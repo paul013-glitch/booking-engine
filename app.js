@@ -1330,7 +1330,7 @@ function renderAdminPage() {
     button.classList.toggle("active", button.dataset.configTab === adminUiState.configTab);
   });
   if (topbarActions) {
-    topbarActions.hidden = !(authState.user && authState.workspaceLoaded);
+    topbarActions.hidden = false;
   }
 
   if (availabilityRoomSelect) {
@@ -1776,26 +1776,43 @@ async function cancelBookingReservation(bookingId, reservationCode = "", current
 
 function updateAdminAuthUI(user) {
   const authStatus = document.getElementById("authStatus");
-  const authButton = document.getElementById("authButton");
-  const authLogout = document.getElementById("authLogout");
-  const topbarBookingUrl = document.getElementById("topbarBookingUrl");
   const adminWorkspace = document.getElementById("adminWorkspace");
-  const topbarActions = document.getElementById("topbarActions");
 
   if (!adminWorkspace) return;
 
   const signedIn = !!user;
   const workspaceReady = signedIn && authState.workspaceLoaded;
   adminWorkspace.hidden = !workspaceReady;
-  if (topbarActions) topbarActions.hidden = false;
+  renderTopbarActions(user, workspaceReady);
 
   if (authStatus) {
     authStatus.textContent = signedIn ? "" : "Loading access state...";
   }
+}
 
-  if (authButton) authButton.hidden = signedIn;
-  if (authLogout) authLogout.hidden = !signedIn;
-  if (topbarBookingUrl) topbarBookingUrl.hidden = !signedIn || !workspaceReady;
+function renderTopbarActions(user, workspaceReady) {
+  const topbarActions = document.getElementById("topbarActions");
+  if (!topbarActions) return;
+
+  if (!user) {
+    topbarActions.innerHTML = `
+      <button class="button button-primary" type="button" id="authButton" data-admin-auth-action="login">
+        Login
+      </button>
+    `;
+    return;
+  }
+
+  const openLink = workspaceReady
+    ? `<a href="${bookingUrl()}" data-booking-link id="topbarBookingUrl" target="_blank" rel="noreferrer">Open</a>`
+    : "";
+
+  topbarActions.innerHTML = `
+    <span class="topbar-url">${openLink}</span>
+    <button class="button button-secondary" type="button" id="topbarLogout" data-admin-auth-action="logout">
+      Log out
+    </button>
+  `;
 }
 
 function initNetlifyIdentityAuth() {
@@ -1829,15 +1846,17 @@ function initNetlifyIdentityAuth() {
     updateAdminAuthUI(null);
   });
 
-  const authButton = document.getElementById("authButton");
-  const authLogout = document.getElementById("authLogout");
+  const topbarActions = document.getElementById("topbarActions");
 
-  authButton?.addEventListener("click", () => {
-    window.netlifyIdentity.open();
-  });
+  topbarActions?.addEventListener("click", (event) => {
+    const actionButton = event.target?.closest?.("[data-admin-auth-action]");
+    if (!actionButton) return;
 
-  authLogout?.addEventListener("click", () => {
-    window.netlifyIdentity.logout();
+    if (actionButton.dataset.adminAuthAction === "login") {
+      window.netlifyIdentity.open();
+    } else if (actionButton.dataset.adminAuthAction === "logout") {
+      window.netlifyIdentity.logout();
+    }
   });
 
   window.netlifyIdentity.init();
