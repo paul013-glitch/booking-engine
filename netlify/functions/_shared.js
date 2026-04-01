@@ -190,6 +190,7 @@ function normalizeWorkspace(data = {}) {
     slug: data?.camp?.slug || data?.slug,
     startDate: data?.startDate,
   });
+  const rooms = Array.isArray(data.rooms) ? data.rooms : base.rooms;
 
   return {
     ...base,
@@ -216,7 +217,7 @@ function normalizeWorkspace(data = {}) {
       slug: (data.camp && data.camp.slug) || data.slug || base.camp.slug,
     },
     packages: Array.isArray(data.packages) ? data.packages : base.packages,
-    rooms: structuredClone(base.rooms),
+    rooms: structuredClone(rooms),
     addons: Array.isArray(data.addons) ? data.addons : base.addons,
     bookings: Array.isArray(data.bookings) ? data.bookings : base.bookings,
     leads: Array.isArray(data.leads) ? data.leads : [],
@@ -227,7 +228,7 @@ function normalizeWorkspace(data = {}) {
         ? data.packageQuantities
         : base.packageQuantities,
     selectedPackageId: data.selectedPackageId || base.selectedPackageId,
-    selectedRoomId: base.rooms.some((room) => room.id === data.selectedRoomId)
+    selectedRoomId: rooms.some((room) => room.id === data.selectedRoomId)
       ? data.selectedRoomId
       : base.selectedRoomId,
   };
