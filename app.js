@@ -250,7 +250,7 @@ function normalizeWorkspaceData(data = {}) {
       slug: (data.camp && data.camp.slug) || slugify((data.camp && data.camp.name) || seedState.camp.name),
     },
     packages: Array.isArray(data.packages) ? data.packages : structuredClone(seedState.packages),
-    rooms: structuredClone(seedState.rooms),
+    rooms: Array.isArray(data.rooms) ? data.rooms : structuredClone(seedState.rooms),
     addons: Array.isArray(data.addons) ? data.addons : structuredClone(seedState.addons),
     bookings: Array.isArray(data.bookings) ? data.bookings : structuredClone(seedState.bookings),
     leads: Array.isArray(data.leads) ? data.leads : [],
@@ -1447,14 +1447,15 @@ function renderAdminPage() {
   if (roomList) {
     roomList.innerHTML = state.rooms
       .map((room) => {
-        const availability = availabilityText(room);
         return `
           <div class="stack-item">
+            <div class="stack-item-media">
+              ${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}
+            </div>
             <div class="stack-item-top">
               <strong>${room.name}</strong>
-              <span class="status ${availability.cls || "confirmed"}">${availability.label}</span>
             </div>
-            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits * room.capacity} total available</div>
+            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits} rooms</div>
             <div class="stack-item-actions">
               <button type="button" class="button button-secondary" data-edit-room="${room.id}">Edit</button>
             </div>
