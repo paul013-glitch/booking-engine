@@ -27,6 +27,16 @@ A lightweight surf camp booking SaaS with a real Netlify-backed multi-tenant she
 
 The admin editor stays hidden until a user signs in.
 
+## Netlify Blobs setup
+
+If the workspace API shows a Blobs configuration error, add these site environment variables in Netlify:
+
+- `SITE_ID` with your Netlify project/site id
+- `NETLIFY_BLOBS_CONTEXT` with the Base64-encoded JSON context for Blobs, or
+- `NETLIFY_BLOBS_TOKEN` with a Netlify personal access token
+
+The functions will read `NETLIFY_BLOBS_CONTEXT` first, then fall back to `SITE_ID` plus a token.
+
 ## Next real backend steps
 
 1. Add Stripe Checkout and webhook confirmation

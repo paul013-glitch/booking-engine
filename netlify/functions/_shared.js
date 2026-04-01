@@ -182,10 +182,26 @@ function normalizeWorkspace(data = {}) {
 }
 
 function stores() {
+  const rawContext = process.env.NETLIFY_BLOBS_CONTEXT || globalThis.netlifyBlobsContext;
+  let blobContext = null;
+
+  if (rawContext) {
+    try {
+      const decoded = Buffer.from(String(rawContext), "base64").toString("utf-8");
+      blobContext = JSON.parse(decoded);
+    } catch {
+      blobContext = null;
+    }
+  }
+
+  const siteID = blobContext?.siteID || process.env.SITE_ID;
+  const token = blobContext?.token || process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_AUTH_TOKEN;
+  const storeOptions = siteID && token ? { siteID, token, apiURL: blobContext?.apiURL, edgeURL: blobContext?.edgeURL } : undefined;
+
   return {
-    workspaces: getStore(WORKSPACES_STORE),
-    slugs: getStore(SLUGS_STORE),
-    owners: getStore(OWNERS_STORE),
+    workspaces: storeOptions ? getStore(WORKSPACES_STORE, storeOptions) : getStore(WORKSPACES_STORE),
+    slugs: storeOptions ? getStore(SLUGS_STORE, storeOptions) : getStore(SLUGS_STORE),
+    owners: storeOptions ? getStore(OWNERS_STORE, storeOptions) : getStore(OWNERS_STORE),
   };
 }
 
