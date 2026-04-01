@@ -742,6 +742,38 @@ function bookedUnitsForWeek(roomId, weekKey) {
   }).length;
 }
 
+function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
+  const room = getRoom(roomId);
+  const weeks = weekKeysBetween(startDate, endDate);
+
+  if (!weeks.length) {
+    const available = Math.max(0, room.totalUnits || 0);
+    const booked = overlappingBookings(roomId, startDate, endDate).length;
+    return {
+      available,
+      booked,
+      forSale: Math.max(0, available - booked),
+    };
+  }
+
+  const weekStats = weeks.map((weekKey) => {
+    const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
+    const available = Number(row?.units ?? room.totalUnits ?? 0);
+    const booked = bookedUnitsForWeek(roomId, weekKey);
+    return {
+      available,
+      booked,
+      forSale: Math.max(0, available - booked),
+    };
+  });
+
+  return {
+    available: Math.min(...weekStats.map((item) => item.available)),
+    booked: Math.max(...weekStats.map((item) => item.booked)),
+    forSale: Math.min(...weekStats.map((item) => item.forSale)),
+  };
+}
+
 function firstAvailableRoom(startDate = draft.startDate, endDate = endDateForDraft()) {
   return state.rooms.find((room) => availableUnits(room.id, startDate, endDate) > 0)?.id || null;
 }
@@ -779,10 +811,10 @@ function totalPrice() {
 }
 
 function availabilityText(room) {
-  const available = availableUnits(room.id, draft.startDate, endDateForDraft());
-  if (available <= 0) return { label: "Sold out", cls: "empty" };
-  if (available === 1) return { label: "1 left", cls: "low" };
-  return { label: `${available} left`, cls: "" };
+  const snapshot = roomAvailabilitySnapshot(room.id);
+  if (snapshot.forSale <= 0) return { label: "Sold out", cls: "empty" };
+  if (snapshot.forSale === 1) return { label: "1 for sale", cls: "low" };
+  return { label: `${snapshot.forSale} for sale`, cls: "" };
 }
 
 function isSoldOutStartDate(dateInput) {
@@ -985,6 +1017,7 @@ function renderBookPage() {
     .map((room) => {
       const selected = room.id === draft.roomId;
       const availability = availabilityText(room);
+      const snapshot = roomAvailabilitySnapshot(room.id);
       return `
         <article class="option-card ${selected ? "selected" : ""}" data-select-room="${room.id}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
@@ -995,6 +1028,7 @@ function renderBookPage() {
               <span>${money(room.pricePerNight)} / night</span>
               <span class="availability ${availability.cls}">${availability.label}</span>
             </div>
+            <div class="tiny">${snapshot.available} available &middot; ${snapshot.booked} booked &middot; ${snapshot.forSale} for sale</div>
             <div class="tiny">${room.capacity} guests per room &middot; ${room.totalUnits * room.capacity} total available</div>
           </div>
         </article>
@@ -1476,6 +1510,83 @@ function renderAdminPage() {
       })
       .join("");
   }
+}
+
+function availabilityRowsForRoom(roomId, count = 12) {
+  const room = getRoom(roomId);
+  const rows = [];
+  const start = startOfWeek(new Date());
+
+  for (let i = 0; i < count; i += 1) {
+    const cursor = new Date(start);
+    cursor.setDate(cursor.getDate() + i * 7);
+    const key = cursor.toISOString().slice(0, 10);
+    const row = state.camp.availability?.[roomId]?.weeks?.[key] || {
+      units: room.totalUnits,
+      pricePerNight: room.pricePerNight,
+    };
+    const units = Number(row.units ?? room.totalUnits ?? 0);
+    const booked = bookedUnitsForWeek(roomId, key);
+    rows.push({
+      weekKey: key,
+      weekLabel: `${formatDate(key)} to ${formatDate(addDays(key, 6))}`,
+      units,
+      booked,
+      forSale: Math.max(0, units - booked),
+      pricePerNight: Number(row.pricePerNight ?? room.pricePerNight ?? 0),
+    });
+  }
+
+  return rows;
+}
+
+function renderAvailabilityMatrix(roomId) {
+  const room = getRoom(roomId);
+  const rows = availabilityRowsForRoom(roomId);
+  return `
+    <div class="availability-row-header">
+      <span>Week</span>
+      <span>Available</span>
+      <span>Booked</span>
+      <span>For sale</span>
+      <span>Price per night</span>
+    </div>
+    ${rows
+      .map(
+        (row) => `
+          <div class="availability-row">
+            <div>
+              <strong>${escapeHtml(row.weekLabel)}</strong>
+              <div class="tiny">${room.name}</div>
+            </div>
+            <div>
+              <strong>${row.units}</strong>
+              <div class="tiny">total</div>
+            </div>
+            <div>
+              <strong>${row.booked}</strong>
+              <div class="tiny">sold</div>
+            </div>
+            <div>
+              <strong>${row.forSale}</strong>
+              <div class="tiny">sellable</div>
+            </div>
+            <label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value="${row.pricePerNight}"
+                data-availability-price="${row.weekKey}"
+                data-availability-room="${roomId}"
+                aria-label="Price per night for ${escapeHtml(row.weekLabel)}"
+              />
+            </label>
+          </div>
+        `,
+      )
+      .join("")}
+  `;
 }
 
 function readAvailabilityMatrix(roomId) {

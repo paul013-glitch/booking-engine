@@ -677,7 +677,7 @@ textarea:focus {
 .availability-row-header,
 .availability-row {
   display: grid;
-  grid-template-columns: 1.6fr 0.9fr 0.9fr;
+  grid-template-columns: 1.6fr 0.7fr 0.7fr 0.7fr 0.9fr;
   gap: 12px;
   align-items: center;
 }
@@ -984,6 +984,8 @@ textarea:focus {
   .date-summary,
   .theme-grid,
   .availability-toolbar,
+  .availability-row-header,
+  .availability-row,
   .day-grid {
     grid-template-columns: 1fr;
   }
