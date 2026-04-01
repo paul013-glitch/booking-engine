@@ -208,7 +208,7 @@ const draft = {
   packageQuantities: { ...(state.packageQuantities || {}) },
   roomId: state.selectedRoomId,
   addonIds: [...state.selectedAddonIds],
-  startDate: state.startDate || nextDefaultDate(),
+  startDate: state.startDate || "",
   calendarMonthOffset: 0,
   guestName: state.guestName,
   guestEmail: state.guestEmail,
@@ -258,21 +258,11 @@ function normalizeWorkspaceData(data = {}) {
     bookings: Array.isArray(data.bookings) ? data.bookings : structuredClone(seedState.bookings),
     leads: Array.isArray(data.leads) ? data.leads : [],
     bookingIntents: Array.isArray(data.bookingIntents) ? data.bookingIntents : [],
-    selectedAddonIds: Array.isArray(data.selectedAddonIds)
-      ? data.selectedAddonIds.filter((id) => id !== "airport-transfer")
-      : structuredClone(seedState.selectedAddonIds),
+    selectedAddonIds: [],
     selectedPackageId: data.selectedPackageId || seedState.selectedPackageId,
-    packageQuantities:
-      data.packageQuantities && typeof data.packageQuantities === "object"
-        ? data.packageQuantities
-        : data.packagePeople
-          ? { [data.selectedPackageId || seedState.selectedPackageId]: data.packagePeople }
-          : structuredClone(seedState.packageQuantities),
-    selectedRoomId:
-      structuredClone(seedState.rooms).some((room) => room.id === data.selectedRoomId)
-        ? data.selectedRoomId
-        : "",
-    startDate: data.startDate || nextDefaultDate(),
+    packageQuantities: {},
+    selectedRoomId: "",
+    startDate: "",
     guestName: data.guestName || "",
     guestPhone: data.guestPhone || "",
     guestEmail: data.guestEmail || "",
@@ -309,7 +299,7 @@ function applyTheme(theme = {}) {
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    return normalizeWorkspaceData({ startDate: nextDefaultDate() });
+    return normalizeWorkspaceData();
   }
 
   try {
@@ -723,6 +713,9 @@ function selectedPackagePeopleCount() {
 }
 
 function bookingNights() {
+  if (!draft.startDate || !selectedPackageRows().length) {
+    return 0;
+  }
   const rows = selectedPackageRows();
   if (!rows.length) {
     return getPackage(draft.packageId).nights;
@@ -936,15 +929,15 @@ function renderDateSelector() {
       <div class="date-summary">
         <div>
           <span class="tiny">Check-in</span>
-          <strong>${formatDate(draft.startDate)}</strong>
+          <strong>${draft.startDate ? formatDate(draft.startDate) : ""}</strong>
         </div>
         <div>
           <span class="tiny">Check-out</span>
-          <strong>${formatDate(endDateForDraft())}</strong>
+          <strong>${draft.startDate ? formatDate(endDateForDraft()) : ""}</strong>
         </div>
         <div>
           <span class="tiny">Nights</span>
-          <strong>${bookingNights()}</strong>
+          <strong>${bookingNights() ? bookingNights() : ""}</strong>
         </div>
       </div>
 
@@ -1185,13 +1178,13 @@ function renderBookPage() {
   const summaryHasData = selectedPackageRows().length > 0 || !!draft.startDate || !!draft.roomId || draft.addonIds.length > 0;
   const summaryActions =
     draft.currentStep === 0
-      ? `<button class="button button-primary" type="button" id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Next</button>`
+      ? `<button class="button button-primary summary-button" type="button" id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Select dates</button>`
       : draft.currentStep === 1
-        ? `<button class="button button-primary" type="button" id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Next</button>`
+        ? `<button class="button button-primary summary-button" type="button" id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Select room</button>`
         : draft.currentStep === 2
-          ? `<button class="button button-primary" type="button" id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Next</button>`
+          ? `<button class="button button-primary summary-button" type="button" id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Add ons</button>`
           : draft.currentStep === 3
-            ? `<button class="button button-primary" type="button" id="continueToBook">Continue to book</button>`
+            ? `<button class="button button-primary summary-button" type="button" id="continueToBook">Book now</button>`
             : "";
 
   summary.innerHTML = `
@@ -1216,7 +1209,7 @@ function renderBookPage() {
             <strong>Date</strong>
             <span>${draft.startDate ? `${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}` : ""}</span>
           </div>
-          <strong>${draft.startDate ? "" : ""}</strong>
+          <strong></strong>
         </div>
         <div class="summary-item">
           <div>

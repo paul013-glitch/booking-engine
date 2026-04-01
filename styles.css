@@ -629,6 +629,11 @@ textarea:focus {
   justify-content: flex-end;
 }
 
+.summary-actions .summary-button {
+  width: 100%;
+  justify-content: center;
+}
+
 .summary-footer {
   margin-top: 16px;
   color: var(--muted);
