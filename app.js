@@ -1197,13 +1197,13 @@ function renderBookPage() {
   const summaryHasData = selectedPackageRows().length > 0 || !!draft.startDate || !!draft.roomId || draft.addonIds.length > 0;
   const summaryActions =
     draft.currentStep === 0
-      ? `<button class="button button-primary summary-button" type="button" id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Select dates</button>`
+      ? `<button class="button button-primary summary-button" type="button" id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Select dates →</button>`
       : draft.currentStep === 1
-        ? `<button class="button button-primary summary-button" type="button" id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Select room</button>`
+        ? `<button class="button button-primary summary-button" type="button" id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Select room →</button>`
         : draft.currentStep === 2
-          ? `<button class="button button-primary summary-button" type="button" id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Add ons</button>`
+          ? `<button class="button button-primary summary-button" type="button" id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Add-ons →</button>`
           : draft.currentStep === 3
-            ? `<button class="button button-primary summary-button" type="button" id="continueToBook">Book now</button>`
+            ? `<button class="button button-primary summary-button" type="button" id="continueToBook">Book now →</button>`
             : "";
 
   summary.innerHTML = `
@@ -2108,7 +2108,7 @@ async function confirmBookingReservation() {
 function initBookInteractions() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest(
-    "[data-step], [data-select-package], [data-select-room], [data-toggle-addon], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], #nextFromPackage, #nextFromRoom, #continueToBook",
+    "[data-step], [data-select-package], [data-select-room], [data-toggle-addon], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], #nextFromPackage, #nextFromDate, #nextFromRoom, #continueToBook",
     );
     if (!target) return;
 
