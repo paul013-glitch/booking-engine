@@ -256,6 +256,35 @@
       <section class="panel">
         <div class="panel-head">
           <div>
+            <p class="section-label">Availability</p>
+            <h2>Weekly room matrix</h2>
+          </div>
+          <span class="pill">Sold-out weeks block the booking calendar</span>
+        </div>
+
+        <div class="availability-toolbar">
+          <label>
+            Room type
+            <select id="availabilityRoomSelect"></select>
+          </label>
+          <label>
+            Update all prices
+            <div class="copy-row">
+              <input id="availabilityBasePrice" type="number" min="0" step="1" placeholder="700" />
+              <button class="button button-secondary" type="button" id="availabilityUpdateAllPrices">
+                Update all prices
+              </button>
+            </div>
+          </label>
+          <button class="button button-primary" type="button" id="saveAvailability">Save availability</button>
+        </div>
+
+        <div id="availabilityMatrix" class="availability-matrix"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
             <p class="section-label">Current data</p>
             <h2>Inventory and bookings</h2>
           </div>

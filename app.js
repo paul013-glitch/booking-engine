@@ -8,6 +8,10 @@ const authState = {
   syncTimer: null,
 };
 
+const adminUiState = {
+  availabilityRoomId: "shared-double",
+};
+
 const logoSvg =
   'data:image/svg+xml;charset=UTF-8,' +
   encodeURIComponent(`
@@ -52,48 +56,38 @@ const seedState = {
   packageQuantities: {
     "package-7": 1,
   },
-  selectedRoomId: "suite-ocean",
+  selectedRoomId: "shared-double",
   selectedAddonIds: ["airport-transfer"],
   startDate: "",
   guestName: "",
   guestPhone: "",
   guestEmail: "",
   guestCountry: "Netherlands",
-    notes: "",
-    bookingConfirmation: null,
-    leads: [],
-    bookingIntents: [],
+  notes: "",
+  bookingConfirmation: null,
+  leads: [],
+  bookingIntents: [],
   packages: [
     {
       id: "package-7",
-      name: "7-night Surf Package",
+      name: "Essentials",
       nights: 7,
-      basePrice: 1290,
+      basePrice: 700,
       description: "Breakfast, surf coaching, boards, and daily surf guiding.",
     },
     {
-      id: "package-14",
-      name: "14-night Surf Package",
-      nights: 14,
-      basePrice: 2190,
-      description: "A longer stay with more surf days, coaching, and recovery time.",
+      id: "package-7-surf",
+      name: "Surf & stay",
+      nights: 7,
+      basePrice: 900,
+      description: "Breakfast, surf coaching, boards, and daily surf guiding.",
     },
   ],
   rooms: [
     {
-      id: "suite-ocean",
-      name: "Ocean Suite",
-      description: "Private ensuite room with a sea view.",
-      pricePerNight: 145,
-      totalUnits: 2,
-      capacity: 2,
-      imageUrl:
-        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-      id: "villa-double",
-      name: "Garden Double",
-      description: "A calm twin room with shared terrace access.",
+      id: "shared-double",
+      name: "Shared Double",
+      description: "Shared dorm room type for two guests.",
       pricePerNight: 95,
       totalUnits: 4,
       capacity: 2,
@@ -101,12 +95,12 @@ const seedState = {
         "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
     },
     {
-      id: "dorm-bunk",
-      name: "Shared Dorm",
-      description: "The simplest room option for lower budgets.",
-      pricePerNight: 45,
-      totalUnits: 6,
-      capacity: 6,
+      id: "shared-dorm-4bed",
+      name: "Shared Dorm 4 Bed",
+      description: "Shared dorm room type for four guests.",
+      pricePerNight: 75,
+      totalUnits: 4,
+      capacity: 4,
       imageUrl:
         "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80",
     },
@@ -141,11 +135,11 @@ const seedState = {
       guestEmail: "ava@example.com",
       guestCountry: "Germany",
       packageId: "package-7",
-      roomId: "suite-ocean",
+      roomId: "shared-double",
       addonIds: ["yoga-pack"],
-      startDate: "2026-04-08",
-      endDate: "2026-04-15",
-      total: 2395,
+      startDate: "2026-04-11",
+      endDate: "2026-04-18",
+      total: 1485,
       status: "confirmed",
       createdAt: "2026-03-30T09:10:00.000Z",
       holdExpiresAt: null,
@@ -156,12 +150,12 @@ const seedState = {
       guestName: "Jonas",
       guestEmail: "jonas@example.com",
       guestCountry: "Belgium",
-      packageId: "package-14",
-      roomId: "dorm-bunk",
+      packageId: "package-7-surf",
+      roomId: "shared-dorm-4bed",
       addonIds: ["airport-transfer"],
-      startDate: "2026-04-14",
-      endDate: "2026-04-18",
-      total: 1115,
+      startDate: "2026-04-18",
+      endDate: "2026-04-25",
+      total: 1470,
       status: "held",
       createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
       holdExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
@@ -169,6 +163,39 @@ const seedState = {
     },
   ],
 };
+
+function startOfWeek(dateInput) {
+  const date = new Date(dateInput);
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function weekKeyForDate(dateInput) {
+  return startOfWeek(dateInput).toISOString().slice(0, 10);
+}
+
+function createSeedAvailability(rooms, weeks = 12) {
+  const availability = {};
+  const start = startOfWeek(new Date());
+
+  rooms.forEach((room) => {
+    availability[room.id] = { weeks: {} };
+    for (let i = 0; i < weeks; i += 1) {
+      const cursor = new Date(start);
+      cursor.setDate(cursor.getDate() + i * 7);
+      const key = cursor.toISOString().slice(0, 10);
+      availability[room.id].weeks[key] = {
+        units: room.totalUnits,
+        pricePerNight: room.pricePerNight,
+      };
+    }
+  });
+
+  return availability;
+}
+
+seedState.camp.availability = createSeedAvailability(seedState.rooms);
 
 const state = loadState();
 const draft = {
@@ -213,6 +240,10 @@ function normalizeWorkspaceData(data = {}) {
       bookingRules: {
         ...seedState.camp.bookingRules,
         ...((data.camp && data.camp.bookingRules) || {}),
+      },
+      availability: {
+        ...(seedState.camp.availability || {}),
+        ...((data.camp && data.camp.availability) || {}),
       },
       slug: (data.camp && data.camp.slug) || slugify((data.camp && data.camp.name) || seedState.camp.name),
     },
@@ -580,6 +611,53 @@ function endDateForDraft() {
   return addDays(draft.startDate, bookingNights());
 }
 
+function weekKeysBetween(startDate, endDate) {
+  const keys = [];
+  const cursor = startOfWeek(startDate);
+  const endCursor = startOfWeek(addDays(endDate, -1));
+  while (cursor <= endCursor) {
+    keys.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return keys;
+}
+
+function roomAvailabilityRow(roomId, dateInput) {
+  return state.camp.availability?.[roomId]?.weeks?.[weekKeyForDate(dateInput)] || null;
+}
+
+function roomNightRate(roomId, dateInput) {
+  const room = getRoom(roomId);
+  return Number(roomAvailabilityRow(roomId, dateInput)?.pricePerNight ?? room.pricePerNight ?? 0);
+}
+
+function ensureAvailabilityCoverage(targetState = state) {
+  if (!targetState.camp) return;
+  if (!targetState.camp.availability) targetState.camp.availability = {};
+  const weekStart = startOfWeek(new Date());
+
+  targetState.rooms.forEach((room) => {
+    if (!targetState.camp.availability[room.id]) {
+      targetState.camp.availability[room.id] = { weeks: {} };
+    }
+    if (!targetState.camp.availability[room.id].weeks) {
+      targetState.camp.availability[room.id].weeks = {};
+    }
+
+    for (let i = 0; i < 12; i += 1) {
+      const cursor = new Date(weekStart);
+      cursor.setDate(cursor.getDate() + i * 7);
+      const key = cursor.toISOString().slice(0, 10);
+      if (!targetState.camp.availability[room.id].weeks[key]) {
+        targetState.camp.availability[room.id].weeks[key] = {
+          units: room.totalUnits,
+          pricePerNight: room.pricePerNight,
+        };
+      }
+    }
+  });
+}
+
 function packageQuantity(packageId) {
   return Math.max(0, Number(draft.packageQuantities?.[packageId] || 0));
 }
@@ -617,7 +695,17 @@ function overlappingBookings(roomId, startDate, endDate) {
 
 function availableUnits(roomId, startDate, endDate) {
   const room = getRoom(roomId);
-  return Math.max(0, room.totalUnits - overlappingBookings(roomId, startDate, endDate).length);
+  const rows = weekKeysBetween(startDate, endDate);
+  const booked = overlappingBookings(roomId, startDate, endDate).length;
+  if (!rows.length) return Math.max(0, room.totalUnits - booked);
+
+  const units = rows.map((weekKey) => {
+    const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
+    const total = Number(row?.units ?? room.totalUnits ?? 0);
+    return Math.max(0, total - booked);
+  });
+
+  return Math.max(0, Math.min(...units));
 }
 
 function firstAvailableRoom(startDate = draft.startDate, endDate = endDateForDraft()) {
@@ -633,7 +721,15 @@ function ensureRoomSelection() {
 }
 
 function roomPrice() {
-  return getRoom(draft.roomId).pricePerNight * bookingNights();
+  let total = 0;
+  const cursor = new Date(draft.startDate);
+  const end = new Date(endDateForDraft());
+  while (cursor < end) {
+    const iso = cursor.toISOString().slice(0, 10);
+    total += roomNightRate(draft.roomId, iso);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return total;
 }
 
 function packagePrice() {
@@ -1061,6 +1157,76 @@ function renderBookPage() {
   }
 }
 
+function availabilityRowsForRoom(roomId, count = 12) {
+  const room = getRoom(roomId);
+  const rows = [];
+  const start = startOfWeek(new Date());
+
+  for (let i = 0; i < count; i += 1) {
+    const cursor = new Date(start);
+    cursor.setDate(cursor.getDate() + i * 7);
+    const key = cursor.toISOString().slice(0, 10);
+    const row = state.camp.availability?.[roomId]?.weeks?.[key] || {
+      units: room.totalUnits,
+      pricePerNight: room.pricePerNight,
+    };
+    rows.push({
+      weekKey: key,
+      weekLabel: `${formatDate(key)} to ${formatDate(addDays(key, 6))}`,
+      units: Number(row.units ?? room.totalUnits ?? 0),
+      pricePerNight: Number(row.pricePerNight ?? room.pricePerNight ?? 0),
+    });
+  }
+
+  return rows;
+}
+
+function renderAvailabilityMatrix(roomId) {
+  const room = getRoom(roomId);
+  const rows = availabilityRowsForRoom(roomId);
+  return `
+    <div class="availability-row-header">
+      <span>Week</span>
+      <span>Rooms available</span>
+      <span>Price per night</span>
+    </div>
+    ${rows
+      .map(
+        (row) => `
+          <div class="availability-row">
+            <div>
+              <strong>${escapeHtml(row.weekLabel)}</strong>
+              <div class="tiny">${room.name}</div>
+            </div>
+            <label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value="${row.units}"
+                data-availability-units="${row.weekKey}"
+                data-availability-room="${roomId}"
+                aria-label="Rooms available for ${escapeHtml(row.weekLabel)}"
+              />
+            </label>
+            <label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value="${row.pricePerNight}"
+                data-availability-price="${row.weekKey}"
+                data-availability-room="${roomId}"
+                aria-label="Price per night for ${escapeHtml(row.weekLabel)}"
+              />
+            </label>
+          </div>
+        `,
+      )
+      .join("")}
+  `;
+}
+
 function renderAdminPage() {
   const roomCount = document.getElementById("roomCount");
   const packageCount = document.getElementById("packageCount");
@@ -1085,6 +1251,15 @@ function renderAdminPage() {
   const bookingIntentList = document.getElementById("bookingIntentList");
   const campForm = document.getElementById("campForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
+  const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
+  const availabilityBasePrice = document.getElementById("availabilityBasePrice");
+  const availabilityMatrix = document.getElementById("availabilityMatrix");
+
+  ensureAvailabilityCoverage(state);
+
+  if (!state.rooms.some((room) => room.id === adminUiState.availabilityRoomId)) {
+    adminUiState.availabilityRoomId = state.rooms[0]?.id || "shared-double";
+  }
 
   if (campForm) {
     campForm.elements.campName.value = state.camp.name;
@@ -1116,6 +1291,28 @@ function renderAdminPage() {
     bookingUrlInput.value = bookingUrl();
   }
   applyTheme(state.camp.theme);
+
+  if (availabilityRoomSelect) {
+    availabilityRoomSelect.innerHTML = state.rooms
+      .map(
+        (room) => `
+          <option value="${room.id}" ${room.id === adminUiState.availabilityRoomId ? "selected" : ""}>
+            ${room.name}
+          </option>
+        `,
+      )
+      .join("");
+  }
+
+  if (availabilityBasePrice) {
+    const selectedRoom = getRoom(adminUiState.availabilityRoomId);
+    const firstRow = availabilityRowsForRoom(adminUiState.availabilityRoomId)[0];
+    availabilityBasePrice.value = firstRow?.pricePerNight || selectedRoom.pricePerNight || 0;
+  }
+
+  if (availabilityMatrix) {
+    availabilityMatrix.innerHTML = renderAvailabilityMatrix(adminUiState.availabilityRoomId);
+  }
 
   if (roomList) {
     roomList.innerHTML = state.rooms
@@ -1224,6 +1421,23 @@ function renderAdminPage() {
   }
 }
 
+function readAvailabilityMatrix(roomId) {
+  const rows = {};
+  document
+    .querySelectorAll(`[data-availability-room="${roomId}"][data-availability-units]`)
+    .forEach((input) => {
+      const weekKey = input.dataset.availabilityUnits;
+      const priceInput = document.querySelector(
+        `[data-availability-room="${roomId}"][data-availability-price="${weekKey}"]`,
+      );
+      rows[weekKey] = {
+        units: clampPackageQuantity(input.value),
+        pricePerNight: Math.max(0, Number(priceInput?.value || 0)),
+      };
+    });
+  return rows;
+}
+
 function renderLandingPage() {
   const form = document.getElementById("signupForm");
   if (!form) return;
@@ -1291,6 +1505,7 @@ function initLandingAuth() {
 
 function hydrateStateFromWorkspace(workspace) {
   Object.assign(state, normalizeWorkspaceData(workspace));
+  ensureAvailabilityCoverage(state);
   applyStateToDraft();
   applyTheme(state.camp.theme);
   saveState();
@@ -1793,10 +2008,42 @@ function initAdminInteractions() {
   const addonForm = document.getElementById("addonForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
   const copyBookingUrlButton = document.getElementById("copyBookingUrl");
+  const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
+  const availabilityBasePrice = document.getElementById("availabilityBasePrice");
+  const availabilityUpdateAllPrices = document.getElementById("availabilityUpdateAllPrices");
+  const saveAvailabilityButton = document.getElementById("saveAvailability");
 
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
   }
+
+  availabilityRoomSelect?.addEventListener("change", (event) => {
+    adminUiState.availabilityRoomId = event.target.value;
+    renderAdminPage();
+  });
+
+  availabilityUpdateAllPrices?.addEventListener("click", () => {
+    const selectedRoom = getRoom(adminUiState.availabilityRoomId);
+    const price = Math.max(0, Number(availabilityBasePrice?.value || selectedRoom.pricePerNight || 0));
+    document
+      .querySelectorAll(
+        `[data-availability-room="${adminUiState.availabilityRoomId}"][data-availability-price]`,
+      )
+      .forEach((input) => {
+        input.value = price;
+      });
+  });
+
+  saveAvailabilityButton?.addEventListener("click", () => {
+    ensureAvailabilityCoverage(state);
+    state.camp.availability = state.camp.availability || {};
+    state.camp.availability[adminUiState.availabilityRoomId] = {
+      weeks: readAvailabilityMatrix(adminUiState.availabilityRoomId),
+    };
+    saveState();
+    applyTheme(state.camp.theme);
+    renderAdminPage();
+  });
 
   copyBookingUrlButton?.addEventListener("click", async () => {
     const url = bookingUrl();
@@ -1876,6 +2123,7 @@ function initAdminInteractions() {
     });
 
     roomForm.reset();
+    ensureAvailabilityCoverage(state);
     saveState();
     renderAdminPage();
   });

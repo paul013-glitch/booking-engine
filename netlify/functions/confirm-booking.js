@@ -27,6 +27,28 @@ function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return new Date(aStart) < new Date(bEnd) && new Date(bStart) < new Date(aEnd);
 }
 
+function startOfWeek(dateInput) {
+  const date = new Date(dateInput);
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function weekKeyForDate(dateInput) {
+  return startOfWeek(dateInput).toISOString().slice(0, 10);
+}
+
+function weekKeysBetween(startDate, endDate) {
+  const keys = [];
+  const cursor = startOfWeek(startDate);
+  const endCursor = startOfWeek(new Date(new Date(endDate).getTime() - 1));
+  while (cursor <= endCursor) {
+    keys.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return keys;
+}
+
 function isHoldActive(booking) {
   return booking.status === "held" && (!booking.holdExpiresAt || new Date(booking.holdExpiresAt) > new Date());
 }
@@ -43,7 +65,22 @@ function overlappingBookings(workspace, roomId, startDate, endDate) {
 function availableUnits(workspace, roomId, startDate, endDate) {
   const room = (workspace.rooms || []).find((item) => item.id === roomId);
   if (!room) return 0;
-  return Math.max(0, Number(room.totalUnits || 0) - overlappingBookings(workspace, roomId, startDate, endDate).length);
+  const booked = overlappingBookings(workspace, roomId, startDate, endDate).length;
+  const weeks = weekKeysBetween(startDate, endDate);
+  if (!weeks.length) {
+    return Math.max(0, Number(room.totalUnits || 0) - booked);
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      ...weeks.map((weekKey) => {
+        const row = workspace.camp?.availability?.[roomId]?.weeks?.[weekKey];
+        const total = Number(row?.units ?? room.totalUnits ?? 0);
+        return Math.max(0, total - booked);
+      }),
+    ),
+  );
 }
 
 function packageSummary(workspace, booking) {

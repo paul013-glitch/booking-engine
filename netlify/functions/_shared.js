@@ -41,35 +41,25 @@ const seedCamp = {
 const seedPackages = [
   {
     id: "package-7",
-    name: "7-night Surf Package",
+    name: "Essentials",
     nights: 7,
-    basePrice: 1290,
+    basePrice: 700,
     description: "Breakfast, surf coaching, boards, and daily surf guiding.",
   },
   {
-    id: "package-14",
-    name: "14-night Surf Package",
-    nights: 14,
-    basePrice: 2190,
-    description: "A longer stay with more surf days, coaching, and recovery time.",
+    id: "package-7-surf",
+    name: "Surf & stay",
+    nights: 7,
+    basePrice: 900,
+    description: "Breakfast, surf coaching, boards, and daily surf guiding.",
   },
 ];
 
 const seedRooms = [
   {
-    id: "suite-ocean",
-    name: "Ocean Suite",
-    description: "Private ensuite room with a sea view.",
-    pricePerNight: 145,
-    totalUnits: 2,
-    capacity: 2,
-    imageUrl:
-      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
-  },
-  {
-    id: "villa-double",
-    name: "Garden Double",
-    description: "A calm twin room with shared terrace access.",
+    id: "shared-double",
+    name: "Shared Double",
+    description: "Shared dorm room type for two guests.",
     pricePerNight: 95,
     totalUnits: 4,
     capacity: 2,
@@ -77,12 +67,12 @@ const seedRooms = [
       "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
   },
   {
-    id: "dorm-bunk",
-    name: "Shared Dorm",
-    description: "The simplest room option for lower budgets.",
-    pricePerNight: 45,
-    totalUnits: 6,
-    capacity: 6,
+    id: "shared-dorm-4bed",
+    name: "Shared Dorm 4 Bed",
+    description: "Shared dorm room type for four guests.",
+    pricePerNight: 75,
+    totalUnits: 4,
+    capacity: 4,
     imageUrl:
       "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80",
   },
@@ -112,6 +102,37 @@ const seedAddons = [
   },
 ];
 
+function startOfWeek(dateInput) {
+  const date = new Date(dateInput);
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function weekKeyForDate(dateInput) {
+  return startOfWeek(dateInput).toISOString().slice(0, 10);
+}
+
+function createDefaultAvailability(rooms, weeks = 12) {
+  const availability = {};
+  const weekStart = startOfWeek(new Date());
+
+  rooms.forEach((room) => {
+    availability[room.id] = { weeks: {} };
+    for (let i = 0; i < weeks; i += 1) {
+      const cursor = new Date(weekStart);
+      cursor.setDate(cursor.getDate() + i * 7);
+      const key = cursor.toISOString().slice(0, 10);
+      availability[room.id].weeks[key] = {
+        units: room.totalUnits,
+        pricePerNight: room.pricePerNight,
+      };
+    }
+  });
+
+  return availability;
+}
+
 function slugify(value) {
   return String(value || "")
     .trim()
@@ -138,10 +159,11 @@ function createDefaultWorkspace(input = {}) {
       slug: input.slug || randomSlug("camp"),
       logoUrl: seedCamp.logoUrl,
       bookingRules: { ...seedCamp.bookingRules },
+      availability: createDefaultAvailability(seedRooms),
     },
     selectedPackageId: "package-7",
     packageQuantities: { "package-7": 1 },
-    selectedRoomId: "suite-ocean",
+    selectedRoomId: "shared-double",
     selectedAddonIds: ["airport-transfer"],
     startDate: input.startDate || "",
     guestName: "",
@@ -186,6 +208,10 @@ function normalizeWorkspace(data = {}) {
       bookingRules: {
         ...base.camp.bookingRules,
         ...((data.camp && data.camp.bookingRules) || {}),
+      },
+      availability: {
+        ...(base.camp.availability || {}),
+        ...((data.camp && data.camp.availability) || {}),
       },
       slug: (data.camp && data.camp.slug) || data.slug || base.camp.slug,
     },
