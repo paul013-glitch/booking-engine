@@ -165,19 +165,21 @@ const seedState = {
 };
 
 function startOfWeek(dateInput) {
-  const date = new Date(dateInput);
+  const date = parseDateValue(dateInput) || new Date();
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
   start.setHours(0, 0, 0, 0);
   return start;
 }
 
 function localDateKey(dateInput) {
-  const date = new Date(dateInput);
+  const date = parseDateValue(dateInput);
+  if (!date) return "";
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function weekKeyForDate(dateInput) {
-  return localDateKey(startOfWeek(dateInput));
+  const weekStart = startOfWeek(dateInput);
+  return localDateKey(weekStart);
 }
 
 function createSeedAvailability(rooms, weeks = 12) {
@@ -323,8 +325,22 @@ function money(value) {
   }).format(value);
 }
 
+function parseDateValue(value) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function formatDate(value) {
-  if (!value) {
+  const date = parseDateValue(value);
+  if (!date) {
     return "Not set";
   }
 
@@ -333,11 +349,12 @@ function formatDate(value) {
     day: "numeric",
     month: "short",
     year: "numeric",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function formatDateTime(value) {
-  if (!value) {
+  const date = parseDateValue(value);
+  if (!date) {
     return "Not set";
   }
 
@@ -348,43 +365,45 @@ function formatDateTime(value) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function weekdayName(dateInput) {
-  return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][
-    new Date(dateInput).getDay()
-  ];
+  const date = parseDateValue(dateInput);
+  if (!date) return "";
+  return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][date.getDay()];
 }
 
 function addDays(dateInput, days) {
-  if (!dateInput) return "";
-  const date = new Date(dateInput);
+  const date = parseDateValue(dateInput);
+  if (!date) return "";
   date.setDate(date.getDate() + days);
   return localDateKey(date);
 }
 
 function startOfMonth(dateInput) {
-  const date = new Date(dateInput);
+  const date = parseDateValue(dateInput) || new Date();
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function addMonths(dateInput, months) {
-  const date = new Date(dateInput);
+  const date = parseDateValue(dateInput) || new Date();
   return new Date(date.getFullYear(), date.getMonth() + months, 1);
 }
 
 function monthOffsetBetween(a, b) {
   const start = startOfMonth(a);
-  const end = startOfMonth(b);
+  const end = parseDateValue(b) ? startOfMonth(b) : start;
   return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
 }
 
 function formatMonthLabel(dateInput) {
+  const date = parseDateValue(dateInput);
+  if (!date) return "";
   return new Intl.DateTimeFormat("en-GB", {
     month: "long",
     year: "numeric",
-  }).format(new Date(dateInput));
+  }).format(date);
 }
 
 function slugify(value) {
@@ -548,7 +567,7 @@ function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules)
 }
 
 function firstAllowedStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
-  const cursor = new Date(afterDate);
+  const cursor = parseDateValue(afterDate) || new Date();
   for (let i = 0; i < 120; i += 1) {
     const candidate = localDateKey(cursor);
     if (isArrivalAllowed(candidate, bookingRules)) return candidate;
@@ -564,7 +583,7 @@ function hasAvailabilityForDate(startDate) {
 }
 
 function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
-  const cursor = new Date(afterDate);
+  const cursor = parseDateValue(afterDate) || new Date();
   for (let i = 0; i < 180; i += 1) {
     const candidate = localDateKey(cursor);
     if (isArrivalAllowed(candidate, bookingRules) && hasAvailabilityForDate(candidate)) {
@@ -583,8 +602,9 @@ function isSelectableDate(dateInput) {
 }
 
 function ensureStartDateSelection() {
+  if (!draft.startDate) return;
   if (!isSelectableDate(draft.startDate)) {
-    draft.startDate = firstBookableStartDate(nextDefaultDate(), state.camp.bookingRules);
+    draft.startDate = "";
   }
 }
 
@@ -976,7 +996,6 @@ function renderBookPage() {
   if (name) name.textContent = state.camp.name;
   applyTheme(state.camp.theme);
 
-  ensureStartDateSelection();
   ensureRoomSelection();
 
   const maxUnlockedStep = Math.max(0, draft.currentStep);
@@ -2340,6 +2359,65 @@ function initAdminInteractions() {
     } catch {
       alert(`Copy this link: ${url}`);
     }
+  });
+
+  const liveBrandingFields = new Set([
+    "campName",
+    "logoUrl",
+    "bg",
+    "panel",
+    "panelSoft",
+    "border",
+    "text",
+    "muted",
+    "accent",
+    "accentSoft",
+    "titleFont",
+    "bodyFont",
+  ]);
+
+  const syncBrandingPreview = () => {
+    if (!campForm) return;
+
+    const nextTheme = {
+      ...(state.camp.theme || {}),
+      bg: campForm.elements.bg.value,
+      panel: campForm.elements.panel.value,
+      panelSoft: campForm.elements.panelSoft.value,
+      border: campForm.elements.border.value,
+      text: campForm.elements.text.value,
+      muted: campForm.elements.muted.value,
+      accent: campForm.elements.accent.value,
+      accentSoft: campForm.elements.accentSoft.value,
+      titleFont: campForm.elements.titleFont.value,
+      bodyFont: campForm.elements.bodyFont.value,
+    };
+
+    state.camp.name = campForm.elements.campName.value.trim() || state.camp.name;
+    if (campForm.elements.logoUrl.value.trim()) {
+      state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
+    }
+    state.camp.theme = nextTheme;
+    state.camp.showBookingIntents = campForm.elements.showBookingIntents?.checked ?? true;
+    applyTheme(state.camp.theme);
+    saveState();
+    if (bookingUrlInput) {
+      bookingUrlInput.value = bookingUrl();
+    }
+  };
+
+  campForm?.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!liveBrandingFields.has(target.name)) return;
+    syncBrandingPreview();
+  });
+
+  campForm?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!liveBrandingFields.has(target.name)) return;
+    syncBrandingPreview();
   });
 
   campForm?.addEventListener("submit", async (event) => {
