@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Booking Confirmed | Campify</title>
+    <meta name="description" content="Your surf camp booking has been confirmed." />
+    <script>
+      (function () {
+        const base = window.location.protocol === "file:" ? "./" : "/";
+        document.write('<link rel="stylesheet" href="' + base + 'styles.css" />');
+      })();
+    </script>
+  </head>
+  <body class="page page-book">
+    <main class="booking-shell" style="min-height: 100vh; align-items: center;">
+      <section class="panel" style="max-width: 620px; width: 100%; margin: 0 auto;">
+        <p class="eyebrow">Booking confirmed</p>
+        <h1 style="margin-bottom: 12px;">Please check your email for the confirmation.</h1>
+        <p class="lede" style="margin-bottom: 18px;">
+          Your reservation has been saved. We’ve sent the details to your inbox, including the next steps.
+        </p>
+        <div class="confirmation-card">
+          <div class="summary-item" style="padding-bottom: 0; border-bottom: 0;">
+            <div>
+              <strong>Reservation number</strong>
+              <span id="reservationCode">Loading...</span>
+            </div>
+            <strong id="confirmationEmail">Saved</strong>
+          </div>
+        </div>
+        <div class="booking-actions" style="justify-content: space-between; margin-top: 20px;">
+          <a class="button button-secondary" href="./index.html">Back home</a>
+          <a class="button button-primary" href="./book.html?camp=amigos-surf-camp">View demo booking</a>
+        </div>
+      </section>
+    </main>
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const reservation = params.get("reservation") || "Pending";
+        const email = params.get("email") || "";
+        const reservationCode = document.getElementById("reservationCode");
+        const confirmationEmail = document.getElementById("confirmationEmail");
+
+        if (reservationCode) reservationCode.textContent = reservation;
+        if (confirmationEmail) {
+          confirmationEmail.textContent = email ? `Sent to ${email}` : "Saved";
+        }
+      })();
+    </script>
+  </body>
+</html>

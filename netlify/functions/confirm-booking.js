@@ -4,6 +4,7 @@ const {
   response,
   saveWorkspace,
 } = require("./_shared");
+const crypto = require("crypto");
 
 function formatMoney(value) {
   return new Intl.NumberFormat("en-US", {
@@ -72,7 +73,7 @@ function buildEmail({ workspace, booking }) {
   const fromName = process.env.RESEND_FROM_NAME || workspace.camp?.name || "Campify";
   const fromEmail = process.env.RESEND_FROM_EMAIL;
   const replyTo = process.env.RESEND_REPLY_TO || fromEmail;
-  const subject = `Booking confirmed at ${workspace.camp?.name || "your camp"}`;
+  const subject = `Booking confirmed at ${workspace.camp?.name || "your camp"} (${booking.reservationCode || ""})`;
   const text = [
     `Hello ${booking.guestName},`,
     "",
@@ -114,6 +115,21 @@ function buildEmail({ workspace, booking }) {
   `;
 
   return { fromName, fromEmail, replyTo, subject, text, html };
+}
+
+function generateReservationCode(existing = []) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const bytes = crypto.randomBytes(5);
+    const code = Array.from(bytes)
+      .map((byte) => alphabet[byte % alphabet.length])
+      .join("")
+      .slice(0, 5);
+    if (!existing.includes(code)) {
+      return code;
+    }
+  }
+  return `R${Date.now().toString(36).slice(-4).toUpperCase()}`.slice(0, 5);
 }
 
 async function sendConfirmationEmail({ workspace, booking }) {
@@ -191,12 +207,18 @@ exports.handler = async (event) => {
     }
 
     const now = new Date();
+    const existingCodes = [
+      ...(normalized.bookings || []).map((item) => item.reservationCode).filter(Boolean),
+      ...(normalized.bookingIntents || []).map((item) => item.reservationCode).filter(Boolean),
+    ];
+    const reservationCode = generateReservationCode(existingCodes);
     const intentId = booking.id || `intent-${now.getTime()}`;
     const bookingId = `booking-${now.getTime()}`;
 
     const intentRecord = {
       ...booking,
       id: intentId,
+      reservationCode,
       stage: "confirmed",
       createdAt: booking.createdAt || now.toISOString(),
       updatedAt: now.toISOString(),
@@ -205,6 +227,7 @@ exports.handler = async (event) => {
     const bookingRecord = {
       ...booking,
       id: bookingId,
+      reservationCode,
       status: "confirmed",
       createdAt: booking.createdAt || now.toISOString(),
       holdExpiresAt: null,
@@ -240,6 +263,7 @@ exports.handler = async (event) => {
     return response(200, {
       workspace: finalWorkspace,
       booking: finalWorkspace.bookings.find((item) => item.id === bookingId) || bookingRecord,
+      reservationCode,
       email,
     });
   } catch (error) {

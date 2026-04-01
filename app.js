@@ -372,6 +372,23 @@ function bookingUrl() {
   }
 }
 
+function confirmationUrl(reservationCode = "", guestEmail = "") {
+  const params = new URLSearchParams();
+  if (reservationCode) params.set("reservation", reservationCode);
+  if (guestEmail) params.set("email", guestEmail);
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+  if (window.location.protocol === "file:") {
+    return `./confirmation.html${query}`;
+  }
+
+  try {
+    return new URL(`/confirmation.html${query}`, window.location.origin).toString();
+  } catch {
+    return `/confirmation.html${query}`;
+  }
+}
+
 function requestedCampSlug() {
   const params = new URLSearchParams(window.location.search);
   const querySlug = params.get("camp");
@@ -1174,6 +1191,7 @@ function renderAdminPage() {
             <div class="tiny">${booking.guestEmail || "No email"} &middot; ${booking.guestPhone || "No phone"}</div>
             <div class="tiny">${formatDate(booking.startDate)} to ${formatDate(booking.endDate)} &middot; ${money(booking.total)}</div>
             <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDate(booking.holdExpiresAt) : "N/A"}</div>
+            <div class="tiny">Reservation: ${booking.reservationCode || "pending"}</div>
             <div class="tiny">Email: ${booking.confirmationEmail?.status || "not sent"}</div>
           </div>
         `;
@@ -1198,6 +1216,7 @@ function renderAdminPage() {
             <small>${pkg.name} &middot; ${room.name}</small>
             <div class="tiny">${intent.guestEmail || "No email"} &middot; ${intent.guestPhone || "No phone"}</div>
             <div class="tiny">${formatDate(intent.startDate)} to ${formatDate(intent.endDate)} &middot; ${money(intent.total)}</div>
+            <div class="tiny">Reservation: ${intent.reservationCode || "pending"}</div>
           </div>
         `;
       })
@@ -1558,6 +1577,7 @@ async function confirmBookingReservation() {
       confirmedAt: now.toISOString(),
       guestEmail,
       guestName,
+      reservationCode: result?.reservationCode || result?.booking?.reservationCode || "",
     };
     draft.bookingConfirmation = state.bookingConfirmation;
     syncDraftToState();
@@ -1573,7 +1593,7 @@ async function confirmBookingReservation() {
         ? "Booking confirmed and confirmation email sent."
         : "Booking confirmed. Confirmation email will be sent when email delivery is configured.",
     );
-    renderBookPage();
+    window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
   } catch (error) {
     state.bookingIntents.unshift({ ...bookingPayload, stage: "confirmed" });
     state.bookings.unshift({
@@ -1590,6 +1610,7 @@ async function confirmBookingReservation() {
       confirmedAt: now.toISOString(),
       guestEmail,
       guestName,
+      reservationCode: `R${now.getTime().toString(36).slice(-4).toUpperCase()}`.slice(0, 5),
     };
     draft.bookingConfirmation = state.bookingConfirmation;
     saveState();
@@ -1600,7 +1621,7 @@ async function confirmBookingReservation() {
       total: totalPrice(),
     });
     alert(`Booking confirmed locally, but the server could not be reached: ${error instanceof Error ? error.message : "Unknown error"}`);
-    renderBookPage();
+    window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
   }
 }
 
