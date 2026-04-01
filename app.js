@@ -4,6 +4,7 @@ const authState = {
   user: null,
   token: null,
   workspace: null,
+  workspaceLoaded: false,
   syncTimer: null,
 };
 
@@ -1038,6 +1039,7 @@ async function loadAdminWorkspace() {
   if (!user) return;
 
   authState.user = user;
+  authState.workspaceLoaded = false;
   try {
     authState.token = await user.jwt();
     const workspace = await apiJson("me-workspace", {
@@ -1048,8 +1050,10 @@ async function loadAdminWorkspace() {
 
     if (workspace) {
       authState.workspace = workspace;
+      authState.workspaceLoaded = true;
       hydrateStateFromWorkspace(workspace);
       renderAdminPage();
+      updateAdminAuthUI(user);
     }
   } catch (error) {
     const authStatus = document.getElementById("authStatus");
@@ -1069,12 +1073,15 @@ function updateAdminAuthUI(user) {
   if (!authPanel || !adminWorkspace) return;
 
   const signedIn = !!user;
-  adminWorkspace.hidden = !signedIn;
+  const workspaceReady = signedIn && authState.workspaceLoaded;
+  adminWorkspace.hidden = !workspaceReady;
   authPanel.dataset.authenticated = signedIn ? "true" : "false";
 
   if (authStatus) {
     authStatus.textContent = signedIn
-      ? `Signed in as ${user.email}.`
+      ? workspaceReady
+        ? `Signed in as ${user.email}.`
+        : "Loading your camp workspace..."
       : "Sign in with Netlify Identity to edit this camp.";
   }
 
@@ -1109,6 +1116,7 @@ function initNetlifyIdentityAuth() {
     authState.user = null;
     authState.token = null;
     authState.workspace = null;
+    authState.workspaceLoaded = false;
     updateAdminAuthUI(null);
   });
 
@@ -1414,7 +1422,6 @@ function initAdminInteractions() {
   campForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     state.camp.name = campForm.elements.campName.value.trim() || state.camp.name;
-    state.camp.slug = state.camp.slug || slugify(state.camp.name);
 
     const restrictedArrivalDays = campForm.elements.restrictedArrivalDays.checked;
     const allowedArrivalDays = Array.from(campForm.querySelectorAll('input[name="arrivalDays"]:checked')).map(
@@ -1508,6 +1515,7 @@ function init() {
     initNetlifyIdentityAuth();
     initAdminInteractions();
     renderAdminPage();
+    updateAdminAuthUI(window.netlifyIdentity?.currentUser?.());
   }
 }
 

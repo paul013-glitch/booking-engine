@@ -15,7 +15,7 @@ exports.handler = async (_event, context) => {
   const ownerId = user.sub || user.email;
   const existing = await getWorkspaceForOwner(ownerId);
   if (existing) {
-    return response(200, existing);
+    return response(200, await saveWorkspace(existing));
   }
 
   const created = await saveWorkspace(

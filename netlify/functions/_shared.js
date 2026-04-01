@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { getStore } = require("@netlify/blobs");
 
 const WORKSPACES_STORE = "surfcamp-workspaces";
@@ -108,6 +109,11 @@ function slugify(value) {
     .replace(/-{2,}/g, "-");
 }
 
+function randomSlug(prefix = "camp") {
+  const seed = slugify(prefix) || "camp";
+  return `${seed}-${crypto.randomBytes(3).toString("hex")}`;
+}
+
 function createDefaultWorkspace(input = {}) {
   const name = input.name || input.campName || "New Surf Camp";
   return {
@@ -116,7 +122,7 @@ function createDefaultWorkspace(input = {}) {
     ownerEmail: input.email || "",
     camp: {
       name,
-      slug: input.slug || `${slugify(name) || "camp"}-${Math.random().toString(36).slice(2, 8)}`,
+      slug: input.slug || randomSlug("camp"),
       logoUrl: seedCamp.logoUrl,
       bookingRules: { ...seedCamp.bookingRules },
     },
@@ -242,6 +248,23 @@ async function saveWorkspace(workspace) {
   const { workspaces, slugs, owners } = stores();
 
   const existing = await getWorkspaceById(normalized.id);
+  const nameSlug = slugify(normalized.camp.name || "");
+  let candidateSlug =
+    !normalized.camp.slug ||
+    normalized.camp.slug === nameSlug ||
+    normalized.camp.slug === seedCamp.slug
+      ? randomSlug("camp")
+      : normalized.camp.slug;
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const slugEntry = await slugs.get(getSlugKey(candidateSlug), { type: "json" });
+    if (!slugEntry?.workspaceId || slugEntry.workspaceId === normalized.id) {
+      break;
+    }
+    candidateSlug = randomSlug(candidateSlug);
+  }
+
+  normalized.camp.slug = candidateSlug;
+
   if (existing?.camp?.slug && existing.camp.slug !== normalized.camp.slug) {
     await slugs.delete(getSlugKey(existing.camp.slug));
   }
