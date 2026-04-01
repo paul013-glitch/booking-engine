@@ -41,16 +41,16 @@ const seedCamp = {
 const seedPackages = [
   {
     id: "package-7",
-    name: "Essentials",
+    name: "7 nights - essentials",
     nights: 7,
-    basePrice: 700,
+    basePrice: 899,
     description: "Breakfast, surf coaching, boards, and daily surf guiding.",
   },
   {
     id: "package-7-surf",
-    name: "Surf & stay",
+    name: "7 nights - surf & stay",
     nights: 7,
-    basePrice: 900,
+    basePrice: 1100,
     description: "Breakfast, surf coaching, boards, and daily surf guiding.",
   },
 ];
