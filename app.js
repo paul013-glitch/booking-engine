@@ -658,6 +658,20 @@ function roomNightRate(roomId, dateInput) {
   return Number(roomAvailabilityRow(roomId, dateInput)?.pricePerNight ?? room.pricePerNight ?? 0);
 }
 
+function roomAvailableSpots(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
+  const room = getRoom(roomId);
+  return availableUnits(roomId, startDate, endDate) * Number(room.capacity || 0);
+}
+
+function roomCanFitParty(
+  roomId,
+  startDate = draft.startDate,
+  endDate = endDateForDraft(),
+  guestCount = selectedPackagePeopleCount(),
+) {
+  return roomAvailableSpots(roomId, startDate, endDate) >= Math.max(0, Number(guestCount) || 0);
+}
+
 function ensureAvailabilityCoverage(targetState = state) {
   if (!targetState.camp) return;
   if (!targetState.camp.availability) targetState.camp.availability = {};
@@ -780,9 +794,17 @@ function firstAvailableRoom(startDate = draft.startDate, endDate = endDateForDra
   return state.rooms.find((room) => availableUnits(room.id, startDate, endDate) > 0)?.id || null;
 }
 
+function firstRoomForParty(
+  startDate = draft.startDate,
+  endDate = endDateForDraft(),
+  guestCount = selectedPackagePeopleCount(),
+) {
+  return state.rooms.find((room) => roomCanFitParty(room.id, startDate, endDate, guestCount))?.id || null;
+}
+
 function ensureRoomSelection() {
-  if (availableUnits(draft.roomId, draft.startDate, endDateForDraft()) > 0) return;
-  const replacement = firstAvailableRoom();
+  if (roomCanFitParty(draft.roomId, draft.startDate, endDateForDraft(), selectedPackagePeopleCount())) return;
+  const replacement = firstRoomForParty();
   if (replacement) {
     draft.roomId = replacement;
   }
@@ -1018,20 +1040,17 @@ function renderBookPage() {
   const roomCards = state.rooms
     .map((room) => {
       const selected = room.id === draft.roomId;
-      const availability = availabilityText(room);
-      const snapshot = roomAvailabilitySnapshot(room.id);
+      const fitsParty = roomCanFitParty(room.id);
       return `
-        <article class="option-card ${selected ? "selected" : ""}" data-select-room="${room.id}">
+        <article class="option-card ${selected ? "selected" : ""} ${fitsParty ? "" : "unavailable"}" data-select-room="${room.id}" ${fitsParty ? "" : 'aria-disabled="true"'}>
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
           <div class="option-body">
             <h3>${room.name}</h3>
             <p>${room.description}</p>
             <div class="option-meta">
               <span>${money(room.pricePerNight)} / night</span>
-              <span class="availability ${availability.cls}">${availability.label}</span>
             </div>
-            <div class="tiny">${snapshot.available} available &middot; ${snapshot.booked} booked &middot; ${snapshot.forSale} for sale</div>
-            <div class="tiny">${room.capacity} guests per room &middot; ${room.totalUnits * room.capacity} total available</div>
+            <div class="tiny">${room.capacity} guests per room</div>
           </div>
         </article>
       `;
@@ -1068,8 +1087,14 @@ function renderBookPage() {
         </div>
         <div class="stack">${packageCards}</div>
         <div class="package-footer">
-          <div class="tiny">${selectedPackageRows().length ? `${selectedPackageRows().length} package types · ${selectedPackagePeopleCount()} people` : "Choose at least one package row to continue."}</div>
-          <button class="button button-primary" type="button" id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Next</button>
+          <div class="tiny">${
+            selectedPackageRows().length
+              ? `${selectedPackageRows().length} package types · ${selectedPackagePeopleCount()} people`
+              : "Choose at least one package row to continue."
+          }</div>
+          <button class="button button-primary" type="button" id="nextFromPackage" ${
+            selectedPackageRows().length && firstRoomForParty() ? "" : "disabled"
+          }>Next</button>
         </div>
       </section>
     `,
@@ -1085,7 +1110,7 @@ function renderBookPage() {
         </div>
         <div class="card-grid">${roomCards}</div>
         <div class="booking-actions room-actions">
-          <button class="button button-primary" type="button" data-go-step="3" id="nextFromRoom">Next</button>
+          <button class="button button-primary" type="button" id="nextFromRoom">Next</button>
         </div>
       </section>
     `,
@@ -2116,8 +2141,8 @@ function initBookInteractions() {
 
     if (target.dataset.selectRoom) {
       const roomId = target.dataset.selectRoom;
-      if (availableUnits(roomId, draft.startDate, endDateForDraft()) <= 0) {
-        alert("That room is sold out for the selected dates.");
+      if (!roomCanFitParty(roomId, draft.startDate, endDateForDraft(), selectedPackagePeopleCount())) {
+        alert("That room can't fit your group for the selected dates.");
         return;
       }
       draft.roomId = roomId;
@@ -2146,6 +2171,10 @@ function initBookInteractions() {
         alert("Please choose at least one package row before continuing.");
         return;
       }
+      if (!firstRoomForParty()) {
+        alert("No room can fit that group for the selected stay.");
+        return;
+      }
       draft.currentStep = 1;
       updateBookPage();
       return;
@@ -2158,6 +2187,10 @@ function initBookInteractions() {
     }
 
     if (target.id === "nextFromRoom") {
+      if (!roomCanFitParty(draft.roomId, draft.startDate, endDateForDraft(), selectedPackagePeopleCount())) {
+        alert("That room can't fit your group for the selected dates.");
+        return;
+      }
       draft.currentStep = 3;
       trackAnalyticsEvent("add_to_cart", {
         camp: bookingSlug(),
