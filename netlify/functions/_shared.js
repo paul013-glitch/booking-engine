@@ -23,6 +23,19 @@ const seedCamp = {
     restrictedArrivalDays: true,
     allowedArrivalDays: ["Saturday"],
   },
+  showBookingIntents: true,
+  theme: {
+    bg: "#f4ecdf",
+    panel: "#fffaf1",
+    panelSoft: "#f8f1e4",
+    border: "#ded2c1",
+    text: "#2f261d",
+    muted: "#6f6255",
+    accent: "#8a6d49",
+    accentSoft: "#efe2cf",
+    titleFont: 'Georgia, "Times New Roman", serif',
+    bodyFont: "Arial, Helvetica, sans-serif",
+  },
 };
 
 const seedPackages = [
@@ -61,7 +74,7 @@ const seedRooms = [
     totalUnits: 4,
     capacity: 2,
     imageUrl:
-      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe86?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
   },
   {
     id: "dorm-bunk",
@@ -132,10 +145,12 @@ function createDefaultWorkspace(input = {}) {
     selectedAddonIds: ["airport-transfer"],
     startDate: input.startDate || "",
     guestName: "",
+    guestPhone: "",
     guestEmail: "",
     guestCountry: "Netherlands",
     notes: "",
     leads: [],
+    bookingIntents: [],
     packages: structuredClone(seedPackages),
     rooms: structuredClone(seedRooms),
     addons: structuredClone(seedAddons),
@@ -160,6 +175,14 @@ function normalizeWorkspace(data = {}) {
     camp: {
       ...base.camp,
       ...(data.camp || {}),
+      showBookingIntents:
+        typeof (data.camp && data.camp.showBookingIntents) === "boolean"
+          ? data.camp.showBookingIntents
+          : base.camp.showBookingIntents,
+      theme: {
+        ...base.camp.theme,
+        ...((data.camp && data.camp.theme) || {}),
+      },
       bookingRules: {
         ...base.camp.bookingRules,
         ...((data.camp && data.camp.bookingRules) || {}),
@@ -171,6 +194,7 @@ function normalizeWorkspace(data = {}) {
     addons: Array.isArray(data.addons) ? data.addons : base.addons,
     bookings: Array.isArray(data.bookings) ? data.bookings : base.bookings,
     leads: Array.isArray(data.leads) ? data.leads : [],
+    bookingIntents: Array.isArray(data.bookingIntents) ? data.bookingIntents : [],
     selectedAddonIds: Array.isArray(data.selectedAddonIds) ? data.selectedAddonIds : base.selectedAddonIds,
     packageQuantities:
       data.packageQuantities && typeof data.packageQuantities === "object"

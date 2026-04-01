@@ -25,6 +25,23 @@ const seedState = {
     name: "Amigos Surf Camp",
     slug: "amigos-surf-camp",
     logoUrl: logoSvg,
+    showBookingIntents: true,
+    theme: {
+      bg: "#f4ecdf",
+      panel: "#fffaf1",
+      panelSoft: "#f8f1e4",
+      border: "#ded2c1",
+      text: "#2f261d",
+      muted: "#6f6255",
+      accent: "#8a6d49",
+      accentSoft: "#efe2cf",
+      titleFont: 'Georgia, "Times New Roman", serif',
+      bodyFont: "Arial, Helvetica, sans-serif",
+    },
+    analytics: {
+      ga4Id: "",
+      pixelId: "",
+    },
     bookingRules: {
       restrictedArrivalDays: true,
       allowedArrivalDays: ["Saturday"],
@@ -39,10 +56,12 @@ const seedState = {
   selectedAddonIds: ["airport-transfer"],
   startDate: "",
   guestName: "",
+  guestPhone: "",
   guestEmail: "",
   guestCountry: "Netherlands",
   notes: "",
   leads: [],
+  bookingIntents: [],
   packages: [
     {
       id: "package-7",
@@ -78,7 +97,7 @@ const seedState = {
       totalUnits: 4,
       capacity: 2,
       imageUrl:
-        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe86?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
     },
     {
       id: "dorm-bunk",
@@ -178,6 +197,18 @@ function normalizeWorkspaceData(data = {}) {
     camp: {
       ...seedState.camp,
       ...(data.camp || {}),
+      showBookingIntents:
+        typeof (data.camp && data.camp.showBookingIntents) === "boolean"
+          ? data.camp.showBookingIntents
+          : base.camp.showBookingIntents,
+      theme: {
+        ...seedState.camp.theme,
+        ...((data.camp && data.camp.theme) || {}),
+      },
+      analytics: {
+        ...seedState.camp.analytics,
+        ...((data.camp && data.camp.analytics) || {}),
+      },
       bookingRules: {
         ...seedState.camp.bookingRules,
         ...((data.camp && data.camp.bookingRules) || {}),
@@ -189,6 +220,7 @@ function normalizeWorkspaceData(data = {}) {
     addons: Array.isArray(data.addons) ? data.addons : structuredClone(seedState.addons),
     bookings: Array.isArray(data.bookings) ? data.bookings : structuredClone(seedState.bookings),
     leads: Array.isArray(data.leads) ? data.leads : [],
+    bookingIntents: Array.isArray(data.bookingIntents) ? data.bookingIntents : [],
     selectedAddonIds: Array.isArray(data.selectedAddonIds)
       ? data.selectedAddonIds
       : structuredClone(seedState.selectedAddonIds),
@@ -202,11 +234,35 @@ function normalizeWorkspaceData(data = {}) {
     selectedRoomId: data.selectedRoomId || seedState.selectedRoomId,
     startDate: data.startDate || nextDefaultDate(),
     guestName: data.guestName || "",
+    guestPhone: data.guestPhone || "",
     guestEmail: data.guestEmail || "",
     guestCountry: data.guestCountry || "",
     notes: data.notes || "",
     currentStep: Number.isFinite(data.currentStep) ? data.currentStep : 0,
   };
+}
+
+function applyTheme(theme = {}) {
+  const root = document.documentElement;
+  const tokens = {
+    bg: theme.bg,
+    panel: theme.panel,
+    panelSoft: theme.panelSoft,
+    border: theme.border,
+    text: theme.text,
+    muted: theme.muted,
+    accent: theme.accent,
+    accentSoft: theme.accentSoft,
+  };
+
+  Object.entries(tokens).forEach(([key, value]) => {
+    if (value) {
+      root.style.setProperty(`--${key}`, value);
+    }
+  });
+
+  if (theme.titleFont) root.style.setProperty("--title-font", theme.titleFont);
+  if (theme.bodyFont) root.style.setProperty("--body-font", theme.bodyFont);
 }
 
 function loadState() {
@@ -345,6 +401,81 @@ async function apiJson(path, options = {}) {
   }
 
   return data;
+}
+
+const analyticsState = {
+  initialized: false,
+  loadTracked: false,
+};
+
+function analyticsConfig() {
+  return state?.camp?.analytics || {};
+}
+
+function initAnalytics() {
+  const { ga4Id, pixelId } = analyticsConfig();
+  if (analyticsState.initialized || (!ga4Id && !pixelId) || typeof window === "undefined") return;
+
+  if (ga4Id && !document.querySelector(`script[data-ga4-id="${ga4Id}"]`)) {
+    const gtagScript = document.createElement("script");
+    gtagScript.async = true;
+    gtagScript.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(ga4Id)}`;
+    gtagScript.dataset.ga4Id = ga4Id;
+    document.head.appendChild(gtagScript);
+
+    const inline = document.createElement("script");
+    inline.textContent = `
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){window.dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '${ga4Id}');
+    `;
+    document.head.appendChild(inline);
+  }
+
+  if (pixelId && !document.querySelector(`script[data-pixel-id="${pixelId}"]`)) {
+    const inline = document.createElement("script");
+    inline.textContent = `
+      !function(f,b,e,v,n,t,s)
+      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', '${pixelId}');
+      fbq('track', 'PageView');
+    `;
+    inline.dataset.pixelId = pixelId;
+    document.head.appendChild(inline);
+  }
+
+  analyticsState.initialized = true;
+}
+
+function trackAnalyticsEvent(eventName, params = {}) {
+  const { ga4Id, pixelId } = analyticsConfig();
+  if (ga4Id && typeof window.gtag === "function") {
+    window.gtag("event", eventName, params);
+  }
+
+  if (pixelId && typeof window.fbq === "function") {
+    if (eventName === "booking_engine_load") {
+      window.fbq("trackCustom", eventName, params);
+    } else if (eventName === "search") {
+      window.fbq("track", "Search", params);
+      window.fbq("trackCustom", eventName, params);
+    } else if (eventName === "add_to_cart") {
+      window.fbq("track", "AddToCart", params);
+      window.fbq("trackCustom", eventName, params);
+    } else if (eventName === "checkout") {
+      window.fbq("track", "InitiateCheckout", params);
+      window.fbq("trackCustom", eventName, params);
+    } else {
+      window.fbq("trackCustom", eventName, params);
+    }
+  }
 }
 
 function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules) {
@@ -578,16 +709,10 @@ function renderDateSelector() {
 
   return `
     <section class="calendar-card">
-      <div class="calendar-head">
-        <div class="calendar-nav">
-          <button type="button" class="nav-button" data-month-nav="-1">Prev</button>
-          <button type="button" class="nav-button" data-month-nav="1">Next</button>
-        </div>
-        <button type="button" class="button button-primary calendar-next" id="nextFromDate" data-go-step="2">
-          Next
-        </button>
+      <div class="date-intro">
+        <h3>2. Pick a date</h3>
+        <p class="helper">Select your check-in date.</p>
       </div>
-
       <div class="date-summary">
         <div>
           <span class="tiny">Check-in</span>
@@ -603,6 +728,13 @@ function renderDateSelector() {
         </div>
       </div>
 
+      <div class="calendar-head">
+        <div class="calendar-nav">
+          <button type="button" class="nav-button" data-month-nav="-1">Prev</button>
+          <button type="button" class="nav-button" data-month-nav="1">Next</button>
+        </div>
+      </div>
+
       <div class="calendar-grid-wrap">
         ${renderMonthCard(baseMonth)}
         ${renderMonthCard(nextMonth)}
@@ -612,6 +744,12 @@ function renderDateSelector() {
         ${state.camp.bookingRules?.restrictedArrivalDays
           ? `Arrival days: ${state.camp.bookingRules.allowedArrivalDays.join(", ")}`
           : "Any arrival day is allowed."}
+      </div>
+
+      <div class="date-footer">
+        <button type="button" class="button button-primary" id="nextFromDate" data-go-step="2">
+          Next
+        </button>
       </div>
     </section>
   `;
@@ -628,6 +766,7 @@ function renderBookPage() {
 
   if (logo) logo.src = state.camp.logoUrl;
   if (name) name.textContent = state.camp.name;
+  applyTheme(state.camp.theme);
 
   ensureStartDateSelection();
   ensureRoomSelection();
@@ -643,7 +782,7 @@ function renderBookPage() {
           ${index > maxUnlockedStep ? "disabled" : ""}
           data-step="${index}"
         >
-          ${index + 1}
+          ${index + 1}. ${label}
         </button>
       `,
     )
@@ -743,11 +882,14 @@ function renderBookPage() {
         <div class="step-title">
           <div>
             <h3>3. Pick a room</h3>
-            <p class="helper">Inventory blocks overlapping holds and confirmed bookings.</p>
+            <p class="helper">Choose the room that fits your group.</p>
           </div>
           <span class="step-badge">Rooms</span>
         </div>
         <div class="card-grid">${roomCards}</div>
+        <div class="booking-actions room-actions">
+          <button class="button button-primary" type="button" data-go-step="3" id="nextFromRoom">Next</button>
+        </div>
       </section>
     `,
     `
@@ -771,7 +913,7 @@ function renderBookPage() {
         <div class="step-title">
           <div>
             <h3>5. Book</h3>
-            <p class="helper">Create a hold, then send the guest to Stripe.</p>
+            <p class="helper">We save the guest details before checkout.</p>
           </div>
           <span class="step-badge">Stripe-ready</span>
         </div>
@@ -787,17 +929,20 @@ function renderBookPage() {
         </div>
         <div class="input-row" style="margin-top: 14px;">
           <label class="field">
+            Phone
+            <input id="guestPhone" type="tel" value="${escapeHtml(draft.guestPhone)}" />
+          </label>
+          <label class="field">
             Country
             <input id="guestCountry" type="text" value="${escapeHtml(draft.guestCountry)}" />
           </label>
-          <label class="field">
-            Notes
-            <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
-          </label>
         </div>
+        <label class="field" style="margin-top: 14px;">
+          Notes
+          <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
+        </label>
         <div class="booking-actions">
-          <button class="button button-primary" type="button" id="bookButton">Reserve and send to Stripe</button>
-          <span class="helper">Temporary hold only until payment is confirmed.</span>
+          <button class="button button-primary" type="button" id="bookButton">Checkout</button>
         </div>
         <div class="notice">
           In production this would open Stripe Checkout and confirm the booking through a webhook.
@@ -856,6 +1001,15 @@ function renderBookPage() {
       </div>
     </div>
   `;
+
+  initAnalytics();
+  if (!analyticsState.loadTracked && (analyticsConfig().ga4Id || analyticsConfig().pixelId)) {
+    trackAnalyticsEvent("booking_engine_load", {
+      camp: bookingSlug(),
+      step: draft.currentStep + 1,
+    });
+    analyticsState.loadTracked = true;
+  }
 }
 
 function renderAdminPage() {
@@ -863,6 +1017,7 @@ function renderAdminPage() {
   const packageCount = document.getElementById("packageCount");
   const addonCount = document.getElementById("addonCount");
   const bookingCount = document.getElementById("bookingCount");
+  const intentCount = document.getElementById("intentCount");
   document.querySelectorAll("[data-booking-link]").forEach((bookingLink) => {
     bookingLink.setAttribute("href", bookingUrl());
   });
@@ -871,17 +1026,35 @@ function renderAdminPage() {
   if (packageCount) packageCount.textContent = `${state.packages.length} packages`;
   if (addonCount) addonCount.textContent = `${state.addons.length} add-ons`;
   if (bookingCount) bookingCount.textContent = `${state.bookings.length} bookings`;
+  if (intentCount) intentCount.textContent = `${state.bookingIntents.length} intents`;
 
   const roomList = document.getElementById("roomList");
   const packageList = document.getElementById("packageList");
   const addonList = document.getElementById("addonList");
   const bookingList = document.getElementById("bookingList");
+  const bookingIntentCard = document.getElementById("bookingIntentCard");
+  const bookingIntentList = document.getElementById("bookingIntentList");
   const campForm = document.getElementById("campForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
 
   if (campForm) {
     campForm.elements.campName.value = state.camp.name;
     campForm.elements.logoUrl.value = state.camp.logoUrl.startsWith("data:") ? "" : state.camp.logoUrl;
+    campForm.elements.bg.value = state.camp.theme?.bg || seedState.camp.theme.bg;
+    campForm.elements.panel.value = state.camp.theme?.panel || seedState.camp.theme.panel;
+    campForm.elements.panelSoft.value = state.camp.theme?.panelSoft || seedState.camp.theme.panelSoft;
+    campForm.elements.border.value = state.camp.theme?.border || seedState.camp.theme.border;
+    campForm.elements.text.value = state.camp.theme?.text || seedState.camp.theme.text;
+    campForm.elements.muted.value = state.camp.theme?.muted || seedState.camp.theme.muted;
+    campForm.elements.accent.value = state.camp.theme?.accent || seedState.camp.theme.accent;
+    campForm.elements.accentSoft.value = state.camp.theme?.accentSoft || seedState.camp.theme.accentSoft;
+    campForm.elements.titleFont.value = state.camp.theme?.titleFont || seedState.camp.theme.titleFont;
+    campForm.elements.bodyFont.value = state.camp.theme?.bodyFont || seedState.camp.theme.bodyFont;
+    campForm.elements.ga4Id.value = state.camp.analytics?.ga4Id || "";
+    campForm.elements.pixelId.value = state.camp.analytics?.pixelId || "";
+    if (campForm.elements.showBookingIntents) {
+      campForm.elements.showBookingIntents.checked = !!state.camp.showBookingIntents;
+    }
     campForm.elements.restrictedArrivalDays.checked = !!state.camp.bookingRules?.restrictedArrivalDays;
     campForm
       .querySelectorAll('input[name="arrivalDays"]')
@@ -893,6 +1066,7 @@ function renderAdminPage() {
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
   }
+  applyTheme(state.camp.theme);
 
   if (roomList) {
     roomList.innerHTML = state.rooms
@@ -965,8 +1139,32 @@ function renderAdminPage() {
               <span class="status ${booking.status}">${booking.status}</span>
             </div>
             <small>${packageSummary} &middot; ${room.name}</small>
+            <div class="tiny">${booking.guestEmail || "No email"} &middot; ${booking.guestPhone || "No phone"}</div>
             <div class="tiny">${formatDate(booking.startDate)} to ${formatDate(booking.endDate)} &middot; ${money(booking.total)}</div>
             <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDate(booking.holdExpiresAt) : "N/A"}</div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  if (bookingIntentCard && bookingIntentList) {
+    bookingIntentCard.hidden = !state.camp.showBookingIntents && state.bookingIntents.length === 0;
+    bookingIntentList.innerHTML = state.bookingIntents
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((intent) => {
+        const pkg = getPackage(intent.packageId);
+        const room = getRoom(intent.roomId);
+        return `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${intent.guestName || "Guest lead"}</strong>
+              <span class="status held">intent</span>
+            </div>
+            <small>${pkg.name} &middot; ${room.name}</small>
+            <div class="tiny">${intent.guestEmail || "No email"} &middot; ${intent.guestPhone || "No phone"}</div>
+            <div class="tiny">${formatDate(intent.startDate)} to ${formatDate(intent.endDate)} &middot; ${money(intent.total)}</div>
           </div>
         `;
       })
@@ -1042,6 +1240,7 @@ function initLandingAuth() {
 function hydrateStateFromWorkspace(workspace) {
   Object.assign(state, normalizeWorkspaceData(workspace));
   applyStateToDraft();
+  applyTheme(state.camp.theme);
   saveState();
 }
 
@@ -1173,6 +1372,7 @@ function syncDraftToState() {
   state.selectedAddonIds = [...draft.addonIds];
   state.startDate = draft.startDate;
   state.guestName = draft.guestName;
+  state.guestPhone = draft.guestPhone;
   state.guestEmail = draft.guestEmail;
   state.guestCountry = draft.guestCountry;
   state.notes = draft.notes;
@@ -1185,6 +1385,7 @@ function applyStateToDraft() {
   draft.addonIds = [...(state.selectedAddonIds || [])];
   draft.startDate = state.startDate || nextDefaultDate();
   draft.guestName = state.guestName || "";
+  draft.guestPhone = state.guestPhone || "";
   draft.guestEmail = state.guestEmail || "";
   draft.guestCountry = state.guestCountry || "";
   draft.notes = state.notes || "";
@@ -1212,6 +1413,7 @@ async function syncWorkspaceToServer() {
     authState.workspace = result.workspace;
     Object.assign(state, normalizeWorkspaceData(result.workspace));
     applyStateToDraft();
+    applyTheme(state.camp.theme);
   }
 }
 
@@ -1247,17 +1449,19 @@ function updateBookPage() {
   syncDraftToState();
   saveState();
   cleanExpiredHolds();
+  applyTheme(state.camp.theme);
   renderBookPage();
 }
 
 function addBookingHold() {
   const guestName = document.getElementById("guestName")?.value.trim();
+  const guestPhone = document.getElementById("guestPhone")?.value.trim();
   const guestEmail = document.getElementById("guestEmail")?.value.trim();
   const guestCountry = document.getElementById("guestCountry")?.value.trim();
   const notes = document.getElementById("guestNotes")?.value.trim();
 
-  if (!guestName || !guestEmail || !guestCountry) {
-    alert("Please add guest name, email, and country.");
+  if (!guestName || !guestEmail || !guestPhone || !guestCountry) {
+    alert("Please add guest name, phone, email, and country.");
     return;
   }
 
@@ -1269,9 +1473,27 @@ function addBookingHold() {
   }
 
   const now = new Date();
+  state.bookingIntents.unshift({
+    id: `intent-${now.getTime()}`,
+    guestName,
+    guestPhone,
+    guestEmail,
+    guestCountry,
+    packageId: draft.packageId,
+    packageQuantities: { ...draft.packageQuantities },
+    roomId: draft.roomId,
+    addonIds: [...draft.addonIds],
+    startDate,
+    endDate,
+    total: totalPrice(),
+    stage: "checkout",
+    createdAt: now.toISOString(),
+  });
+
   state.bookings.unshift({
     id: `booking-${now.getTime()}`,
     guestName,
+    guestPhone,
     guestEmail,
     guestCountry,
     packageId: draft.packageId,
@@ -1288,11 +1510,18 @@ function addBookingHold() {
   });
 
   draft.guestName = guestName;
+  draft.guestPhone = guestPhone;
   draft.guestEmail = guestEmail;
   draft.guestCountry = guestCountry;
   draft.notes = notes;
   syncDraftToState();
   saveState();
+  trackAnalyticsEvent("checkout", {
+    camp: bookingSlug(),
+    package: getPackage(draft.packageId)?.name || draft.packageId,
+    room: getRoom(draft.roomId)?.name || draft.roomId,
+    total: totalPrice(),
+  });
   alert("Reservation hold created. In a real app this would now open Stripe Checkout.");
   renderBookPage();
 }
@@ -1322,6 +1551,10 @@ function initBookInteractions() {
     if (target.dataset.selectDate) {
       draft.startDate = target.dataset.selectDate;
       ensureRoomSelection();
+      trackAnalyticsEvent("search", {
+        camp: bookingSlug(),
+        check_in: draft.startDate,
+      });
       updateBookPage();
       return;
     }
@@ -1340,7 +1573,6 @@ function initBookInteractions() {
         return;
       }
       draft.roomId = roomId;
-      draft.currentStep = 3;
       updateBookPage();
       return;
     }
@@ -1374,6 +1606,18 @@ function initBookInteractions() {
       return;
     }
 
+    if (target.id === "nextFromRoom") {
+      draft.currentStep = 3;
+      trackAnalyticsEvent("add_to_cart", {
+        camp: bookingSlug(),
+        room: getRoom(draft.roomId)?.name || draft.roomId,
+        package: getPackage(draft.packageId)?.name || draft.packageId,
+        check_in: draft.startDate,
+      });
+      updateBookPage();
+      return;
+    }
+
     if (target.dataset.goStep) {
       draft.currentStep = Number(target.dataset.goStep);
       updateBookPage();
@@ -1402,11 +1646,16 @@ function initBookInteractions() {
       draft.startDate = target.value;
       draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
       ensureRoomSelection();
+      trackAnalyticsEvent("search", {
+        camp: bookingSlug(),
+        check_in: draft.startDate,
+      });
       updateBookPage();
       return;
     }
 
     if (target.id === "guestName") draft.guestName = target.value;
+    if (target.id === "guestPhone") draft.guestPhone = target.value;
     if (target.id === "guestEmail") draft.guestEmail = target.value;
     if (target.id === "guestCountry") draft.guestCountry = target.value;
     if (target.id === "guestNotes") draft.notes = target.value;
@@ -1475,7 +1724,27 @@ function initAdminInteractions() {
       state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
     }
 
+    state.camp.theme = {
+      ...(state.camp.theme || {}),
+      bg: campForm.elements.bg.value,
+      panel: campForm.elements.panel.value,
+      panelSoft: campForm.elements.panelSoft.value,
+      border: campForm.elements.border.value,
+      text: campForm.elements.text.value,
+      muted: campForm.elements.muted.value,
+      accent: campForm.elements.accent.value,
+      accentSoft: campForm.elements.accentSoft.value,
+      titleFont: campForm.elements.titleFont.value,
+      bodyFont: campForm.elements.bodyFont.value,
+    };
+    state.camp.analytics = {
+      ga4Id: campForm.elements.ga4Id.value.trim(),
+      pixelId: campForm.elements.pixelId.value.trim(),
+    };
+    state.camp.showBookingIntents = campForm.elements.showBookingIntents?.checked ?? true;
+
     saveState();
+    applyTheme(state.camp.theme);
     renderAdminPage();
     if (bookingUrlInput) {
       bookingUrlInput.value = bookingUrl();
@@ -1537,6 +1806,7 @@ function initAdminInteractions() {
 
 function init() {
   cleanExpiredHolds();
+  applyTheme(state.camp.theme);
   renderLandingPage();
   initLandingAuth();
 

@@ -12,6 +12,8 @@
   --accent: #8a6d49;
   --accent-soft: #efe2cf;
   --shadow: 0 10px 24px rgba(63, 47, 28, 0.08);
+  --title-font: Georgia, "Times New Roman", serif;
+  --body-font: Arial, Helvetica, sans-serif;
   --radius-xl: 24px;
   --radius-lg: 18px;
   --radius-md: 14px;
@@ -26,7 +28,7 @@ body {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--body-font);
   line-height: 1.5;
 }
 
@@ -45,7 +47,7 @@ p {
 
 h1,
 h2 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--title-font);
   line-height: 1.1;
 }
 
@@ -99,7 +101,7 @@ textarea:focus {
 }
 
 .brand-mark {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--title-font);
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -250,6 +252,10 @@ textarea:focus {
   margin-bottom: 22px;
 }
 
+.page-book {
+  padding-bottom: 14px;
+}
+
 .camp-logo {
   width: 72px;
   height: 72px;
@@ -284,14 +290,14 @@ textarea:focus {
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .stepper {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .stepper button {
@@ -317,11 +323,11 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: #fffdf8;
-  padding: 18px;
+  padding: 14px;
 }
 
 .wizard-step + .wizard-step {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .step-title {
@@ -488,6 +494,10 @@ textarea:focus {
   margin-top: 18px;
 }
 
+.room-actions {
+  justify-content: flex-end;
+}
+
 .notice {
   margin-top: 16px;
   border: 1px solid var(--border);
@@ -626,6 +636,21 @@ textarea:focus {
   flex: 1;
 }
 
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.theme-grid label {
+  gap: 6px;
+}
+
+.theme-grid input[type="color"] {
+  height: 48px;
+  padding: 4px;
+}
+
 .day-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -693,7 +718,13 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: #fffdf8;
-  padding: 18px;
+  padding: 14px;
+}
+
+.date-intro {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
 }
 
 .calendar-head {
@@ -726,13 +757,13 @@ textarea:focus {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .date-summary > div {
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 12px;
+  padding: 10px;
   background: #fffaf1;
 }
 
@@ -744,7 +775,7 @@ textarea:focus {
 .calendar-grid-wrap {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .month-card {
@@ -813,7 +844,8 @@ textarea:focus {
 
 .date-footer {
   margin-top: 14px;
-  display: none;
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media (max-width: 1080px) {
@@ -853,6 +885,7 @@ textarea:focus {
   .two-col,
   .calendar-grid-wrap,
   .date-summary,
+  .theme-grid,
   .day-grid {
     grid-template-columns: 1fr;
   }

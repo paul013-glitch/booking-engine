@@ -73,6 +73,68 @@
             Or upload logo
             <input name="logoFile" type="file" accept="image/*" />
           </label>
+          <div class="theme-grid">
+            <label>
+              Background
+              <input name="bg" type="color" />
+            </label>
+            <label>
+              Panel
+              <input name="panel" type="color" />
+            </label>
+            <label>
+              Soft panel
+              <input name="panelSoft" type="color" />
+            </label>
+            <label>
+              Border
+              <input name="border" type="color" />
+            </label>
+            <label>
+              Text
+              <input name="text" type="color" />
+            </label>
+            <label>
+              Muted text
+              <input name="muted" type="color" />
+            </label>
+            <label>
+              Accent
+              <input name="accent" type="color" />
+            </label>
+            <label>
+              Accent soft
+              <input name="accentSoft" type="color" />
+            </label>
+          </div>
+          <div class="two-col">
+            <label>
+              Title font
+              <select name="titleFont">
+                <option value='Georgia, "Times New Roman", serif'>Georgia</option>
+                <option value='"Palatino Linotype", "Book Antiqua", Palatino, serif'>Palatino</option>
+                <option value='"Times New Roman", Times, serif'>Times New Roman</option>
+                <option value='"Baskerville", "Baskerville Old Face", serif'>Baskerville</option>
+              </select>
+            </label>
+            <label>
+              Body font
+              <select name="bodyFont">
+                <option value='Arial, Helvetica, sans-serif'>Arial</option>
+                <option value='"Segoe UI", Tahoma, sans-serif'>Segoe UI</option>
+                <option value='"Helvetica Neue", Helvetica, Arial, sans-serif'>Helvetica Neue</option>
+                <option value='system-ui, sans-serif'>System UI</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            GA4 measurement ID
+            <input name="ga4Id" type="text" placeholder="G-XXXXXXXXXX" />
+          </label>
+          <label>
+            Meta Pixel ID
+            <input name="pixelId" type="text" placeholder="123456789012345" />
+          </label>
           <label class="checkbox-row">
             <input name="restrictedArrivalDays" type="checkbox" />
             Only allow arrivals on selected days
@@ -83,6 +145,10 @@
               <input id="bookingUrl" type="text" readonly />
               <button class="button button-secondary" type="button" id="copyBookingUrl">Copy link</button>
             </div>
+          </label>
+          <label class="checkbox-row">
+            <input name="showBookingIntents" type="checkbox" />
+            Show saved checkout intents in admin
           </label>
           <div class="day-grid">
             <label><input type="checkbox" name="arrivalDays" value="Sunday" /> Sun</label>
@@ -226,6 +292,14 @@
               <span class="pill" id="bookingCount"></span>
             </div>
             <div id="bookingList" class="stack"></div>
+          </article>
+
+          <article class="list-card" id="bookingIntentCard" hidden>
+            <div class="list-head">
+              <h3>Checkout intents</h3>
+              <span class="pill" id="intentCount"></span>
+            </div>
+            <div id="bookingIntentList" class="stack"></div>
           </article>
         </div>
       </section>
