@@ -68,7 +68,7 @@ const seedRooms = [
   },
   {
     id: "shared-dorm-4bed",
-    name: "Shared Dorm 4 Bed",
+    name: "Shared Dorm (4 guest)",
     description: "Shared dorm room type for four guests.",
     pricePerNight: 75,
     totalUnits: 4,
@@ -216,7 +216,7 @@ function normalizeWorkspace(data = {}) {
       slug: (data.camp && data.camp.slug) || data.slug || base.camp.slug,
     },
     packages: Array.isArray(data.packages) ? data.packages : base.packages,
-    rooms: Array.isArray(data.rooms) ? data.rooms : base.rooms,
+    rooms: structuredClone(base.rooms),
     addons: Array.isArray(data.addons) ? data.addons : base.addons,
     bookings: Array.isArray(data.bookings) ? data.bookings : base.bookings,
     leads: Array.isArray(data.leads) ? data.leads : [],
@@ -227,7 +227,9 @@ function normalizeWorkspace(data = {}) {
         ? data.packageQuantities
         : base.packageQuantities,
     selectedPackageId: data.selectedPackageId || base.selectedPackageId,
-    selectedRoomId: data.selectedRoomId || base.selectedRoomId,
+    selectedRoomId: base.rooms.some((room) => room.id === data.selectedRoomId)
+      ? data.selectedRoomId
+      : base.selectedRoomId,
   };
 }
 

@@ -873,9 +873,22 @@ textarea:focus {
   border: 1px solid var(--border);
   background: #fff;
   border-radius: 12px;
-  min-height: 40px;
-  padding: 0;
+  min-height: 48px;
+  padding: 4px 2px;
   font-weight: 700;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+}
+
+.day-number {
+  line-height: 1;
+}
+
+.day-status {
+  font-size: 0.6rem;
+  line-height: 1;
+  letter-spacing: 0.08em;
 }
 
 .day-cell:disabled {
@@ -885,6 +898,13 @@ textarea:focus {
 .day-cell.disabled-day {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.day-cell.soldout-day {
+  opacity: 1;
+  color: #a23434;
+  border-color: #d7a9a9;
+  background: #fff1f1;
 }
 
 .day-cell.muted-day {

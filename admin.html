@@ -167,43 +167,31 @@
         <div class="panel-head">
           <div>
             <p class="section-label">Camp content</p>
-            <h2>Rooms, packages, and add-ons</h2>
+            <h2>Packages and add-ons</h2>
           </div>
         </div>
 
         <div class="admin-grid">
-          <form class="admin-form" id="roomForm">
-            <h3>Create room option</h3>
-            <label>
-              Room name
-              <input name="name" type="text" placeholder="Private Suite" required />
-            </label>
-            <label>
-              Description
-              <textarea name="description" rows="3" placeholder="Private room with ensuite bathroom"></textarea>
-            </label>
-            <div class="two-col">
-              <label>
-                Price per night
-                <input name="pricePerNight" type="number" min="0" step="1" required />
-              </label>
-              <label>
-                Total units
-                <input name="totalUnits" type="number" min="1" step="1" required />
-              </label>
+          <article class="list-card">
+            <h3>Room options</h3>
+            <p class="helper">Room editing is paused for now while we ship the booking flow.</p>
+            <div class="stack">
+              <div class="stack-item">
+                <div class="stack-item-top">
+                  <strong>Shared Double</strong>
+                  <span class="pill">8 total available</span>
+                </div>
+                <small>4 rooms with 2 guests per room.</small>
+              </div>
+              <div class="stack-item">
+                <div class="stack-item-top">
+                  <strong>Shared Dorm (4 guest)</strong>
+                  <span class="pill">16 total available</span>
+                </div>
+                <small>4 rooms with 4 guests per room.</small>
+              </div>
             </div>
-            <div class="two-col">
-              <label>
-                Guest capacity
-                <input name="capacity" type="number" min="1" step="1" required />
-              </label>
-              <label>
-                Picture
-                <input name="image" type="file" accept="image/*" />
-              </label>
-            </div>
-            <button class="button button-primary" type="submit">Add room</button>
-          </form>
+          </article>
 
           <form class="admin-form" id="packageForm">
             <h3>Create package</h3>

@@ -96,7 +96,7 @@ const seedState = {
     },
     {
       id: "shared-dorm-4bed",
-      name: "Shared Dorm 4 Bed",
+      name: "Shared Dorm (4 guest)",
       description: "Shared dorm room type for four guests.",
       pricePerNight: 75,
       totalUnits: 4,
@@ -248,7 +248,7 @@ function normalizeWorkspaceData(data = {}) {
       slug: (data.camp && data.camp.slug) || slugify((data.camp && data.camp.name) || seedState.camp.name),
     },
     packages: Array.isArray(data.packages) ? data.packages : structuredClone(seedState.packages),
-    rooms: Array.isArray(data.rooms) ? data.rooms : structuredClone(seedState.rooms),
+    rooms: structuredClone(seedState.rooms),
     addons: Array.isArray(data.addons) ? data.addons : structuredClone(seedState.addons),
     bookings: Array.isArray(data.bookings) ? data.bookings : structuredClone(seedState.bookings),
     leads: Array.isArray(data.leads) ? data.leads : [],
@@ -263,7 +263,10 @@ function normalizeWorkspaceData(data = {}) {
         : data.packagePeople
           ? { [data.selectedPackageId || seedState.selectedPackageId]: data.packagePeople }
           : structuredClone(seedState.packageQuantities),
-    selectedRoomId: data.selectedRoomId || seedState.selectedRoomId,
+    selectedRoomId:
+      structuredClone(seedState.rooms).some((room) => room.id === data.selectedRoomId)
+        ? data.selectedRoomId
+        : seedState.selectedRoomId,
     startDate: data.startDate || nextDefaultDate(),
     guestName: data.guestName || "",
     guestPhone: data.guestPhone || "",
@@ -751,6 +754,14 @@ function availabilityText(room) {
   return { label: `${available} left`, cls: "" };
 }
 
+function isSoldOutStartDate(dateInput) {
+  const today = new Date();
+  const date = new Date(dateInput);
+  if (date < new Date(today.getFullYear(), today.getMonth(), today.getDate())) return false;
+  if (!isArrivalAllowed(dateInput, state.camp.bookingRules)) return false;
+  return !hasAvailabilityForDate(dateInput);
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -769,11 +780,13 @@ function renderDayCell(cellDate, monthDate) {
   const isStart = selected;
   const isEnd = iso === endDateForDraft();
   const selectable = inMonth && isSelectableDate(iso);
+  const soldOut = inMonth && isSoldOutStartDate(iso);
 
   const classes = [
     "day-cell",
     inMonth ? "" : "muted-day",
     selectable ? "" : "disabled-day",
+    soldOut ? "soldout-day" : "",
     inRange ? "in-range" : "",
     isStart ? "range-start" : "",
     isEnd ? "range-end" : "",
@@ -788,7 +801,8 @@ function renderDayCell(cellDate, monthDate) {
       ${selectable ? `data-select-date="${iso}"` : "disabled"}
       aria-label="${formatDate(iso)}"
     >
-      ${cellDate.getDate()}
+      <span class="day-number">${cellDate.getDate()}</span>
+      ${soldOut ? '<span class="day-status">FULL</span>' : ""}
     </button>
   `;
 }
@@ -950,6 +964,7 @@ function renderBookPage() {
               <span>${money(room.pricePerNight)} / night</span>
               <span class="availability ${availability.cls}">${availability.label}</span>
             </div>
+            <div class="tiny">${room.capacity} guests per room &middot; ${room.totalUnits * room.capacity} total available</div>
           </div>
         </article>
       `;
@@ -1325,7 +1340,7 @@ function renderAdminPage() {
               <span class="status ${availability.cls || "confirmed"}">${availability.label}</span>
             </div>
             <small>${room.description}</small>
-            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests &middot; ${room.totalUnits} units</div>
+            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits * room.capacity} total available</div>
           </div>
         `;
       })
