@@ -700,8 +700,12 @@ textarea:focus {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: start;
+  align-items: center;
   margin-bottom: 14px;
+}
+
+.calendar-next {
+  margin-left: auto;
 }
 
 .calendar-nav {
@@ -809,11 +813,7 @@ textarea:focus {
 
 .date-footer {
   margin-top: 14px;
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  align-items: center;
-  flex-wrap: wrap;
+  display: none;
 }
 
 @media (max-width: 1080px) {

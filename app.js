@@ -579,14 +579,13 @@ function renderDateSelector() {
   return `
     <section class="calendar-card">
       <div class="calendar-head">
-        <div>
-          <h3>2. Choose dates</h3>
-          <p class="helper">Amigos accepts arrivals only on allowed days when the rule is enabled.</p>
-        </div>
         <div class="calendar-nav">
           <button type="button" class="nav-button" data-month-nav="-1">Prev</button>
           <button type="button" class="nav-button" data-month-nav="1">Next</button>
         </div>
+        <button type="button" class="button button-primary calendar-next" id="nextFromDate" data-go-step="2">
+          Next
+        </button>
       </div>
 
       <div class="date-summary">
@@ -613,11 +612,6 @@ function renderDateSelector() {
         ${state.camp.bookingRules?.restrictedArrivalDays
           ? `Arrival days: ${state.camp.bookingRules.allowedArrivalDays.join(", ")}`
           : "Any arrival day is allowed."}
-      </div>
-
-      <div class="date-footer">
-        <div class="tiny">Pick your arrival date, then continue to rooms.</div>
-        <button type="button" class="button button-primary" id="nextFromDate">Next</button>
       </div>
     </section>
   `;
@@ -649,7 +643,7 @@ function renderBookPage() {
           ${index > maxUnlockedStep ? "disabled" : ""}
           data-step="${index}"
         >
-          ${index + 1}. ${label}
+          ${index + 1}
         </button>
       `,
     )
@@ -1306,7 +1300,7 @@ function addBookingHold() {
 function initBookInteractions() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest(
-      "[data-step], [data-select-package], [data-select-room], [data-toggle-addon], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], #nextFromPackage, #continueToBook",
+    "[data-step], [data-select-package], [data-select-room], [data-toggle-addon], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], #nextFromPackage, #continueToBook",
     );
     if (!target) return;
 
@@ -1376,6 +1370,12 @@ function initBookInteractions() {
 
     if (target.id === "nextFromDate") {
       draft.currentStep = 2;
+      updateBookPage();
+      return;
+    }
+
+    if (target.dataset.goStep) {
+      draft.currentStep = Number(target.dataset.goStep);
       updateBookPage();
       return;
     }
