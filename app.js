@@ -1792,11 +1792,7 @@ function updateAdminAuthUI(user) {
   if (topbarActions) topbarActions.hidden = !workspaceReady;
 
   if (authStatus) {
-    authStatus.textContent = signedIn
-      ? workspaceReady
-        ? `Signed in as ${user.email}.`
-        : "Loading your camp workspace..."
-      : "Sign in with Netlify Identity to edit this camp.";
+    authStatus.textContent = signedIn ? (workspaceReady ? "" : "Loading your camp workspace...") : "";
   }
 
   if (authButton) authButton.hidden = signedIn;

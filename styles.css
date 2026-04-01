@@ -132,6 +132,13 @@ textarea:focus {
   font-weight: 700;
 }
 
+.auth-panel .auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
 .landing-shell,
 .admin-shell,
 .booking-shell {

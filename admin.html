@@ -18,14 +18,9 @@
   <body class="page page-admin">
     <header class="topbar">
       <div class="brand-mark">SurfCamp OS</div>
-      <nav class="topnav">
-        <a href="./index.html">SaaS</a>
-        <a href="./book.html?camp=amigos-surf-camp" data-booking-link>Book demo</a>
-      </nav>
       <div class="topbar-actions" id="topbarActions" hidden>
         <span class="topbar-url">
-          <span class="tiny">Engine URL</span>
-          <a href="./book.html?camp=amigos-surf-camp" data-booking-link id="topbarBookingUrl">Open</a>
+          <a href="./book.html?camp=amigos-surf-camp" data-booking-link id="topbarBookingUrl" target="_blank" rel="noreferrer">Open</a>
         </span>
         <button class="button button-secondary" type="button" id="topbarLogout">Log out</button>
       </div>
@@ -33,16 +28,8 @@
 
     <main class="admin-shell">
       <section class="panel auth-panel" id="authPanel">
-        <div>
-          <p class="eyebrow">Workspace access</p>
-          <h1>Sign in to edit your camp.</h1>
-          <p class="lede">
-            Netlify Identity keeps the admin editor private while guests use the public booking link.
-          </p>
-        </div>
         <div class="auth-actions">
-          <button class="button button-primary" type="button" id="authButton">Sign in / Sign up</button>
-          <button class="button button-secondary" type="button" id="authLogout" hidden>Sign out</button>
+          <button class="button button-primary" type="button" id="authButton">Login</button>
           <p class="tiny" id="authStatus">Loading access state...</p>
         </div>
       </section>
