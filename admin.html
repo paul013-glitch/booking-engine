@@ -18,22 +18,16 @@
   <body class="page page-admin">
     <header class="topbar">
       <div class="brand-mark">SurfCamp OS</div>
-      <div class="topbar-actions" id="topbarActions" hidden>
+      <div class="topbar-actions" id="topbarActions">
+        <button class="button button-primary" type="button" id="authButton">Login</button>
         <span class="topbar-url">
-          <a href="./book.html?camp=amigos-surf-camp" data-booking-link id="topbarBookingUrl" target="_blank" rel="noreferrer">Open</a>
+          <a href="./book.html?camp=amigos-surf-camp" data-booking-link id="topbarBookingUrl" target="_blank" rel="noreferrer" hidden>Open</a>
         </span>
-        <button class="button button-secondary" type="button" id="topbarLogout">Log out</button>
+        <button class="button button-secondary" type="button" id="topbarLogout" hidden>Log out</button>
       </div>
     </header>
 
     <main class="admin-shell">
-      <section class="panel auth-panel" id="authPanel">
-        <div class="auth-actions">
-          <button class="button button-primary" type="button" id="authButton">Login</button>
-          <p class="tiny" id="authStatus">Loading access state...</p>
-        </div>
-      </section>
-
       <div id="adminWorkspace" hidden>
         <section class="panel admin-hero">
           <div>

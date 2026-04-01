@@ -1775,28 +1775,27 @@ async function cancelBookingReservation(bookingId, reservationCode = "", current
 }
 
 function updateAdminAuthUI(user) {
-  const authPanel = document.getElementById("authPanel");
   const authStatus = document.getElementById("authStatus");
   const authButton = document.getElementById("authButton");
   const authLogout = document.getElementById("authLogout");
+  const topbarBookingUrl = document.getElementById("topbarBookingUrl");
   const adminWorkspace = document.getElementById("adminWorkspace");
   const topbarActions = document.getElementById("topbarActions");
 
-  if (!authPanel || !adminWorkspace) return;
+  if (!adminWorkspace) return;
 
   const signedIn = !!user;
   const workspaceReady = signedIn && authState.workspaceLoaded;
-  authPanel.hidden = signedIn && workspaceReady;
   adminWorkspace.hidden = !workspaceReady;
-  authPanel.dataset.authenticated = signedIn ? "true" : "false";
-  if (topbarActions) topbarActions.hidden = !workspaceReady;
+  if (topbarActions) topbarActions.hidden = false;
 
   if (authStatus) {
-    authStatus.textContent = signedIn ? (workspaceReady ? "" : "Loading your camp workspace...") : "";
+    authStatus.textContent = signedIn ? "" : "Loading access state...";
   }
 
   if (authButton) authButton.hidden = signedIn;
   if (authLogout) authLogout.hidden = !signedIn;
+  if (topbarBookingUrl) topbarBookingUrl.hidden = !signedIn || !workspaceReady;
 }
 
 function initNetlifyIdentityAuth() {
