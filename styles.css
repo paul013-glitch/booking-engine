@@ -759,6 +759,18 @@ textarea:focus {
   margin-top: 6px;
 }
 
+.stack-item-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.status.cancelled {
+  color: #7e4d3e;
+  background: #f6e2da;
+  border-color: #e5beb1;
+}
+
 .list-head {
   display: flex;
   justify-content: space-between;

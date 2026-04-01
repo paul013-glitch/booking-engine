@@ -341,6 +341,21 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatDateTime(value) {
+  if (!value) {
+    return "Not set";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 function weekdayName(dateInput) {
   return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][
     new Date(dateInput).getDay()
@@ -585,6 +600,13 @@ function isHoldActive(booking) {
   return booking.status === "held" && (!booking.holdExpiresAt || new Date(booking.holdExpiresAt) > new Date());
 }
 
+function blocksInventory(booking) {
+  if (!booking) return false;
+  if (booking.status === "cancelled" || booking.status === "expired") return false;
+  if (booking.status === "held") return isHoldActive(booking);
+  return booking.status === "confirmed";
+}
+
 function cleanExpiredHolds() {
   let changed = false;
   state.bookings = state.bookings.map((booking) => {
@@ -690,8 +712,7 @@ function bookingNights() {
 function overlappingBookings(roomId, startDate, endDate) {
   return state.bookings.filter((booking) => {
     if (booking.roomId !== roomId) return false;
-    if (booking.status === "expired") return false;
-    if (booking.status === "held" && !isHoldActive(booking)) return false;
+    if (!blocksInventory(booking)) return false;
     return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
   });
 }
@@ -709,6 +730,16 @@ function availableUnits(roomId, startDate, endDate) {
   });
 
   return Math.max(0, Math.min(...units));
+}
+
+function bookedUnitsForWeek(roomId, weekKey) {
+  const startDate = weekKey;
+  const endDate = addDays(weekKey, 7);
+  return state.bookings.filter((booking) => {
+    if (booking.roomId !== roomId) return false;
+    if (!blocksInventory(booking)) return false;
+    return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
+  }).length;
 }
 
 function firstAvailableRoom(startDate = draft.startDate, endDate = endDateForDraft()) {
@@ -1212,6 +1243,7 @@ function renderAvailabilityMatrix(roomId) {
             <div>
               <strong>${escapeHtml(row.weekLabel)}</strong>
               <div class="tiny">${room.name}</div>
+              <div class="tiny">${bookedUnitsForWeek(roomId, row.weekKey)} booked · ${Math.max(0, row.units - bookedUnitsForWeek(roomId, row.weekKey))} left</div>
             </div>
             <label>
               <input
@@ -1402,9 +1434,17 @@ function renderAdminPage() {
             <small>${packageSummary} &middot; ${room.name}</small>
             <div class="tiny">${booking.guestEmail || "No email"} &middot; ${booking.guestPhone || "No phone"}</div>
             <div class="tiny">${formatDate(booking.startDate)} to ${formatDate(booking.endDate)} &middot; ${money(booking.total)}</div>
-            <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDate(booking.holdExpiresAt) : "N/A"}</div>
+            <div class="tiny">Booked: ${formatDateTime(booking.createdAt)}</div>
+            <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDateTime(booking.holdExpiresAt) : "N/A"}</div>
             <div class="tiny">Reservation: ${booking.reservationCode || "pending"}</div>
             <div class="tiny">Email: ${booking.confirmationEmail?.status || "not sent"}</div>
+            ${
+              booking.status !== "cancelled" && booking.status !== "expired"
+                ? `<div class="stack-item-actions"><button type="button" class="button button-secondary" data-cancel-booking="${booking.id}" data-reservation-code="${booking.reservationCode || ""}">Cancel</button></div>`
+                : booking.cancelledAt
+                  ? `<div class="tiny">Cancelled: ${formatDateTime(booking.cancelledAt)}</div>`
+                  : ""
+            }
           </div>
         `;
       })
@@ -1428,6 +1468,8 @@ function renderAdminPage() {
             <small>${pkg.name} &middot; ${room.name}</small>
             <div class="tiny">${intent.guestEmail || "No email"} &middot; ${intent.guestPhone || "No phone"}</div>
             <div class="tiny">${formatDate(intent.startDate)} to ${formatDate(intent.endDate)} &middot; ${money(intent.total)}</div>
+            <div class="tiny">Created: ${formatDateTime(intent.createdAt)}</div>
+            <div class="tiny">Updated: ${formatDateTime(intent.updatedAt || intent.createdAt)}</div>
             <div class="tiny">Reservation: ${intent.reservationCode || "pending"}</div>
           </div>
         `;
@@ -1571,6 +1613,39 @@ async function loadAdminWorkspace() {
     if (authStatus) {
       authStatus.textContent = error instanceof Error ? error.message : "Could not load your workspace.";
     }
+  }
+}
+
+async function refreshAdminWorkspace({ silent = false } = {}) {
+  if (!window.netlifyIdentity?.currentUser || !window.netlifyIdentity.currentUser()) return;
+
+  try {
+    await loadAdminWorkspace();
+  } catch (error) {
+    if (!silent) {
+      alert(error instanceof Error ? error.message : "Could not refresh workspace.");
+    }
+  }
+}
+
+async function cancelBookingReservation(bookingId, reservationCode = "") {
+  if (!bookingId) return;
+  const confirmed = window.confirm("Cancel this reservation and release the room back into availability?");
+  if (!confirmed) return;
+
+  try {
+    const result = await apiJson("cancel-booking", {
+      method: "POST",
+      headers: authState.token ? { Authorization: `Bearer ${authState.token}` } : {},
+      body: JSON.stringify({ bookingId, reservationCode }),
+    });
+
+    if (result?.workspace) {
+      hydrateStateFromWorkspace(result.workspace);
+      renderAdminPage();
+    }
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Could not cancel reservation.");
   }
 }
 
@@ -2004,6 +2079,14 @@ function initBookInteractions() {
     if (event.target?.id === "bookButton") {
       void confirmBookingReservation();
     }
+
+    const cancelBookingButton = event.target?.closest?.("[data-cancel-booking]");
+    if (cancelBookingButton) {
+      void cancelBookingReservation(
+        cancelBookingButton.dataset.cancelBooking,
+        cancelBookingButton.dataset.reservationCode || "",
+      );
+    }
   });
 }
 
@@ -2200,5 +2283,8 @@ init();
 setInterval(() => {
   cleanExpiredHolds();
   if (document.getElementById("stepper")) renderBookPage();
-  if (document.getElementById("roomForm")) renderAdminPage();
+  if (document.getElementById("adminWorkspace")) {
+    renderAdminPage();
+    void refreshAdminWorkspace({ silent: true });
+  }
 }, 30000);

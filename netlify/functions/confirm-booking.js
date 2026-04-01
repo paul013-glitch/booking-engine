@@ -53,11 +53,17 @@ function isHoldActive(booking) {
   return booking.status === "held" && (!booking.holdExpiresAt || new Date(booking.holdExpiresAt) > new Date());
 }
 
+function blocksInventory(booking) {
+  if (!booking) return false;
+  if (booking.status === "cancelled" || booking.status === "expired") return false;
+  if (booking.status === "held") return isHoldActive(booking);
+  return booking.status === "confirmed";
+}
+
 function overlappingBookings(workspace, roomId, startDate, endDate) {
   return (workspace.bookings || []).filter((booking) => {
     if (booking.roomId !== roomId) return false;
-    if (booking.status === "expired") return false;
-    if (booking.status === "held" && !isHoldActive(booking)) return false;
+    if (!blocksInventory(booking)) return false;
     return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
   });
 }
