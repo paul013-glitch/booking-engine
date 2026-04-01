@@ -59,7 +59,7 @@ const seedState = {
     "package-7": 1,
   },
   selectedRoomId: "shared-double",
-  selectedAddonIds: ["airport-transfer"],
+  selectedAddonIds: [],
   startDate: "",
   guestName: "",
   guestPhone: "",
@@ -168,13 +168,18 @@ const seedState = {
 
 function startOfWeek(dateInput) {
   const date = new Date(dateInput);
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
   start.setHours(0, 0, 0, 0);
   return start;
 }
 
+function localDateKey(dateInput) {
+  const date = new Date(dateInput);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function weekKeyForDate(dateInput) {
-  return startOfWeek(dateInput).toISOString().slice(0, 10);
+  return localDateKey(startOfWeek(dateInput));
 }
 
 function createSeedAvailability(rooms, weeks = 12) {
@@ -186,7 +191,7 @@ function createSeedAvailability(rooms, weeks = 12) {
     for (let i = 0; i < weeks; i += 1) {
       const cursor = new Date(start);
       cursor.setDate(cursor.getDate() + i * 7);
-      const key = cursor.toISOString().slice(0, 10);
+      const key = localDateKey(cursor);
       availability[room.id].weeks[key] = {
         units: room.totalUnits,
         pricePerNight: room.pricePerNight,
@@ -217,7 +222,7 @@ const draft = {
 function nextDefaultDate() {
   const date = new Date();
   date.setDate(date.getDate() + 7);
-  return firstAllowedStartDate(date.toISOString().slice(0, 10), seedState.camp.bookingRules);
+  return firstAllowedStartDate(localDateKey(date), seedState.camp.bookingRules);
 }
 
 function normalizeWorkspaceData(data = {}) {
@@ -256,7 +261,7 @@ function normalizeWorkspaceData(data = {}) {
     leads: Array.isArray(data.leads) ? data.leads : [],
     bookingIntents: Array.isArray(data.bookingIntents) ? data.bookingIntents : [],
     selectedAddonIds: Array.isArray(data.selectedAddonIds)
-      ? data.selectedAddonIds
+      ? data.selectedAddonIds.filter((id) => id !== "airport-transfer")
       : structuredClone(seedState.selectedAddonIds),
     selectedPackageId: data.selectedPackageId || seedState.selectedPackageId,
     packageQuantities:
@@ -367,7 +372,7 @@ function weekdayName(dateInput) {
 function addDays(dateInput, days) {
   const date = new Date(dateInput);
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return localDateKey(date);
 }
 
 function startOfMonth(dateInput) {
@@ -556,7 +561,7 @@ function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules)
 function firstAllowedStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
   const cursor = new Date(afterDate);
   for (let i = 0; i < 120; i += 1) {
-    const candidate = cursor.toISOString().slice(0, 10);
+    const candidate = localDateKey(cursor);
     if (isArrivalAllowed(candidate, bookingRules)) return candidate;
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -572,7 +577,7 @@ function hasAvailabilityForDate(startDate) {
 function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
   const cursor = new Date(afterDate);
   for (let i = 0; i < 180; i += 1) {
-    const candidate = cursor.toISOString().slice(0, 10);
+    const candidate = localDateKey(cursor);
     if (isArrivalAllowed(candidate, bookingRules) && hasAvailabilityForDate(candidate)) {
       return candidate;
     }
@@ -643,7 +648,7 @@ function weekKeysBetween(startDate, endDate) {
   const cursor = startOfWeek(startDate);
   const endCursor = startOfWeek(addDays(endDate, -1));
   while (cursor <= endCursor) {
-    keys.push(cursor.toISOString().slice(0, 10));
+    keys.push(localDateKey(cursor));
     cursor.setDate(cursor.getDate() + 7);
   }
   return keys;
@@ -688,7 +693,7 @@ function ensureAvailabilityCoverage(targetState = state) {
     for (let i = 0; i < 12; i += 1) {
       const cursor = new Date(weekStart);
       cursor.setDate(cursor.getDate() + i * 7);
-      const key = cursor.toISOString().slice(0, 10);
+      const key = localDateKey(cursor);
       if (!targetState.camp.availability[room.id].weeks[key]) {
         targetState.camp.availability[room.id].weeks[key] = {
           units: room.totalUnits,
@@ -815,7 +820,7 @@ function roomPrice() {
   const cursor = new Date(draft.startDate);
   const end = new Date(endDateForDraft());
   while (cursor < end) {
-    const iso = cursor.toISOString().slice(0, 10);
+    const iso = localDateKey(cursor);
     total += roomNightRate(draft.roomId, iso);
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -858,7 +863,7 @@ function escapeHtml(value) {
 }
 
 function renderDayCell(cellDate, monthDate) {
-  const iso = cellDate.toISOString().slice(0, 10);
+  const iso = localDateKey(cellDate);
   const inMonth = cellDate.getMonth() === monthDate.getMonth();
   const selected = iso === draft.startDate;
   const rangeStart = new Date(draft.startDate);
@@ -896,8 +901,7 @@ function renderDayCell(cellDate, monthDate) {
 
 function renderMonthCard(monthDate) {
   const firstDay = startOfMonth(monthDate);
-  const gridStart = new Date(firstDay);
-  gridStart.setDate(firstDay.getDate() - firstDay.getDay());
+  const gridStart = startOfWeek(firstDay);
   const cells = [];
 
   for (let i = 0; i < 42; i += 1) {
@@ -912,7 +916,7 @@ function renderMonthCard(monthDate) {
         <strong>${formatMonthLabel(firstDay)}</strong>
       </div>
       <div class="weekday-row">
-        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
       </div>
       <div class="month-grid">${cells.join("")}</div>
     </section>
@@ -1083,7 +1087,6 @@ function renderBookPage() {
             <h3>1. Pick a package</h3>
             <p class="helper">Set the number of people for each package row.</p>
           </div>
-          <span class="step-badge">${state.packages.length} packages</span>
         </div>
         <div class="stack">${packageCards}</div>
         <div class="package-footer">
@@ -1106,7 +1109,6 @@ function renderBookPage() {
             <h3>3. Pick a room</h3>
             <p class="helper">Choose the room that fits your group.</p>
           </div>
-          <span class="step-badge">Rooms</span>
         </div>
         <div class="card-grid">${roomCards}</div>
         <div class="booking-actions room-actions">
@@ -1121,7 +1123,6 @@ function renderBookPage() {
             <h3>4. Add-ons</h3>
             <p class="helper">Add extras only if you need them.</p>
           </div>
-          <span class="step-badge">${state.addons.length} add-ons</span>
         </div>
         <div class="card-grid">${addonCards}</div>
         <div class="booking-actions">
@@ -1137,7 +1138,6 @@ function renderBookPage() {
             <h3>5. Book</h3>
             <p class="helper">We save the guest details before confirming the reservation.</p>
           </div>
-          <span class="step-badge">Reservation</span>
         </div>
         ${
           state.bookingConfirmation
@@ -1207,7 +1207,6 @@ function renderBookPage() {
 
   summary.innerHTML = `
     <div class="summary-hero">
-      <div class="summary-badge">Live summary</div>
       <h2>${getPackage(draft.packageId).name}</h2>
       <p class="muted" style="margin-top: 10px;">${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}</p>
       <div class="summary-list">
@@ -1242,7 +1241,6 @@ function renderBookPage() {
       <div class="summary-total">
         <div>
           <strong>Total</strong>
-          <div class="tiny">Demo mode confirms immediately. Stripe comes next.</div>
         </div>
         <strong>${money(totalPrice())}</strong>
       </div>
@@ -1549,7 +1547,7 @@ function availabilityRowsForRoom(roomId, count = 12) {
   for (let i = 0; i < count; i += 1) {
     const cursor = new Date(start);
     cursor.setDate(cursor.getDate() + i * 7);
-    const key = cursor.toISOString().slice(0, 10);
+    const key = localDateKey(cursor);
     const row = state.camp.availability?.[roomId]?.weeks?.[key] || {
       units: room.totalUnits,
       pricePerNight: room.pricePerNight,

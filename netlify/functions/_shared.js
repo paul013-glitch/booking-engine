@@ -104,13 +104,18 @@ const seedAddons = [
 
 function startOfWeek(dateInput) {
   const date = new Date(dateInput);
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
   start.setHours(0, 0, 0, 0);
   return start;
 }
 
+function localDateKey(dateInput) {
+  const date = new Date(dateInput);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function weekKeyForDate(dateInput) {
-  return startOfWeek(dateInput).toISOString().slice(0, 10);
+  return localDateKey(startOfWeek(dateInput));
 }
 
 function createDefaultAvailability(rooms, weeks = 12) {
@@ -122,7 +127,7 @@ function createDefaultAvailability(rooms, weeks = 12) {
     for (let i = 0; i < weeks; i += 1) {
       const cursor = new Date(weekStart);
       cursor.setDate(cursor.getDate() + i * 7);
-      const key = cursor.toISOString().slice(0, 10);
+      const key = localDateKey(cursor);
       availability[room.id].weeks[key] = {
         units: room.totalUnits,
         pricePerNight: room.pricePerNight,
@@ -164,7 +169,7 @@ function createDefaultWorkspace(input = {}) {
     selectedPackageId: "package-7",
     packageQuantities: { "package-7": 1 },
     selectedRoomId: "shared-double",
-    selectedAddonIds: ["airport-transfer"],
+    selectedAddonIds: [],
     startDate: input.startDate || "",
     guestName: "",
     guestPhone: "",
@@ -222,7 +227,9 @@ function normalizeWorkspace(data = {}) {
     bookings: Array.isArray(data.bookings) ? data.bookings : base.bookings,
     leads: Array.isArray(data.leads) ? data.leads : [],
     bookingIntents: Array.isArray(data.bookingIntents) ? data.bookingIntents : [],
-    selectedAddonIds: Array.isArray(data.selectedAddonIds) ? data.selectedAddonIds : base.selectedAddonIds,
+    selectedAddonIds: Array.isArray(data.selectedAddonIds)
+      ? data.selectedAddonIds.filter((id) => id !== "airport-transfer")
+      : base.selectedAddonIds,
     packageQuantities:
       data.packageQuantities && typeof data.packageQuantities === "object"
         ? data.packageQuantities
