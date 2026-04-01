@@ -226,6 +226,14 @@ function nextDefaultDate() {
 }
 
 function normalizeWorkspaceData(data = {}) {
+  const normalizeOrderedCollection = (items = []) =>
+    items
+      .map((item, index) => ({
+        ...item,
+        order: Number.isFinite(Number(item?.order)) ? Number(item.order) : index,
+      }))
+      .sort((a, b) => a.order - b.order);
+
   return {
     ...structuredClone(seedState),
     ...data,
@@ -254,9 +262,15 @@ function normalizeWorkspaceData(data = {}) {
       },
       slug: (data.camp && data.camp.slug) || slugify((data.camp && data.camp.name) || seedState.camp.name),
     },
-    packages: Array.isArray(data.packages) ? data.packages : structuredClone(seedState.packages),
-    rooms: Array.isArray(data.rooms) ? data.rooms : structuredClone(seedState.rooms),
-    addons: Array.isArray(data.addons) ? data.addons : structuredClone(seedState.addons),
+    packages: Array.isArray(data.packages)
+      ? normalizeOrderedCollection(data.packages)
+      : normalizeOrderedCollection(structuredClone(seedState.packages)),
+    rooms: Array.isArray(data.rooms)
+      ? normalizeOrderedCollection(data.rooms)
+      : normalizeOrderedCollection(structuredClone(seedState.rooms)),
+    addons: Array.isArray(data.addons)
+      ? normalizeOrderedCollection(data.addons)
+      : normalizeOrderedCollection(structuredClone(seedState.addons)),
     bookings: Array.isArray(data.bookings) ? data.bookings : structuredClone(seedState.bookings),
     leads: Array.isArray(data.leads) ? data.leads : [],
     bookingIntents: Array.isArray(data.bookingIntents) ? data.bookingIntents : [],
@@ -648,6 +662,31 @@ function getAddon(id) {
   return state.addons.find((item) => item.id === id);
 }
 
+function orderedItems(items = []) {
+  return items
+    .map((item, index) => ({
+      ...item,
+      order: Number.isFinite(Number(item?.order)) ? Number(item.order) : index,
+    }))
+    .sort((a, b) => a.order - b.order);
+}
+
+function nextOrderValue(items = []) {
+  return orderedItems(items).reduce((max, item) => Math.max(max, item.order), -1) + 1;
+}
+
+function moveOrderedItem(collectionName, itemId, direction) {
+  const items = orderedItems(state[collectionName] || []);
+  const index = items.findIndex((item) => item.id === itemId);
+  const swapIndex = index + direction;
+  if (index < 0 || swapIndex < 0 || swapIndex >= items.length) return false;
+
+  const nextItems = items.slice();
+  [nextItems[index], nextItems[swapIndex]] = [nextItems[swapIndex], nextItems[index]];
+  state[collectionName] = nextItems.map((item, order) => ({ ...item, order }));
+  return true;
+}
+
 function endDateForDraft() {
   if (!draft.startDate) return "";
   return addDays(draft.startDate, bookingNights());
@@ -720,7 +759,7 @@ function packageQuantity(packageId) {
 }
 
 function selectedPackageRows() {
-  return state.packages
+  return orderedItems(state.packages)
     .map((item) => ({
       ...item,
       quantity: packageQuantity(item.id),
@@ -999,6 +1038,9 @@ function renderBookPage() {
   ensureRoomSelection();
 
   const maxUnlockedStep = Math.max(0, draft.currentStep);
+  const orderedPackages = orderedItems(state.packages);
+  const orderedRooms = orderedItems(state.rooms);
+  const orderedAddons = orderedItems(state.addons);
 
   stepper.innerHTML = ["Package", "Date", "Room", "Add-ons", "Book"]
     .map(
@@ -1015,7 +1057,7 @@ function renderBookPage() {
     )
     .join("");
 
-  const packageCards = state.packages
+  const packageCards = orderedPackages
     .map((item) => {
       const quantity = packageQuantity(item.id);
       return `
@@ -1048,7 +1090,7 @@ function renderBookPage() {
     })
     .join("");
 
-  const roomCards = state.rooms
+  const roomCards = orderedRooms
     .map((room) => {
       const selected = room.id === draft.roomId;
       const fitsParty = roomCanFitParty(room.id);
@@ -1068,7 +1110,7 @@ function renderBookPage() {
     })
     .join("");
 
-  const addonCards = state.addons
+  const addonCards = orderedAddons
     .map((addon) => {
       const selected = draft.addonIds.includes(addon.id);
       return `
@@ -1366,8 +1408,12 @@ function renderAdminPage() {
     topbarActions.hidden = false;
   }
 
+  const orderedRooms = orderedItems(state.rooms);
+  const orderedPackages = orderedItems(state.packages);
+  const orderedAddons = orderedItems(state.addons);
+
   if (availabilityRoomSelect) {
-    availabilityRoomSelect.innerHTML = state.rooms
+    availabilityRoomSelect.innerHTML = orderedRooms
       .map(
         (room) => `
           <option value="${room.id}" ${room.id === adminUiState.availabilityRoomId ? "selected" : ""}>
@@ -1453,7 +1499,7 @@ function renderAdminPage() {
 
   const roomList = document.getElementById("roomList");
   if (roomList) {
-    roomList.innerHTML = state.rooms
+    roomList.innerHTML = orderedRooms
       .map((room) => {
         return `
           <div class="stack-item">
@@ -1465,6 +1511,8 @@ function renderAdminPage() {
             </div>
             <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits} rooms</div>
             <div class="stack-item-actions">
+              <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="-1">↑</button>
+              <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="1">↓</button>
               <button type="button" class="button button-secondary" data-edit-room="${room.id}">Edit</button>
             </div>
           </div>
@@ -1475,7 +1523,7 @@ function renderAdminPage() {
 
   const packageList = document.getElementById("packageList");
   if (packageList) {
-    packageList.innerHTML = state.packages
+    packageList.innerHTML = orderedPackages
       .map(
         (item) => `
           <div class="stack-item">
@@ -1485,6 +1533,8 @@ function renderAdminPage() {
             </div>
             <div class="tiny">${money(item.basePrice)}</div>
             <div class="stack-item-actions">
+              <button type="button" class="button button-secondary" data-move-package="${item.id}" data-move-direction="-1">↑</button>
+              <button type="button" class="button button-secondary" data-move-package="${item.id}" data-move-direction="1">↓</button>
               <button type="button" class="button button-secondary" data-edit-package="${item.id}">Edit</button>
             </div>
           </div>
@@ -1495,7 +1545,7 @@ function renderAdminPage() {
 
   const addonList = document.getElementById("addonList");
   if (addonList) {
-    addonList.innerHTML = state.addons
+    addonList.innerHTML = orderedAddons
       .map(
         (item) => `
           <div class="stack-item">
@@ -1505,6 +1555,8 @@ function renderAdminPage() {
             </div>
             <div class="tiny">${item.unitLabel}</div>
             <div class="stack-item-actions">
+              <button type="button" class="button button-secondary" data-move-addon="${item.id}" data-move-direction="-1">↑</button>
+              <button type="button" class="button button-secondary" data-move-addon="${item.id}" data-move-direction="1">↓</button>
               <button type="button" class="button button-secondary" data-edit-addon="${item.id}">Edit</button>
             </div>
           </div>
@@ -2477,14 +2529,16 @@ function initAdminInteractions() {
   packageForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const id = packageForm.elements.id.value || `package-${Date.now()}`;
+    const existing = state.packages.find((item) => item.id === id);
     const payload = {
       id,
       name: packageForm.elements.name.value.trim(),
       description: packageForm.elements.description.value.trim(),
       nights: Number(packageForm.elements.nights.value),
       basePrice: Number(packageForm.elements.basePrice.value),
+      order: existing?.order ?? nextOrderValue(state.packages),
     };
-    state.packages = [payload, ...state.packages.filter((item) => item.id !== id)];
+    state.packages = orderedItems([...state.packages.filter((item) => item.id !== id), payload]);
     packageForm.reset();
     packageForm.elements.id.value = "";
     saveState();
@@ -2494,6 +2548,7 @@ function initAdminInteractions() {
   roomForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = roomForm.elements.id.value || `room-${Date.now()}`;
+    const existing = state.rooms.find((item) => item.id === id);
     const imageFile = roomForm.elements.imageFile.files?.[0];
     let imageUrl = roomForm.elements.imageUrl.value.trim();
     if (imageFile) {
@@ -2511,8 +2566,9 @@ function initAdminInteractions() {
       capacity: Number(roomForm.elements.capacity.value),
       pricePerNight: Number(roomForm.elements.pricePerNight.value),
       imageUrl,
+      order: existing?.order ?? nextOrderValue(state.rooms),
     };
-    state.rooms = [payload, ...state.rooms.filter((item) => item.id !== id)];
+    state.rooms = orderedItems([...state.rooms.filter((item) => item.id !== id), payload]);
     ensureAvailabilityCoverage(state);
     roomForm.reset();
     roomForm.elements.id.value = "";
@@ -2523,14 +2579,16 @@ function initAdminInteractions() {
   addonForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const id = addonForm.elements.id.value || `addon-${Date.now()}`;
+    const existing = state.addons.find((item) => item.id === id);
     const payload = {
       id,
       name: addonForm.elements.name.value.trim(),
       description: addonForm.elements.description.value.trim(),
       price: Number(addonForm.elements.price.value),
       unitLabel: addonForm.elements.unitLabel.value.trim(),
+      order: existing?.order ?? nextOrderValue(state.addons),
     };
-    state.addons = [payload, ...state.addons.filter((item) => item.id !== id)];
+    state.addons = orderedItems([...state.addons.filter((item) => item.id !== id), payload]);
     addonForm.reset();
     addonForm.elements.id.value = "";
     saveState();
@@ -2541,6 +2599,34 @@ function initAdminInteractions() {
     const editPackageButton = event.target?.closest?.("[data-edit-package]");
     const editRoomButton = event.target?.closest?.("[data-edit-room]");
     const editAddonButton = event.target?.closest?.("[data-edit-addon]");
+    const movePackageButton = event.target?.closest?.("[data-move-package]");
+    const moveRoomButton = event.target?.closest?.("[data-move-room]");
+    const moveAddonButton = event.target?.closest?.("[data-move-addon]");
+
+    if (movePackageButton) {
+      if (moveOrderedItem("packages", movePackageButton.dataset.movePackage, Number(movePackageButton.dataset.moveDirection || 0))) {
+        saveState();
+        renderAdminPage();
+      }
+      return;
+    }
+
+    if (moveRoomButton) {
+      if (moveOrderedItem("rooms", moveRoomButton.dataset.moveRoom, Number(moveRoomButton.dataset.moveDirection || 0))) {
+        ensureAvailabilityCoverage(state);
+        saveState();
+        renderAdminPage();
+      }
+      return;
+    }
+
+    if (moveAddonButton) {
+      if (moveOrderedItem("addons", moveAddonButton.dataset.moveAddon, Number(moveAddonButton.dataset.moveDirection || 0))) {
+        saveState();
+        renderAdminPage();
+      }
+      return;
+    }
 
     if (editPackageButton && packageForm) {
       const item = state.packages.find((entry) => entry.id === editPackageButton.dataset.editPackage);
