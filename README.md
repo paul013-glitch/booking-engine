@@ -40,6 +40,19 @@ The functions will read `NETLIFY_BLOBS_CONTEXT` first, then fall back to `SITE_I
 ## Next real backend steps
 
 1. Add Stripe Checkout and webhook confirmation
-2. Send booking confirmation emails
+2. Expand confirmation email delivery with your preferred provider settings
 3. Add inventory locking for holds and cancellations
 4. Split the workspace API into finer admin endpoints when the app grows
+
+## Booking confirmation email
+
+The public booking flow now confirms reservations through `confirm-booking` and attempts to send a confirmation email.
+
+To send real email, set these Netlify environment variables:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- optional `RESEND_FROM_NAME`
+- optional `RESEND_REPLY_TO`
+
+If the email provider is not configured, the booking still confirms and the confirmation status is saved with the booking record.

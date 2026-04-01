@@ -506,6 +506,15 @@ textarea:focus {
   background: var(--panel-soft);
 }
 
+.confirmation-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+
 .summary-hero {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

@@ -59,9 +59,10 @@ const seedState = {
   guestPhone: "",
   guestEmail: "",
   guestCountry: "Netherlands",
-  notes: "",
-  leads: [],
-  bookingIntents: [],
+    notes: "",
+    bookingConfirmation: null,
+    leads: [],
+    bookingIntents: [],
   packages: [
     {
       id: "package-7",
@@ -238,6 +239,7 @@ function normalizeWorkspaceData(data = {}) {
     guestEmail: data.guestEmail || "",
     guestCountry: data.guestCountry || "",
     notes: data.notes || "",
+    bookingConfirmation: data.bookingConfirmation || null,
     currentStep: Number.isFinite(data.currentStep) ? data.currentStep : 0,
   };
 }
@@ -913,40 +915,70 @@ function renderBookPage() {
         <div class="step-title">
           <div>
             <h3>5. Book</h3>
-            <p class="helper">We save the guest details before checkout.</p>
+            <p class="helper">We save the guest details before confirming the reservation.</p>
           </div>
-          <span class="step-badge">Stripe-ready</span>
+          <span class="step-badge">Reservation</span>
         </div>
-        <div class="input-row">
-          <label class="field">
-            Guest name
-            <input id="guestName" type="text" value="${escapeHtml(draft.guestName)}" />
-          </label>
-          <label class="field">
-            Email
-            <input id="guestEmail" type="email" value="${escapeHtml(draft.guestEmail)}" />
-          </label>
-        </div>
-        <div class="input-row" style="margin-top: 14px;">
-          <label class="field">
-            Phone
-            <input id="guestPhone" type="tel" value="${escapeHtml(draft.guestPhone)}" />
-          </label>
-          <label class="field">
-            Country
-            <input id="guestCountry" type="text" value="${escapeHtml(draft.guestCountry)}" />
-          </label>
-        </div>
-        <label class="field" style="margin-top: 14px;">
-          Notes
-          <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
-        </label>
-        <div class="booking-actions">
-          <button class="button button-primary" type="button" id="bookButton">Checkout</button>
-        </div>
-        <div class="notice">
-          In production this would open Stripe Checkout and confirm the booking through a webhook.
-        </div>
+        ${
+          state.bookingConfirmation
+            ? `
+              <div class="confirmation-card">
+                <p class="eyebrow">Booking confirmed</p>
+                <h3>Thanks, ${escapeHtml(state.bookingConfirmation.guestName || draft.guestName)}.</h3>
+                <p class="helper">Your reservation is saved and the confirmation email is ${
+                  state.bookingConfirmation.emailStatus === "sent" ? "on its way" : "ready when email delivery is configured"
+                }.</p>
+                <div class="summary-list" style="margin-top: 18px;">
+                  <div class="summary-item">
+                    <div>
+                      <strong>Booking ID</strong>
+                      <span>${escapeHtml(state.bookingConfirmation.bookingId || "")}</span>
+                    </div>
+                    <strong>Confirmed</strong>
+                  </div>
+                  <div class="summary-item">
+                    <div>
+                      <strong>Guest</strong>
+                      <span>${escapeHtml(state.bookingConfirmation.guestEmail || draft.guestEmail)}</span>
+                    </div>
+                    <strong>${escapeHtml(state.bookingConfirmation.emailStatus || "skipped")}</strong>
+                  </div>
+                </div>
+              </div>
+            `
+            : `
+              <div class="input-row">
+                <label class="field">
+                  Guest name
+                  <input id="guestName" type="text" value="${escapeHtml(draft.guestName)}" />
+                </label>
+                <label class="field">
+                  Email
+                  <input id="guestEmail" type="email" value="${escapeHtml(draft.guestEmail)}" />
+                </label>
+              </div>
+              <div class="input-row" style="margin-top: 14px;">
+                <label class="field">
+                  Phone
+                  <input id="guestPhone" type="tel" value="${escapeHtml(draft.guestPhone)}" />
+                </label>
+                <label class="field">
+                  Country
+                  <input id="guestCountry" type="text" value="${escapeHtml(draft.guestCountry)}" />
+                </label>
+              </div>
+              <label class="field" style="margin-top: 14px;">
+                Notes
+                <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
+              </label>
+              <div class="booking-actions">
+                <button class="button button-primary" type="button" id="bookButton">Confirm booking</button>
+              </div>
+              <div class="notice">
+                Demo mode: this confirms the booking immediately and would hand off to Stripe in production.
+              </div>
+            `
+        }
       </section>
     `,
   ];
@@ -990,7 +1022,7 @@ function renderBookPage() {
       <div class="summary-total">
         <div>
           <strong>Total</strong>
-          <div class="tiny">Hold first, then charge through Stripe</div>
+          <div class="tiny">Demo mode confirms immediately. Stripe comes next.</div>
         </div>
         <strong>${money(totalPrice())}</strong>
       </div>
@@ -1142,6 +1174,7 @@ function renderAdminPage() {
             <div class="tiny">${booking.guestEmail || "No email"} &middot; ${booking.guestPhone || "No phone"}</div>
             <div class="tiny">${formatDate(booking.startDate)} to ${formatDate(booking.endDate)} &middot; ${money(booking.total)}</div>
             <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDate(booking.holdExpiresAt) : "N/A"}</div>
+            <div class="tiny">Email: ${booking.confirmationEmail?.status || "not sent"}</div>
           </div>
         `;
       })
@@ -1453,7 +1486,7 @@ function updateBookPage() {
   renderBookPage();
 }
 
-function addBookingHold() {
+async function confirmBookingReservation() {
   const guestName = document.getElementById("guestName")?.value.trim();
   const guestPhone = document.getElementById("guestPhone")?.value.trim();
   const guestEmail = document.getElementById("guestEmail")?.value.trim();
@@ -1473,7 +1506,7 @@ function addBookingHold() {
   }
 
   const now = new Date();
-  state.bookingIntents.unshift({
+  const bookingPayload = {
     id: `intent-${now.getTime()}`,
     guestName,
     guestPhone,
@@ -1486,44 +1519,89 @@ function addBookingHold() {
     startDate,
     endDate,
     total: totalPrice(),
+    notes: notes || "",
     stage: "checkout",
     createdAt: now.toISOString(),
-  });
-
-  state.bookings.unshift({
-    id: `booking-${now.getTime()}`,
-    guestName,
-    guestPhone,
-    guestEmail,
-    guestCountry,
-    packageId: draft.packageId,
-    packageQuantities: { ...draft.packageQuantities },
-    roomId: draft.roomId,
-    addonIds: [...draft.addonIds],
-    startDate,
-    endDate,
-    total: totalPrice(),
-    status: "held",
-    createdAt: now.toISOString(),
-    holdExpiresAt: new Date(now.getTime() + HOLD_MINUTES * 60 * 1000).toISOString(),
-    notes: notes || "Awaiting Stripe Checkout completion.",
-  });
+  };
 
   draft.guestName = guestName;
   draft.guestPhone = guestPhone;
   draft.guestEmail = guestEmail;
   draft.guestCountry = guestCountry;
   draft.notes = notes;
-  syncDraftToState();
-  saveState();
-  trackAnalyticsEvent("checkout", {
-    camp: bookingSlug(),
-    package: getPackage(draft.packageId)?.name || draft.packageId,
-    room: getRoom(draft.roomId)?.name || draft.roomId,
-    total: totalPrice(),
-  });
-  alert("Reservation hold created. In a real app this would now open Stripe Checkout.");
-  renderBookPage();
+
+  try {
+    const result = await apiJson("confirm-booking", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceSlug: bookingSlug(),
+        booking: bookingPayload,
+      }),
+    });
+
+    if (result?.workspace) {
+      hydrateStateFromWorkspace(result.workspace);
+    } else {
+      state.bookingIntents.unshift({ ...bookingPayload, stage: "confirmed" });
+      state.bookings.unshift({
+        id: `booking-${now.getTime()}`,
+        ...bookingPayload,
+        status: "confirmed",
+        notes: notes || "Booking confirmed in demo mode.",
+      });
+      syncDraftToState();
+      saveState();
+    }
+    state.bookingConfirmation = {
+      bookingId: result?.booking?.id || `booking-${now.getTime()}`,
+      emailStatus: result?.email?.status || "skipped",
+      confirmedAt: now.toISOString(),
+      guestEmail,
+      guestName,
+    };
+    draft.bookingConfirmation = state.bookingConfirmation;
+    syncDraftToState();
+    saveState();
+    trackAnalyticsEvent("checkout", {
+      camp: bookingSlug(),
+      package: getPackage(draft.packageId)?.name || draft.packageId,
+      room: getRoom(draft.roomId)?.name || draft.roomId,
+      total: totalPrice(),
+    });
+    alert(
+      result?.email?.status === "sent"
+        ? "Booking confirmed and confirmation email sent."
+        : "Booking confirmed. Confirmation email will be sent when email delivery is configured.",
+    );
+    renderBookPage();
+  } catch (error) {
+    state.bookingIntents.unshift({ ...bookingPayload, stage: "confirmed" });
+    state.bookings.unshift({
+      id: `booking-${now.getTime()}`,
+      ...bookingPayload,
+      status: "confirmed",
+      notes: notes || "Booking confirmed locally.",
+    });
+    syncDraftToState();
+    saveState();
+    state.bookingConfirmation = {
+      bookingId: `booking-${now.getTime()}`,
+      emailStatus: "skipped",
+      confirmedAt: now.toISOString(),
+      guestEmail,
+      guestName,
+    };
+    draft.bookingConfirmation = state.bookingConfirmation;
+    saveState();
+    trackAnalyticsEvent("checkout", {
+      camp: bookingSlug(),
+      package: getPackage(draft.packageId)?.name || draft.packageId,
+      room: getRoom(draft.roomId)?.name || draft.roomId,
+      total: totalPrice(),
+    });
+    alert(`Booking confirmed locally, but the server could not be reached: ${error instanceof Error ? error.message : "Unknown error"}`);
+    renderBookPage();
+  }
 }
 
 function initBookInteractions() {
@@ -1550,6 +1628,7 @@ function initBookInteractions() {
 
     if (target.dataset.selectDate) {
       draft.startDate = target.dataset.selectDate;
+      state.bookingConfirmation = null;
       ensureRoomSelection();
       trackAnalyticsEvent("search", {
         camp: bookingSlug(),
@@ -1561,6 +1640,7 @@ function initBookInteractions() {
 
     if (target.dataset.selectPackage) {
       draft.packageId = target.dataset.selectPackage;
+      state.bookingConfirmation = null;
       ensureRoomSelection();
       updateBookPage();
       return;
@@ -1573,6 +1653,7 @@ function initBookInteractions() {
         return;
       }
       draft.roomId = roomId;
+      state.bookingConfirmation = null;
       updateBookPage();
       return;
     }
@@ -1580,12 +1661,14 @@ function initBookInteractions() {
     if (target.dataset.packageRowChange) {
       const [packageId, delta] = target.dataset.packageRowChange.split(":");
       setPackageQuantity(packageId, packageQuantity(packageId) + Number(delta));
+      state.bookingConfirmation = null;
       updateBookPage();
       return;
     }
 
     if (target.dataset.packageRowInput) {
       setPackageQuantity(target.dataset.packageRowInput, target.value);
+      state.bookingConfirmation = null;
       updateBookPage();
       return;
     }
@@ -1629,11 +1712,13 @@ function initBookInteractions() {
       draft.addonIds = draft.addonIds.includes(addonId)
         ? draft.addonIds.filter((id) => id !== addonId)
         : [...draft.addonIds, addonId];
+      state.bookingConfirmation = null;
       updateBookPage();
     }
 
     if (target.id === "continueToBook") {
       draft.currentStep = 4;
+      state.bookingConfirmation = null;
       updateBookPage();
     }
   });
@@ -1645,6 +1730,7 @@ function initBookInteractions() {
     if (target.id === "startDate") {
       draft.startDate = target.value;
       draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+      state.bookingConfirmation = null;
       ensureRoomSelection();
       trackAnalyticsEvent("search", {
         camp: bookingSlug(),
@@ -1665,7 +1751,7 @@ function initBookInteractions() {
 
   document.addEventListener("click", (event) => {
     if (event.target?.id === "bookButton") {
-      addBookingHold();
+      void confirmBookingReservation();
     }
   });
 }
