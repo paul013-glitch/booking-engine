@@ -27,8 +27,12 @@ exports.handler = async (event, context) => {
       return response(400, { error: "Missing bookingId" });
     }
 
-    const ownerId = user.sub || user.email;
-    const workspace = await getWorkspaceForOwner(ownerId);
+    const ownerCandidates = [user.sub, user.email].filter(Boolean);
+    let workspace = null;
+    for (const ownerId of ownerCandidates) {
+      workspace = await getWorkspaceForOwner(ownerId);
+      if (workspace) break;
+    }
     if (!workspace) {
       return response(404, { error: "Workspace not found" });
     }

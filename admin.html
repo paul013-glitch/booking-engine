@@ -22,6 +22,13 @@
         <a href="./index.html">SaaS</a>
         <a href="./book.html?camp=amigos-surf-camp" data-booking-link>Book demo</a>
       </nav>
+      <div class="topbar-actions" id="topbarActions" hidden>
+        <span class="topbar-url">
+          <span class="tiny">Engine URL</span>
+          <a href="./book.html?camp=amigos-surf-camp" data-booking-link id="topbarBookingUrl">Open</a>
+        </span>
+        <button class="button button-secondary" type="button" id="topbarLogout">Log out</button>
+      </div>
     </header>
 
     <main class="admin-shell">
@@ -32,11 +39,11 @@
           <p class="lede">
             Netlify Identity keeps the admin editor private while guests use the public booking link.
           </p>
-          <p class="tiny" id="authStatus">Loading access state...</p>
         </div>
         <div class="auth-actions">
           <button class="button button-primary" type="button" id="authButton">Sign in / Sign up</button>
           <button class="button button-secondary" type="button" id="authLogout" hidden>Sign out</button>
+          <p class="tiny" id="authStatus">Loading access state...</p>
         </div>
       </section>
 
@@ -247,72 +254,127 @@
             </div>
           </div>
 
-          <div class="admin-grid">
-            <article class="list-card">
-              <h3>Room options</h3>
-              <div class="stack">
-                <div class="stack-item">
-                  <div class="stack-item-top">
-                    <strong>Shared Double</strong>
-                    <span class="pill">8 total available</span>
-                  </div>
-                  <small>4 rooms with 2 guests per room.</small>
-                </div>
-                <div class="stack-item">
-                  <div class="stack-item-top">
-                    <strong>Shared Dorm (4 guest)</strong>
-                    <span class="pill">16 total available</span>
-                  </div>
-                  <small>4 rooms with 4 guests per room.</small>
-                </div>
-              </div>
-            </article>
+          <div class="config-tabs" aria-label="Configure sections">
+            <button type="button" class="config-tab-button" data-config-tab="packages">Packages</button>
+            <button type="button" class="config-tab-button" data-config-tab="rooms">Rooms</button>
+            <button type="button" class="config-tab-button" data-config-tab="addons">Add-ons</button>
+          </div>
 
-            <form class="admin-form" id="packageForm">
-              <h3>Create package</h3>
-              <label>
-                Package name
-                <input name="name" type="text" placeholder="7-night Surf Retreat" required />
-              </label>
-              <label>
-                Description
-                <textarea name="description" rows="3" placeholder="Breakfast, surf guiding, and yoga"></textarea>
-              </label>
-              <div class="two-col">
+          <div class="config-pane" data-config-pane="packages">
+            <div class="admin-grid">
+              <form class="admin-form" id="packageForm">
+                <h3>Create / edit package</h3>
+                <input type="hidden" name="id" />
                 <label>
-                  Nights
-                  <input name="nights" type="number" min="1" step="1" required />
+                  Package name
+                  <input name="name" type="text" placeholder="7-night Surf Retreat" required />
                 </label>
                 <label>
-                  Base price
-                  <input name="basePrice" type="number" min="0" step="1" required />
+                  Description
+                  <textarea name="description" rows="3" placeholder="Breakfast, surf guiding, and yoga"></textarea>
                 </label>
-              </div>
-              <button class="button button-primary" type="submit">Add package</button>
-            </form>
+                <div class="two-col">
+                  <label>
+                    Nights
+                    <input name="nights" type="number" min="1" step="1" required />
+                  </label>
+                  <label>
+                    Base price
+                    <input name="basePrice" type="number" min="0" step="1" required />
+                  </label>
+                </div>
+                <button class="button button-primary" type="submit">Save package</button>
+              </form>
+              <article class="list-card">
+                <div class="list-head">
+                  <h3>Packages</h3>
+                  <span class="pill" id="packageCount"></span>
+                </div>
+                <div id="packageList" class="stack"></div>
+              </article>
+            </div>
+          </div>
 
-            <form class="admin-form" id="addonForm">
-              <h3>Create add-on</h3>
-              <label>
-                Add-on name
-                <input name="name" type="text" placeholder="Airport transfer" required />
-              </label>
-              <label>
-                Description
-                <textarea name="description" rows="3" placeholder="One-way transfer from the airport"></textarea>
-              </label>
-              <div class="two-col">
+          <div class="config-pane" data-config-pane="rooms">
+            <div class="admin-grid">
+              <form class="admin-form" id="roomForm">
+                <h3>Create / edit room</h3>
+                <input type="hidden" name="id" />
                 <label>
-                  Price
-                  <input name="price" type="number" min="0" step="1" required />
+                  Room name
+                  <input name="name" type="text" placeholder="Shared Double" required />
                 </label>
                 <label>
-                  Unit label
-                  <input name="unitLabel" type="text" placeholder="per stay" required />
+                  Description
+                  <textarea name="description" rows="3" placeholder="Shared dorm room type"></textarea>
                 </label>
-              </div>
-              <button class="button button-primary" type="submit">Add add-on</button>
-            </form>
+                <div class="two-col">
+                  <label>
+                    Total units
+                    <input name="totalUnits" type="number" min="1" step="1" required />
+                  </label>
+                  <label>
+                    Capacity
+                    <input name="capacity" type="number" min="1" step="1" required />
+                  </label>
+                </div>
+                <label>
+                  Price per night
+                  <input name="pricePerNight" type="number" min="0" step="1" required />
+                </label>
+                <label>
+                  Image URL
+                  <input name="imageUrl" type="url" placeholder="https://..." />
+                </label>
+                <label>
+                  Or upload image
+                  <input name="imageFile" type="file" accept="image/*" />
+                </label>
+                <button class="button button-primary" type="submit">Save room</button>
+              </form>
+              <article class="list-card">
+                <div class="list-head">
+                  <h3>Rooms</h3>
+                  <span class="pill" id="roomCount"></span>
+                </div>
+                <div id="roomList" class="stack"></div>
+              </article>
+            </div>
+          </div>
+
+          <div class="config-pane" data-config-pane="addons">
+            <div class="admin-grid">
+              <form class="admin-form" id="addonForm">
+                <h3>Create / edit add-on</h3>
+                <input type="hidden" name="id" />
+                <label>
+                  Add-on name
+                  <input name="name" type="text" placeholder="Airport transfer" required />
+                </label>
+                <label>
+                  Description
+                  <textarea name="description" rows="3" placeholder="One-way transfer from the airport"></textarea>
+                </label>
+                <div class="two-col">
+                  <label>
+                    Price
+                    <input name="price" type="number" min="0" step="1" required />
+                  </label>
+                  <label>
+                    Unit label
+                    <input name="unitLabel" type="text" placeholder="per stay" required />
+                  </label>
+                </div>
+                <button class="button button-primary" type="submit">Save add-on</button>
+              </form>
+              <article class="list-card">
+                <div class="list-head">
+                  <h3>Add-ons</h3>
+                  <span class="pill" id="addonCount"></span>
+                </div>
+                <div id="addonList" class="stack"></div>
+              </article>
+            </div>
           </div>
         </section>
       </div>

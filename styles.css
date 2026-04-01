@@ -113,6 +113,25 @@ textarea:focus {
   color: var(--muted);
 }
 
+.topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-url {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+}
+
+.topbar-url a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+}
+
 .landing-shell,
 .admin-shell,
 .booking-shell {
@@ -629,6 +648,27 @@ textarea:focus {
 .admin-tab-button.active {
   background: var(--accent);
   color: #fff8ef;
+  border-color: var(--accent);
+}
+
+.config-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 16px;
+}
+
+.config-tab-button {
+  border: 1px solid var(--border);
+  background: #fffefb;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 700;
+}
+
+.config-tab-button.active {
+  background: var(--accent-soft);
   border-color: var(--accent);
 }
 

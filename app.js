@@ -11,6 +11,7 @@ const authState = {
 const adminUiState = {
   availabilityRoomId: "shared-double",
   activeTab: "bookings",
+  configTab: "packages",
 };
 
 const logoSvg =
@@ -1239,26 +1240,39 @@ function renderBookPage() {
 }
 
 function renderAdminPage() {
+  const roomCount = document.getElementById("roomCount");
+  const packageCount = document.getElementById("packageCount");
+  const addonCount = document.getElementById("addonCount");
   const bookingCount = document.getElementById("bookingCount");
   const intentCount = document.getElementById("intentCount");
   const activeTab = adminUiState.activeTab || "bookings";
   document.querySelectorAll("[data-booking-link]").forEach((bookingLink) => {
     bookingLink.setAttribute("href", bookingUrl());
   });
+  if (roomCount) roomCount.textContent = `${state.rooms.length} rooms`;
+  if (packageCount) packageCount.textContent = `${state.packages.length} packages`;
+  if (addonCount) addonCount.textContent = `${state.addons.length} add-ons`;
   if (bookingCount) bookingCount.textContent = `${state.bookings.length} bookings`;
   if (intentCount) intentCount.textContent = `${state.bookingIntents.length} intents`;
 
+  const topbarActions = document.getElementById("topbarActions");
+  const topbarBookingUrl = document.getElementById("topbarBookingUrl");
   const bookingList = document.getElementById("bookingList");
   const bookingIntentCard = document.getElementById("bookingIntentCard");
   const bookingIntentList = document.getElementById("bookingIntentList");
   const campForm = document.getElementById("campForm");
   const analyticsForm = document.getElementById("analyticsForm");
+  const packageForm = document.getElementById("packageForm");
+  const roomForm = document.getElementById("roomForm");
+  const addonForm = document.getElementById("addonForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
   const availabilityBasePrice = document.getElementById("availabilityBasePrice");
   const availabilityMatrix = document.getElementById("availabilityMatrix");
   const panes = document.querySelectorAll("[data-admin-pane]");
   const tabButtons = document.querySelectorAll("[data-admin-tab]");
+  const configPanes = document.querySelectorAll("[data-config-pane]");
+  const configTabButtons = document.querySelectorAll("[data-config-tab]");
 
   ensureAvailabilityCoverage(state);
 
@@ -1298,6 +1312,9 @@ function renderAdminPage() {
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
   }
+  if (topbarBookingUrl) {
+    topbarBookingUrl.setAttribute("href", bookingUrl());
+  }
   applyTheme(state.camp.theme);
 
   panes.forEach((pane) => {
@@ -1306,6 +1323,15 @@ function renderAdminPage() {
   tabButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.adminTab === activeTab);
   });
+  configPanes.forEach((pane) => {
+    pane.hidden = activeTab !== "configure" || pane.dataset.configPane !== adminUiState.configTab;
+  });
+  configTabButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.configTab === adminUiState.configTab);
+  });
+  if (topbarActions) {
+    topbarActions.hidden = !(authState.user && authState.workspaceLoaded);
+  }
 
   if (availabilityRoomSelect) {
     availabilityRoomSelect.innerHTML = state.rooms
@@ -1390,6 +1416,102 @@ function renderAdminPage() {
         `;
       })
       .join("");
+  }
+
+  const roomList = document.getElementById("roomList");
+  if (roomList) {
+    roomList.innerHTML = state.rooms
+      .map((room) => {
+        const availability = availabilityText(room);
+        return `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${room.name}</strong>
+              <span class="status ${availability.cls || "confirmed"}">${availability.label}</span>
+            </div>
+            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits * room.capacity} total available</div>
+            <div class="stack-item-actions">
+              <button type="button" class="button button-secondary" data-edit-room="${room.id}">Edit</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  const packageList = document.getElementById("packageList");
+  if (packageList) {
+    packageList.innerHTML = state.packages
+      .map(
+        (item) => `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${item.name}</strong>
+              <span class="pill">${item.nights} nights</span>
+            </div>
+            <div class="tiny">${money(item.basePrice)}</div>
+            <div class="stack-item-actions">
+              <button type="button" class="button button-secondary" data-edit-package="${item.id}">Edit</button>
+            </div>
+          </div>
+        `,
+      )
+      .join("");
+  }
+
+  const addonList = document.getElementById("addonList");
+  if (addonList) {
+    addonList.innerHTML = state.addons
+      .map(
+        (item) => `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${item.name}</strong>
+              <span class="pill">${money(item.price)}</span>
+            </div>
+            <div class="tiny">${item.unitLabel}</div>
+            <div class="stack-item-actions">
+              <button type="button" class="button button-secondary" data-edit-addon="${item.id}">Edit</button>
+            </div>
+          </div>
+        `,
+      )
+      .join("");
+  }
+
+  if (packageForm) {
+    const editId = packageForm.elements.id.value;
+    const editing = state.packages.find((item) => item.id === editId);
+    if (editing) {
+      packageForm.elements.name.value = editing.name || "";
+      packageForm.elements.description.value = editing.description || "";
+      packageForm.elements.nights.value = editing.nights || 7;
+      packageForm.elements.basePrice.value = editing.basePrice || 0;
+    }
+  }
+
+  if (roomForm) {
+    const editId = roomForm.elements.id.value;
+    const editing = state.rooms.find((item) => item.id === editId);
+    if (editing) {
+      roomForm.elements.name.value = editing.name || "";
+      roomForm.elements.description.value = editing.description || "";
+      roomForm.elements.totalUnits.value = editing.totalUnits || 1;
+      roomForm.elements.capacity.value = editing.capacity || 1;
+      roomForm.elements.pricePerNight.value = editing.pricePerNight || 0;
+      roomForm.elements.imageUrl.value = editing.imageUrl?.startsWith("data:") ? "" : editing.imageUrl || "";
+    }
+  }
+
+  if (addonForm) {
+    const editId = addonForm.elements.id.value;
+    const editing = state.addons.find((item) => item.id === editId);
+    if (editing) {
+      addonForm.elements.name.value = editing.name || "";
+      addonForm.elements.description.value = editing.description || "";
+      addonForm.elements.price.value = editing.price || 0;
+      addonForm.elements.unitLabel.value = editing.unitLabel || "per stay";
+    }
   }
 }
 
@@ -1658,13 +1780,16 @@ function updateAdminAuthUI(user) {
   const authButton = document.getElementById("authButton");
   const authLogout = document.getElementById("authLogout");
   const adminWorkspace = document.getElementById("adminWorkspace");
+  const topbarActions = document.getElementById("topbarActions");
 
   if (!authPanel || !adminWorkspace) return;
 
   const signedIn = !!user;
   const workspaceReady = signedIn && authState.workspaceLoaded;
+  authPanel.hidden = signedIn && workspaceReady;
   adminWorkspace.hidden = !workspaceReady;
   authPanel.dataset.authenticated = signedIn ? "true" : "false";
+  if (topbarActions) topbarActions.hidden = !workspaceReady;
 
   if (authStatus) {
     authStatus.textContent = signedIn
@@ -2106,7 +2231,9 @@ function readFileAsDataUrl(file) {
 function initAdminInteractions() {
   const campForm = document.getElementById("campForm");
   const analyticsForm = document.getElementById("analyticsForm");
+  const topbarLogout = document.getElementById("topbarLogout");
   const packageForm = document.getElementById("packageForm");
+  const roomForm = document.getElementById("roomForm");
   const addonForm = document.getElementById("addonForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
   const copyBookingUrlButton = document.getElementById("copyBookingUrl");
@@ -2123,6 +2250,13 @@ function initAdminInteractions() {
     const tabButton = event.target?.closest?.("[data-admin-tab]");
     if (!tabButton) return;
     adminUiState.activeTab = tabButton.dataset.adminTab || "bookings";
+    renderAdminPage();
+  });
+
+  document.addEventListener("click", (event) => {
+    const configTabButton = event.target?.closest?.("[data-config-tab]");
+    if (!configTabButton) return;
+    adminUiState.configTab = configTabButton.dataset.configTab || "packages";
     renderAdminPage();
   });
 
@@ -2152,6 +2286,10 @@ function initAdminInteractions() {
     saveState();
     applyTheme(state.camp.theme);
     renderAdminPage();
+  });
+
+  topbarLogout?.addEventListener("click", () => {
+    window.netlifyIdentity?.logout?.();
   });
 
   copyBookingUrlButton?.addEventListener("click", async () => {
@@ -2223,32 +2361,114 @@ function initAdminInteractions() {
 
   packageForm?.addEventListener("submit", (event) => {
     event.preventDefault();
-    state.packages.unshift({
-      id: `package-${Date.now()}`,
+    const id = packageForm.elements.id.value || `package-${Date.now()}`;
+    const payload = {
+      id,
       name: packageForm.elements.name.value.trim(),
       description: packageForm.elements.description.value.trim(),
       nights: Number(packageForm.elements.nights.value),
       basePrice: Number(packageForm.elements.basePrice.value),
-    });
-
+    };
+    state.packages = [payload, ...state.packages.filter((item) => item.id !== id)];
     packageForm.reset();
+    packageForm.elements.id.value = "";
+    saveState();
+    renderAdminPage();
+  });
+
+  roomForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const id = roomForm.elements.id.value || `room-${Date.now()}`;
+    const imageFile = roomForm.elements.imageFile.files?.[0];
+    let imageUrl = roomForm.elements.imageUrl.value.trim();
+    if (imageFile) {
+      imageUrl = await readFileAsDataUrl(imageFile);
+    }
+    if (!imageUrl) {
+      imageUrl = state.rooms.find((item) => item.id === id)?.imageUrl || logoSvg;
+    }
+
+    const payload = {
+      id,
+      name: roomForm.elements.name.value.trim(),
+      description: roomForm.elements.description.value.trim(),
+      totalUnits: Number(roomForm.elements.totalUnits.value),
+      capacity: Number(roomForm.elements.capacity.value),
+      pricePerNight: Number(roomForm.elements.pricePerNight.value),
+      imageUrl,
+    };
+    state.rooms = [payload, ...state.rooms.filter((item) => item.id !== id)];
+    ensureAvailabilityCoverage(state);
+    roomForm.reset();
+    roomForm.elements.id.value = "";
     saveState();
     renderAdminPage();
   });
 
   addonForm?.addEventListener("submit", (event) => {
     event.preventDefault();
-    state.addons.unshift({
-      id: `addon-${Date.now()}`,
+    const id = addonForm.elements.id.value || `addon-${Date.now()}`;
+    const payload = {
+      id,
       name: addonForm.elements.name.value.trim(),
       description: addonForm.elements.description.value.trim(),
       price: Number(addonForm.elements.price.value),
       unitLabel: addonForm.elements.unitLabel.value.trim(),
-    });
-
+    };
+    state.addons = [payload, ...state.addons.filter((item) => item.id !== id)];
     addonForm.reset();
+    addonForm.elements.id.value = "";
     saveState();
     renderAdminPage();
+  });
+
+  document.addEventListener("click", (event) => {
+    const editPackageButton = event.target?.closest?.("[data-edit-package]");
+    const editRoomButton = event.target?.closest?.("[data-edit-room]");
+    const editAddonButton = event.target?.closest?.("[data-edit-addon]");
+
+    if (editPackageButton && packageForm) {
+      const item = state.packages.find((entry) => entry.id === editPackageButton.dataset.editPackage);
+      if (!item) return;
+      adminUiState.activeTab = "configure";
+      adminUiState.configTab = "packages";
+      packageForm.elements.id.value = item.id;
+      packageForm.elements.name.value = item.name || "";
+      packageForm.elements.description.value = item.description || "";
+      packageForm.elements.nights.value = item.nights || 7;
+      packageForm.elements.basePrice.value = item.basePrice || 0;
+      renderAdminPage();
+      return;
+    }
+
+    if (editRoomButton && roomForm) {
+      const item = state.rooms.find((entry) => entry.id === editRoomButton.dataset.editRoom);
+      if (!item) return;
+      adminUiState.activeTab = "configure";
+      adminUiState.configTab = "rooms";
+      roomForm.elements.id.value = item.id;
+      roomForm.elements.name.value = item.name || "";
+      roomForm.elements.description.value = item.description || "";
+      roomForm.elements.totalUnits.value = item.totalUnits || 1;
+      roomForm.elements.capacity.value = item.capacity || 1;
+      roomForm.elements.pricePerNight.value = item.pricePerNight || 0;
+      roomForm.elements.imageUrl.value = item.imageUrl?.startsWith("data:") ? "" : item.imageUrl || "";
+      renderAdminPage();
+      return;
+    }
+
+    if (editAddonButton && addonForm) {
+      const item = state.addons.find((entry) => entry.id === editAddonButton.dataset.editAddon);
+      if (!item) return;
+      adminUiState.activeTab = "configure";
+      adminUiState.configTab = "addons";
+      addonForm.elements.id.value = item.id;
+      addonForm.elements.name.value = item.name || "";
+      addonForm.elements.description.value = item.description || "";
+      addonForm.elements.price.value = item.price || 0;
+      addonForm.elements.unitLabel.value = item.unitLabel || "per stay";
+      renderAdminPage();
+    }
   });
 }
 
