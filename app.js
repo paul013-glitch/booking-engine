@@ -1,5 +1,11 @@
 const STORAGE_KEY = "surfcamp-os-demo-v2";
 const HOLD_MINUTES = 15;
+const authState = {
+  user: null,
+  token: null,
+  workspace: null,
+  syncTimer: null,
+};
 
 const logoSvg =
   'data:image/svg+xml;charset=UTF-8,' +
@@ -16,6 +22,7 @@ const logoSvg =
 const seedState = {
   camp: {
     name: "Amigos Surf Camp",
+    slug: "amigos-surf-camp",
     logoUrl: logoSvg,
     bookingRules: {
       restrictedArrivalDays: true,
@@ -163,57 +170,61 @@ function nextDefaultDate() {
   return firstAllowedStartDate(date.toISOString().slice(0, 10), seedState.camp.bookingRules);
 }
 
+function normalizeWorkspaceData(data = {}) {
+  return {
+    ...structuredClone(seedState),
+    ...data,
+    camp: {
+      ...seedState.camp,
+      ...(data.camp || {}),
+      bookingRules: {
+        ...seedState.camp.bookingRules,
+        ...((data.camp && data.camp.bookingRules) || {}),
+      },
+      slug: (data.camp && data.camp.slug) || slugify((data.camp && data.camp.name) || seedState.camp.name),
+    },
+    packages: Array.isArray(data.packages) ? data.packages : structuredClone(seedState.packages),
+    rooms: Array.isArray(data.rooms) ? data.rooms : structuredClone(seedState.rooms),
+    addons: Array.isArray(data.addons) ? data.addons : structuredClone(seedState.addons),
+    bookings: Array.isArray(data.bookings) ? data.bookings : structuredClone(seedState.bookings),
+    leads: Array.isArray(data.leads) ? data.leads : [],
+    selectedAddonIds: Array.isArray(data.selectedAddonIds)
+      ? data.selectedAddonIds
+      : structuredClone(seedState.selectedAddonIds),
+    selectedPackageId: data.selectedPackageId || seedState.selectedPackageId,
+    packageQuantities:
+      data.packageQuantities && typeof data.packageQuantities === "object"
+        ? data.packageQuantities
+        : data.packagePeople
+          ? { [data.selectedPackageId || seedState.selectedPackageId]: data.packagePeople }
+          : structuredClone(seedState.packageQuantities),
+    selectedRoomId: data.selectedRoomId || seedState.selectedRoomId,
+    startDate: data.startDate || nextDefaultDate(),
+    guestName: data.guestName || "",
+    guestEmail: data.guestEmail || "",
+    guestCountry: data.guestCountry || "",
+    notes: data.notes || "",
+    currentStep: Number.isFinite(data.currentStep) ? data.currentStep : 0,
+  };
+}
+
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    const seeded = structuredClone(seedState);
-    seeded.startDate = nextDefaultDate();
-    return seeded;
+    return normalizeWorkspaceData({ startDate: nextDefaultDate() });
   }
 
   try {
     const parsed = JSON.parse(raw);
-    return {
-      ...structuredClone(seedState),
-      ...parsed,
-      camp: {
-        ...seedState.camp,
-        ...(parsed.camp || {}),
-        bookingRules: {
-          ...seedState.camp.bookingRules,
-          ...((parsed.camp && parsed.camp.bookingRules) || {}),
-        },
-      },
-      packages: Array.isArray(parsed.packages) ? parsed.packages : structuredClone(seedState.packages),
-      rooms: Array.isArray(parsed.rooms) ? parsed.rooms : structuredClone(seedState.rooms),
-      addons: Array.isArray(parsed.addons) ? parsed.addons : structuredClone(seedState.addons),
-      bookings: Array.isArray(parsed.bookings) ? parsed.bookings : structuredClone(seedState.bookings),
-      leads: Array.isArray(parsed.leads) ? parsed.leads : [],
-      selectedAddonIds: Array.isArray(parsed.selectedAddonIds)
-        ? parsed.selectedAddonIds
-        : structuredClone(seedState.selectedAddonIds),
-      selectedPackageId: parsed.selectedPackageId || seedState.selectedPackageId,
-      packageQuantities:
-        parsed.packageQuantities && typeof parsed.packageQuantities === "object"
-          ? parsed.packageQuantities
-          : parsed.packagePeople
-            ? { [parsed.selectedPackageId || seedState.selectedPackageId]: parsed.packagePeople }
-            : structuredClone(seedState.packageQuantities),
-      selectedRoomId: parsed.selectedRoomId || seedState.selectedRoomId,
-      startDate: parsed.startDate || nextDefaultDate(),
-      guestName: parsed.guestName || "",
-      guestEmail: parsed.guestEmail || "",
-      guestCountry: parsed.guestCountry || "",
-      notes: parsed.notes || "",
-      currentStep: Number.isFinite(parsed.currentStep) ? parsed.currentStep : 0,
-    };
+    return normalizeWorkspaceData(parsed);
   } catch {
-    return structuredClone(seedState);
+    return normalizeWorkspaceData();
   }
 }
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  queueWorkspaceSync();
 }
 
 function money(value) {
@@ -270,6 +281,69 @@ function formatMonthLabel(dateInput) {
     month: "long",
     year: "numeric",
   }).format(new Date(dateInput));
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+function bookingSlug() {
+  return state.camp.slug || slugify(state.camp.name) || "camp";
+}
+
+function bookingPath() {
+  return `/book/${bookingSlug()}`;
+}
+
+function bookingUrl() {
+  if (window.location.protocol === "file:") {
+    return `./book.html?camp=${bookingSlug()}`;
+  }
+
+  try {
+    return new URL(bookingPath(), window.location.origin).toString();
+  } catch {
+    return bookingPath();
+  }
+}
+
+function requestedCampSlug() {
+  const params = new URLSearchParams(window.location.search);
+  const querySlug = params.get("camp");
+  if (querySlug) return querySlug;
+
+  const match = window.location.pathname.match(/\/book\/([^/?#]+)/i);
+  if (match?.[1]) return decodeURIComponent(match[1]);
+
+  return seedState.camp.slug;
+}
+
+function apiUrl(path) {
+  return `/.netlify/functions/${path}`;
+}
+
+async function apiJson(path, options = {}) {
+  const response = await fetch(apiUrl(path), {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(data?.error || `Request failed (${response.status})`);
+  }
+
+  return data;
 }
 
 function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules) {
@@ -539,6 +613,11 @@ function renderDateSelector() {
           ? `Arrival days: ${state.camp.bookingRules.allowedArrivalDays.join(", ")}`
           : "Any arrival day is allowed."}
       </div>
+
+      <div class="date-footer">
+        <div class="tiny">Pick your arrival date, then continue to rooms.</div>
+        <button type="button" class="button button-primary" id="nextFromDate">Next</button>
+      </div>
     </section>
   `;
 }
@@ -789,6 +868,9 @@ function renderAdminPage() {
   const packageCount = document.getElementById("packageCount");
   const addonCount = document.getElementById("addonCount");
   const bookingCount = document.getElementById("bookingCount");
+  document.querySelectorAll("[data-booking-link]").forEach((bookingLink) => {
+    bookingLink.setAttribute("href", bookingUrl());
+  });
 
   if (roomCount) roomCount.textContent = `${state.rooms.length} rooms`;
   if (packageCount) packageCount.textContent = `${state.packages.length} packages`;
@@ -800,6 +882,7 @@ function renderAdminPage() {
   const addonList = document.getElementById("addonList");
   const bookingList = document.getElementById("bookingList");
   const campForm = document.getElementById("campForm");
+  const bookingUrlInput = document.getElementById("bookingUrl");
 
   if (campForm) {
     campForm.elements.campName.value = state.camp.name;
@@ -810,6 +893,10 @@ function renderAdminPage() {
       .forEach((checkbox) => {
         checkbox.checked = (state.camp.bookingRules?.allowedArrivalDays || []).includes(checkbox.value);
       });
+  }
+
+  if (bookingUrlInput) {
+    bookingUrlInput.value = bookingUrl();
   }
 
   if (roomList) {
@@ -896,6 +983,10 @@ function renderLandingPage() {
   const form = document.getElementById("signupForm");
   if (!form) return;
 
+  document.querySelectorAll("[data-booking-link]").forEach((bookingLink) => {
+    bookingLink.setAttribute("href", bookingUrl());
+  });
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const lead = {
@@ -917,6 +1008,125 @@ function renderLandingPage() {
   });
 }
 
+function hydrateStateFromWorkspace(workspace) {
+  Object.assign(state, normalizeWorkspaceData(workspace));
+  applyStateToDraft();
+  saveState();
+}
+
+async function loadPublicWorkspace() {
+  if (window.location.protocol === "file:") {
+    return;
+  }
+
+  try {
+    const slug = requestedCampSlug();
+    const workspace = await apiJson(`public-workspace?slug=${encodeURIComponent(slug)}`);
+    if (workspace) {
+      hydrateStateFromWorkspace(workspace);
+      renderBookPage();
+    }
+  } catch {
+    // Fall back to local demo state when the public API is unavailable.
+  }
+}
+
+async function loadAdminWorkspace() {
+  if (!window.netlifyIdentity?.currentUser) return;
+
+  const user = window.netlifyIdentity.currentUser();
+  if (!user) return;
+
+  authState.user = user;
+  try {
+    authState.token = await user.jwt();
+    const workspace = await apiJson("me-workspace", {
+      headers: {
+        Authorization: `Bearer ${authState.token}`,
+      },
+    });
+
+    if (workspace) {
+      authState.workspace = workspace;
+      hydrateStateFromWorkspace(workspace);
+      renderAdminPage();
+    }
+  } catch (error) {
+    const authStatus = document.getElementById("authStatus");
+    if (authStatus) {
+      authStatus.textContent = error instanceof Error ? error.message : "Could not load your workspace.";
+    }
+  }
+}
+
+function updateAdminAuthUI(user) {
+  const authPanel = document.getElementById("authPanel");
+  const authStatus = document.getElementById("authStatus");
+  const authButton = document.getElementById("authButton");
+  const authLogout = document.getElementById("authLogout");
+  const adminWorkspace = document.getElementById("adminWorkspace");
+
+  if (!authPanel || !adminWorkspace) return;
+
+  const signedIn = !!user;
+  adminWorkspace.hidden = !signedIn;
+  authPanel.dataset.authenticated = signedIn ? "true" : "false";
+
+  if (authStatus) {
+    authStatus.textContent = signedIn
+      ? `Signed in as ${user.email}.`
+      : "Sign in with Netlify Identity to edit this camp.";
+  }
+
+  if (authButton) authButton.hidden = signedIn;
+  if (authLogout) authLogout.hidden = !signedIn;
+}
+
+function initNetlifyIdentityAuth() {
+  if (!window.netlifyIdentity || typeof window.netlifyIdentity.on !== "function") {
+    updateAdminAuthUI(null);
+    const authStatus = document.getElementById("authStatus");
+    if (authStatus) {
+      authStatus.textContent = "Netlify Identity is not available. Enable it in the Netlify dashboard.";
+    }
+    return;
+  }
+
+  window.netlifyIdentity.on("init", (user) => {
+    updateAdminAuthUI(user);
+    if (user) {
+      void loadAdminWorkspace();
+    }
+  });
+
+  window.netlifyIdentity.on("login", (user) => {
+    window.netlifyIdentity.close();
+    updateAdminAuthUI(user);
+    void loadAdminWorkspace();
+  });
+
+  window.netlifyIdentity.on("logout", () => {
+    authState.user = null;
+    authState.token = null;
+    authState.workspace = null;
+    updateAdminAuthUI(null);
+  });
+
+  const authButton = document.getElementById("authButton");
+  const authLogout = document.getElementById("authLogout");
+
+  authButton?.addEventListener("click", () => {
+    window.netlifyIdentity.open();
+  });
+
+  authLogout?.addEventListener("click", () => {
+    window.netlifyIdentity.logout();
+  });
+
+  window.netlifyIdentity.init();
+  updateAdminAuthUI(window.netlifyIdentity.currentUser());
+}
+
 function syncDraftToState() {
   state.currentStep = draft.currentStep;
   state.selectedPackageId = draft.packageId;
@@ -928,6 +1138,51 @@ function syncDraftToState() {
   state.guestEmail = draft.guestEmail;
   state.guestCountry = draft.guestCountry;
   state.notes = draft.notes;
+}
+
+function applyStateToDraft() {
+  draft.packageId = state.selectedPackageId;
+  draft.packageQuantities = { ...(state.packageQuantities || {}) };
+  draft.roomId = state.selectedRoomId;
+  draft.addonIds = [...(state.selectedAddonIds || [])];
+  draft.startDate = state.startDate || nextDefaultDate();
+  draft.guestName = state.guestName || "";
+  draft.guestEmail = state.guestEmail || "";
+  draft.guestCountry = state.guestCountry || "";
+  draft.notes = state.notes || "";
+  draft.currentStep = state.currentStep ?? 0;
+  draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+}
+
+async function syncWorkspaceToServer() {
+  if (!authState.user || !authState.token || !authState.workspace) return;
+
+  const payload = normalizeWorkspaceData(state);
+  const result = await apiJson("save-workspace", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authState.token}`,
+    },
+    body: JSON.stringify({
+      workspace: payload,
+      workspaceId: authState.workspace.id,
+      slug: authState.workspace.slug,
+    }),
+  });
+
+  if (result?.workspace) {
+    authState.workspace = result.workspace;
+    Object.assign(state, normalizeWorkspaceData(result.workspace));
+    applyStateToDraft();
+  }
+}
+
+function queueWorkspaceSync() {
+  if (!authState.user || !authState.token || !authState.workspace) return;
+  clearTimeout(authState.syncTimer);
+  authState.syncTimer = setTimeout(() => {
+    void syncWorkspaceToServer().catch(() => {});
+  }, 350);
 }
 
 function clampPackageQuantity(value) {
@@ -1028,7 +1283,6 @@ function initBookInteractions() {
 
     if (target.dataset.selectDate) {
       draft.startDate = target.dataset.selectDate;
-      draft.currentStep = Math.max(draft.currentStep, 2);
       ensureRoomSelection();
       updateBookPage();
       return;
@@ -1076,6 +1330,12 @@ function initBookInteractions() {
       return;
     }
 
+    if (target.id === "nextFromDate") {
+      draft.currentStep = 2;
+      updateBookPage();
+      return;
+    }
+
     if (target.dataset.toggleAddon) {
       const addonId = target.dataset.toggleAddon;
       draft.addonIds = draft.addonIds.includes(addonId)
@@ -1096,7 +1356,6 @@ function initBookInteractions() {
 
     if (target.id === "startDate") {
       draft.startDate = target.value;
-      draft.currentStep = Math.max(draft.currentStep, 2);
       draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
       ensureRoomSelection();
       updateBookPage();
@@ -1132,10 +1391,30 @@ function initAdminInteractions() {
   const roomForm = document.getElementById("roomForm");
   const packageForm = document.getElementById("packageForm");
   const addonForm = document.getElementById("addonForm");
+  const bookingUrlInput = document.getElementById("bookingUrl");
+  const copyBookingUrlButton = document.getElementById("copyBookingUrl");
+
+  if (bookingUrlInput) {
+    bookingUrlInput.value = bookingUrl();
+  }
+
+  copyBookingUrlButton?.addEventListener("click", async () => {
+    const url = bookingUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      copyBookingUrlButton.textContent = "Copied";
+      setTimeout(() => {
+        copyBookingUrlButton.textContent = "Copy link";
+      }, 1800);
+    } catch {
+      alert(`Copy this link: ${url}`);
+    }
+  });
 
   campForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     state.camp.name = campForm.elements.campName.value.trim() || state.camp.name;
+    state.camp.slug = state.camp.slug || slugify(state.camp.name);
 
     const restrictedArrivalDays = campForm.elements.restrictedArrivalDays.checked;
     const allowedArrivalDays = Array.from(campForm.querySelectorAll('input[name="arrivalDays"]:checked')).map(
@@ -1155,6 +1434,9 @@ function initAdminInteractions() {
 
     saveState();
     renderAdminPage();
+    if (bookingUrlInput) {
+      bookingUrlInput.value = bookingUrl();
+    }
   });
 
   roomForm?.addEventListener("submit", async (event) => {
@@ -1219,9 +1501,11 @@ function init() {
     draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
     ensureRoomSelection();
     renderBookPage();
+    void loadPublicWorkspace();
   }
 
-  if (document.getElementById("roomForm")) {
+  if (document.getElementById("adminWorkspace")) {
+    initNetlifyIdentityAuth();
     initAdminInteractions();
     renderAdminPage();
   }

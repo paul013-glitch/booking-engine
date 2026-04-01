@@ -15,11 +15,27 @@
       <div class="brand-mark">SurfCamp OS</div>
       <nav class="topnav">
         <a href="./index.html">SaaS</a>
-        <a href="./book.html">Book demo</a>
+        <a href="./book.html?camp=amigos-surf-camp" data-booking-link>Book demo</a>
       </nav>
     </header>
 
     <main class="admin-shell">
+      <section class="panel auth-panel" id="authPanel">
+        <div>
+          <p class="eyebrow">Workspace access</p>
+          <h1>Sign in to edit your camp.</h1>
+          <p class="lede">
+            Netlify Identity keeps the admin editor private while guests use the public booking link.
+          </p>
+          <p class="tiny" id="authStatus">Loading access state...</p>
+        </div>
+        <div class="auth-actions">
+          <button class="button button-primary" type="button" id="authButton">Sign in / Sign up</button>
+          <button class="button button-secondary" type="button" id="authLogout" hidden>Sign out</button>
+        </div>
+      </section>
+
+      <div id="adminWorkspace" hidden>
       <section class="panel admin-hero">
         <div>
           <p class="eyebrow">Backend editor</p>
@@ -55,6 +71,13 @@
           <label class="checkbox-row">
             <input name="restrictedArrivalDays" type="checkbox" />
             Only allow arrivals on selected days
+          </label>
+          <label>
+            Public booking URL
+            <div class="copy-row">
+              <input id="bookingUrl" type="text" readonly />
+              <button class="button button-secondary" type="button" id="copyBookingUrl">Copy link</button>
+            </div>
           </label>
           <div class="day-grid">
             <label><input type="checkbox" name="arrivalDays" value="Sunday" /> Sun</label>
@@ -201,8 +224,10 @@
           </article>
         </div>
       </section>
+      </div>
     </main>
 
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

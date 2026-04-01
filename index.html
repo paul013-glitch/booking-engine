@@ -14,7 +14,7 @@
     <header class="topbar">
       <div class="brand-mark">SurfCamp OS</div>
       <nav class="topnav">
-        <a href="./book.html">Book demo</a>
+        <a href="./book.html?camp=amigos-surf-camp" data-booking-link>Book demo</a>
         <a href="./admin.html">Admin</a>
       </nav>
     </header>
@@ -29,7 +29,7 @@
         </p>
 
         <div class="landing-actions">
-          <a class="button button-primary" href="./book.html">See the booking flow</a>
+          <a class="button button-primary" href="./book/amigos-surf-camp" data-booking-link>See the booking flow</a>
           <a class="button button-secondary" href="./admin.html">Open the admin area</a>
         </div>
       </section>
@@ -80,6 +80,7 @@
       </section>
     </main>
 
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
