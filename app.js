@@ -1064,9 +1064,9 @@ function renderBookPage() {
         <article class="package-row">
           <div class="option-body">
             <h3>${item.name}</h3>
+            <p>${item.nights} nights</p>
             <p>${item.description}</p>
             <div class="option-meta">
-              <span>${item.nights} nights</span>
               <span>From ${money(item.basePrice)}</span>
             </div>
           </div>
