@@ -2101,7 +2101,7 @@ async function confirmBookingReservation() {
 function initBookInteractions() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest(
-    "[data-step], [data-select-package], [data-select-room], [data-toggle-addon], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], #nextFromPackage, #continueToBook",
+    "[data-step], [data-select-package], [data-select-room], [data-toggle-addon], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], #nextFromPackage, #nextFromRoom, #continueToBook",
     );
     if (!target) return;
 
