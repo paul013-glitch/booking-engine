@@ -200,7 +200,7 @@ function normalizeWorkspaceData(data = {}) {
       showBookingIntents:
         typeof (data.camp && data.camp.showBookingIntents) === "boolean"
           ? data.camp.showBookingIntents
-          : base.camp.showBookingIntents,
+          : seedState.camp.showBookingIntents,
       theme: {
         ...seedState.camp.theme,
         ...((data.camp && data.camp.theme) || {}),
