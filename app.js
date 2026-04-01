@@ -1,0 +1,1235 @@
+const STORAGE_KEY = "surfcamp-os-demo-v2";
+const HOLD_MINUTES = 15;
+
+const logoSvg =
+  'data:image/svg+xml;charset=UTF-8,' +
+  encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+      <rect width="200" height="200" rx="36" fill="#efe2cf"/>
+      <circle cx="100" cy="100" r="64" fill="none" stroke="#8a6d49" stroke-width="8"/>
+      <path d="M52 114c16-18 32-27 48-27s32 9 48 27" fill="none" stroke="#8a6d49" stroke-width="8" stroke-linecap="round"/>
+      <path d="M62 88c10-10 21-15 38-15s28 5 38 15" fill="none" stroke="#8a6d49" stroke-width="8" stroke-linecap="round"/>
+      <path d="M100 56v88" stroke="#8a6d49" stroke-width="8" stroke-linecap="round"/>
+    </svg>
+  `);
+
+const seedState = {
+  camp: {
+    name: "Amigos Surf Camp",
+    logoUrl: logoSvg,
+    bookingRules: {
+      restrictedArrivalDays: true,
+      allowedArrivalDays: ["Saturday"],
+    },
+  },
+  currentStep: 0,
+  selectedPackageId: "package-7",
+  packageQuantities: {
+    "package-7": 1,
+  },
+  selectedRoomId: "suite-ocean",
+  selectedAddonIds: ["airport-transfer"],
+  startDate: "",
+  guestName: "",
+  guestEmail: "",
+  guestCountry: "Netherlands",
+  notes: "",
+  leads: [],
+  packages: [
+    {
+      id: "package-7",
+      name: "7-night Surf Package",
+      nights: 7,
+      basePrice: 1290,
+      description: "Breakfast, surf coaching, boards, and daily surf guiding.",
+    },
+    {
+      id: "package-14",
+      name: "14-night Surf Package",
+      nights: 14,
+      basePrice: 2190,
+      description: "A longer stay with more surf days, coaching, and recovery time.",
+    },
+  ],
+  rooms: [
+    {
+      id: "suite-ocean",
+      name: "Ocean Suite",
+      description: "Private ensuite room with a sea view.",
+      pricePerNight: 145,
+      totalUnits: 2,
+      capacity: 2,
+      imageUrl:
+        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
+    },
+    {
+      id: "villa-double",
+      name: "Garden Double",
+      description: "A calm twin room with shared terrace access.",
+      pricePerNight: 95,
+      totalUnits: 4,
+      capacity: 2,
+      imageUrl:
+        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe86?auto=format&fit=crop&w=1200&q=80",
+    },
+    {
+      id: "dorm-bunk",
+      name: "Shared Dorm",
+      description: "The simplest room option for lower budgets.",
+      pricePerNight: 45,
+      totalUnits: 6,
+      capacity: 6,
+      imageUrl:
+        "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80",
+    },
+  ],
+  addons: [
+    {
+      id: "airport-transfer",
+      name: "Airport transfer",
+      description: "One-way transfer from the airport to the camp.",
+      price: 45,
+      unitLabel: "per stay",
+    },
+    {
+      id: "board-rental",
+      name: "Extra board rental",
+      description: "Reserve an extra surfboard for the stay.",
+      price: 80,
+      unitLabel: "per stay",
+    },
+    {
+      id: "yoga-pack",
+      name: "Daily yoga",
+      description: "Morning yoga session added to the booking.",
+      price: 120,
+      unitLabel: "per stay",
+    },
+  ],
+  bookings: [
+    {
+      id: "demo-001",
+      guestName: "Ava",
+      guestEmail: "ava@example.com",
+      guestCountry: "Germany",
+      packageId: "package-7",
+      roomId: "suite-ocean",
+      addonIds: ["yoga-pack"],
+      startDate: "2026-04-08",
+      endDate: "2026-04-15",
+      total: 2395,
+      status: "confirmed",
+      createdAt: "2026-03-30T09:10:00.000Z",
+      holdExpiresAt: null,
+      notes: "Paid via Stripe checkout.",
+    },
+    {
+      id: "demo-002",
+      guestName: "Jonas",
+      guestEmail: "jonas@example.com",
+      guestCountry: "Belgium",
+      packageId: "package-14",
+      roomId: "dorm-bunk",
+      addonIds: ["airport-transfer"],
+      startDate: "2026-04-14",
+      endDate: "2026-04-18",
+      total: 1115,
+      status: "held",
+      createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      holdExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      notes: "Awaiting Stripe confirmation.",
+    },
+  ],
+};
+
+const state = loadState();
+const draft = {
+  packageId: state.selectedPackageId,
+  packageQuantities: { ...(state.packageQuantities || {}) },
+  roomId: state.selectedRoomId,
+  addonIds: [...state.selectedAddonIds],
+  startDate: state.startDate || nextDefaultDate(),
+  calendarMonthOffset: 0,
+  guestName: state.guestName,
+  guestEmail: state.guestEmail,
+  guestCountry: state.guestCountry,
+  notes: state.notes,
+  currentStep: state.currentStep ?? 0,
+};
+
+function nextDefaultDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  return firstAllowedStartDate(date.toISOString().slice(0, 10), seedState.camp.bookingRules);
+}
+
+function loadState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    const seeded = structuredClone(seedState);
+    seeded.startDate = nextDefaultDate();
+    return seeded;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      ...structuredClone(seedState),
+      ...parsed,
+      camp: {
+        ...seedState.camp,
+        ...(parsed.camp || {}),
+        bookingRules: {
+          ...seedState.camp.bookingRules,
+          ...((parsed.camp && parsed.camp.bookingRules) || {}),
+        },
+      },
+      packages: Array.isArray(parsed.packages) ? parsed.packages : structuredClone(seedState.packages),
+      rooms: Array.isArray(parsed.rooms) ? parsed.rooms : structuredClone(seedState.rooms),
+      addons: Array.isArray(parsed.addons) ? parsed.addons : structuredClone(seedState.addons),
+      bookings: Array.isArray(parsed.bookings) ? parsed.bookings : structuredClone(seedState.bookings),
+      leads: Array.isArray(parsed.leads) ? parsed.leads : [],
+      selectedAddonIds: Array.isArray(parsed.selectedAddonIds)
+        ? parsed.selectedAddonIds
+        : structuredClone(seedState.selectedAddonIds),
+      selectedPackageId: parsed.selectedPackageId || seedState.selectedPackageId,
+      packageQuantities:
+        parsed.packageQuantities && typeof parsed.packageQuantities === "object"
+          ? parsed.packageQuantities
+          : parsed.packagePeople
+            ? { [parsed.selectedPackageId || seedState.selectedPackageId]: parsed.packagePeople }
+            : structuredClone(seedState.packageQuantities),
+      selectedRoomId: parsed.selectedRoomId || seedState.selectedRoomId,
+      startDate: parsed.startDate || nextDefaultDate(),
+      guestName: parsed.guestName || "",
+      guestEmail: parsed.guestEmail || "",
+      guestCountry: parsed.guestCountry || "",
+      notes: parsed.notes || "",
+      currentStep: Number.isFinite(parsed.currentStep) ? parsed.currentStep : 0,
+    };
+  } catch {
+    return structuredClone(seedState);
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function money(value) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatDate(value) {
+  if (!value) {
+    return "Not set";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function weekdayName(dateInput) {
+  return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][
+    new Date(dateInput).getDay()
+  ];
+}
+
+function addDays(dateInput, days) {
+  const date = new Date(dateInput);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfMonth(dateInput) {
+  const date = new Date(dateInput);
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(dateInput, months) {
+  const date = new Date(dateInput);
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function monthOffsetBetween(a, b) {
+  const start = startOfMonth(a);
+  const end = startOfMonth(b);
+  return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+}
+
+function formatMonthLabel(dateInput) {
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(dateInput));
+}
+
+function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules) {
+  if (!bookingRules?.restrictedArrivalDays) return true;
+  return bookingRules.allowedArrivalDays.includes(weekdayName(dateInput));
+}
+
+function firstAllowedStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
+  const cursor = new Date(afterDate);
+  for (let i = 0; i < 120; i += 1) {
+    const candidate = cursor.toISOString().slice(0, 10);
+    if (isArrivalAllowed(candidate, bookingRules)) return candidate;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return afterDate;
+}
+
+function hasAvailabilityForDate(startDate) {
+  const nights = getPackage(draft.packageId).nights;
+  const endDate = addDays(startDate, nights);
+  return state.rooms.some((room) => availableUnits(room.id, startDate, endDate) > 0);
+}
+
+function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
+  const cursor = new Date(afterDate);
+  for (let i = 0; i < 180; i += 1) {
+    const candidate = cursor.toISOString().slice(0, 10);
+    if (isArrivalAllowed(candidate, bookingRules) && hasAvailabilityForDate(candidate)) {
+      return candidate;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return afterDate;
+}
+
+function isSelectableDate(dateInput) {
+  const today = new Date();
+  const date = new Date(dateInput);
+  if (date < new Date(today.getFullYear(), today.getMonth(), today.getDate())) return false;
+  return isArrivalAllowed(dateInput, state.camp.bookingRules) && hasAvailabilityForDate(dateInput);
+}
+
+function ensureStartDateSelection() {
+  if (!isSelectableDate(draft.startDate)) {
+    draft.startDate = firstBookableStartDate(nextDefaultDate(), state.camp.bookingRules);
+  }
+}
+
+function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+  return new Date(aStart) < new Date(bEnd) && new Date(bStart) < new Date(aEnd);
+}
+
+function isHoldActive(booking) {
+  return booking.status === "held" && (!booking.holdExpiresAt || new Date(booking.holdExpiresAt) > new Date());
+}
+
+function cleanExpiredHolds() {
+  let changed = false;
+  state.bookings = state.bookings.map((booking) => {
+    if (booking.status === "held" && !isHoldActive(booking)) {
+      changed = true;
+      return { ...booking, status: "expired" };
+    }
+    return booking;
+  });
+
+  if (changed) saveState();
+}
+
+function getPackage(id) {
+  return state.packages.find((item) => item.id === id) || state.packages[0];
+}
+
+function getRoom(id) {
+  return state.rooms.find((item) => item.id === id) || state.rooms[0];
+}
+
+function getAddon(id) {
+  return state.addons.find((item) => item.id === id);
+}
+
+function endDateForDraft() {
+  return addDays(draft.startDate, bookingNights());
+}
+
+function packageQuantity(packageId) {
+  return Math.max(0, Number(draft.packageQuantities?.[packageId] || 0));
+}
+
+function selectedPackageRows() {
+  return state.packages
+    .map((item) => ({
+      ...item,
+      quantity: packageQuantity(item.id),
+    }))
+    .filter((item) => item.quantity > 0);
+}
+
+function selectedPackagePeopleCount() {
+  return selectedPackageRows().reduce((sum, item) => sum + item.quantity, 0);
+}
+
+function bookingNights() {
+  const rows = selectedPackageRows();
+  if (!rows.length) {
+    return getPackage(draft.packageId).nights;
+  }
+
+  return Math.max(...rows.map((item) => item.nights));
+}
+
+function overlappingBookings(roomId, startDate, endDate) {
+  return state.bookings.filter((booking) => {
+    if (booking.roomId !== roomId) return false;
+    if (booking.status === "expired") return false;
+    if (booking.status === "held" && !isHoldActive(booking)) return false;
+    return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
+  });
+}
+
+function availableUnits(roomId, startDate, endDate) {
+  const room = getRoom(roomId);
+  return Math.max(0, room.totalUnits - overlappingBookings(roomId, startDate, endDate).length);
+}
+
+function firstAvailableRoom(startDate = draft.startDate, endDate = endDateForDraft()) {
+  return state.rooms.find((room) => availableUnits(room.id, startDate, endDate) > 0)?.id || null;
+}
+
+function ensureRoomSelection() {
+  if (availableUnits(draft.roomId, draft.startDate, endDateForDraft()) > 0) return;
+  const replacement = firstAvailableRoom();
+  if (replacement) {
+    draft.roomId = replacement;
+  }
+}
+
+function roomPrice() {
+  return getRoom(draft.roomId).pricePerNight * bookingNights();
+}
+
+function packagePrice() {
+  return selectedPackageRows().reduce((sum, item) => sum + item.basePrice * item.quantity, 0);
+}
+
+function addonPrice() {
+  return draft.addonIds.reduce((sum, addonId) => sum + (getAddon(addonId)?.price || 0), 0);
+}
+
+function totalPrice() {
+  return packagePrice() + roomPrice() + addonPrice();
+}
+
+function availabilityText(room) {
+  const available = availableUnits(room.id, draft.startDate, endDateForDraft());
+  if (available <= 0) return { label: "Sold out", cls: "empty" };
+  if (available === 1) return { label: "1 left", cls: "low" };
+  return { label: `${available} left`, cls: "" };
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function renderDayCell(cellDate, monthDate) {
+  const iso = cellDate.toISOString().slice(0, 10);
+  const inMonth = cellDate.getMonth() === monthDate.getMonth();
+  const selected = iso === draft.startDate;
+  const rangeStart = new Date(draft.startDate);
+  const rangeEnd = new Date(endDateForDraft());
+  const inRange = selected || (new Date(iso) > rangeStart && new Date(iso) < rangeEnd);
+  const isStart = selected;
+  const isEnd = iso === endDateForDraft();
+  const selectable = inMonth && isSelectableDate(iso);
+
+  const classes = [
+    "day-cell",
+    inMonth ? "" : "muted-day",
+    selectable ? "" : "disabled-day",
+    inRange ? "in-range" : "",
+    isStart ? "range-start" : "",
+    isEnd ? "range-end" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return `
+    <button
+      type="button"
+      class="${classes}"
+      ${selectable ? `data-select-date="${iso}"` : "disabled"}
+      aria-label="${formatDate(iso)}"
+    >
+      ${cellDate.getDate()}
+    </button>
+  `;
+}
+
+function renderMonthCard(monthDate) {
+  const firstDay = startOfMonth(monthDate);
+  const gridStart = new Date(firstDay);
+  gridStart.setDate(firstDay.getDate() - firstDay.getDay());
+  const cells = [];
+
+  for (let i = 0; i < 42; i += 1) {
+    const cellDate = new Date(gridStart);
+    cellDate.setDate(gridStart.getDate() + i);
+    cells.push(renderDayCell(cellDate, firstDay));
+  }
+
+  return `
+    <section class="month-card">
+      <div class="month-card-head">
+        <strong>${formatMonthLabel(firstDay)}</strong>
+      </div>
+      <div class="weekday-row">
+        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+      </div>
+      <div class="month-grid">${cells.join("")}</div>
+    </section>
+  `;
+}
+
+function renderDateSelector() {
+  const baseMonth = addMonths(startOfMonth(new Date()), draft.calendarMonthOffset);
+  const nextMonth = addMonths(baseMonth, 1);
+
+  return `
+    <section class="calendar-card">
+      <div class="calendar-head">
+        <div>
+          <h3>2. Choose dates</h3>
+          <p class="helper">Amigos accepts arrivals only on allowed days when the rule is enabled.</p>
+        </div>
+        <div class="calendar-nav">
+          <button type="button" class="nav-button" data-month-nav="-1">Prev</button>
+          <button type="button" class="nav-button" data-month-nav="1">Next</button>
+        </div>
+      </div>
+
+      <div class="date-summary">
+        <div>
+          <span class="tiny">Check-in</span>
+          <strong>${formatDate(draft.startDate)}</strong>
+        </div>
+        <div>
+          <span class="tiny">Check-out</span>
+          <strong>${formatDate(endDateForDraft())}</strong>
+        </div>
+        <div>
+          <span class="tiny">Nights</span>
+          <strong>${bookingNights()}</strong>
+        </div>
+      </div>
+
+      <div class="calendar-grid-wrap">
+        ${renderMonthCard(baseMonth)}
+        ${renderMonthCard(nextMonth)}
+      </div>
+
+      <div class="calendar-note">
+        ${state.camp.bookingRules?.restrictedArrivalDays
+          ? `Arrival days: ${state.camp.bookingRules.allowedArrivalDays.join(", ")}`
+          : "Any arrival day is allowed."}
+      </div>
+    </section>
+  `;
+}
+
+function renderBookPage() {
+  const logo = document.getElementById("campLogo");
+  const name = document.getElementById("campName");
+  const stepper = document.getElementById("stepper");
+  const wizard = document.getElementById("wizardContent");
+  const summary = document.getElementById("summaryPanel");
+
+  if (!stepper || !wizard || !summary) return;
+
+  if (logo) logo.src = state.camp.logoUrl;
+  if (name) name.textContent = state.camp.name;
+
+  ensureStartDateSelection();
+  ensureRoomSelection();
+
+  const maxUnlockedStep = Math.max(0, draft.currentStep);
+
+  stepper.innerHTML = ["Package", "Date", "Room", "Add-ons", "Book"]
+    .map(
+      (label, index) => `
+        <button
+          type="button"
+          class="${index === draft.currentStep ? "active" : ""}"
+          ${index > maxUnlockedStep ? "disabled" : ""}
+          data-step="${index}"
+        >
+          ${index + 1}. ${label}
+        </button>
+      `,
+    )
+    .join("");
+
+  const packageCards = state.packages
+    .map((item) => {
+      const quantity = packageQuantity(item.id);
+      return `
+        <article class="package-row">
+          <div class="option-body">
+            <h3>${item.name}</h3>
+            <p>${item.description}</p>
+            <div class="option-meta">
+              <span>${item.nights} nights</span>
+              <span>From ${money(item.basePrice)}</span>
+            </div>
+          </div>
+          <div class="package-row-actions">
+            <span class="tiny">People</span>
+            <div class="people-control" role="group" aria-label="${item.name} people count">
+              <button type="button" class="people-button" data-package-row-change="${item.id}:-1">−</button>
+              <input
+                type="number"
+                min="0"
+                max="12"
+                value="${quantity}"
+                data-package-row-input="${item.id}"
+                aria-label="${item.name} quantity"
+              />
+              <button type="button" class="people-button" data-package-row-change="${item.id}:1">+</button>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  const roomCards = state.rooms
+    .map((room) => {
+      const selected = room.id === draft.roomId;
+      const availability = availabilityText(room);
+      return `
+        <article class="option-card ${selected ? "selected" : ""}" data-select-room="${room.id}">
+          <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
+          <div class="option-body">
+            <h3>${room.name}</h3>
+            <p>${room.description}</p>
+            <div class="option-meta">
+              <span>${money(room.pricePerNight)} / night</span>
+              <span class="availability ${availability.cls}">${availability.label}</span>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  const addonCards = state.addons
+    .map((addon) => {
+      const selected = draft.addonIds.includes(addon.id);
+      return `
+        <article class="option-card ${selected ? "selected" : ""}" data-toggle-addon="${addon.id}">
+          <div class="option-body">
+            <h3>${addon.name}</h3>
+            <p>${addon.description}</p>
+            <div class="option-meta">
+              <span>${money(addon.price)} ${addon.unitLabel}</span>
+              <span>${selected ? "Included" : "Add"}</span>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  const views = [
+    `
+      <section class="wizard-step">
+        <div class="step-title">
+          <div>
+            <h3>1. Pick a package</h3>
+            <p class="helper">Set the number of people for each package row.</p>
+          </div>
+          <span class="step-badge">${state.packages.length} packages</span>
+        </div>
+        <div class="stack">${packageCards}</div>
+        <div class="package-footer">
+          <div class="tiny">${selectedPackageRows().length ? `${selectedPackageRows().length} package types · ${selectedPackagePeopleCount()} people` : "Choose at least one package row to continue."}</div>
+          <button class="button button-primary" type="button" id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Next</button>
+        </div>
+      </section>
+    `,
+    renderDateSelector(),
+    `
+      <section class="wizard-step">
+        <div class="step-title">
+          <div>
+            <h3>3. Pick a room</h3>
+            <p class="helper">Inventory blocks overlapping holds and confirmed bookings.</p>
+          </div>
+          <span class="step-badge">Rooms</span>
+        </div>
+        <div class="card-grid">${roomCards}</div>
+      </section>
+    `,
+    `
+      <section class="wizard-step">
+        <div class="step-title">
+          <div>
+            <h3>4. Add-ons</h3>
+            <p class="helper">Add extras only if you need them.</p>
+          </div>
+          <span class="step-badge">${state.addons.length} add-ons</span>
+        </div>
+        <div class="card-grid">${addonCards}</div>
+        <div class="booking-actions">
+          <button class="button button-primary" type="button" id="continueToBook">Continue to book</button>
+          <span class="helper">Step 5 unlocks after this step is completed.</span>
+        </div>
+      </section>
+    `,
+    `
+      <section class="wizard-step">
+        <div class="step-title">
+          <div>
+            <h3>5. Book</h3>
+            <p class="helper">Create a hold, then send the guest to Stripe.</p>
+          </div>
+          <span class="step-badge">Stripe-ready</span>
+        </div>
+        <div class="input-row">
+          <label class="field">
+            Guest name
+            <input id="guestName" type="text" value="${escapeHtml(draft.guestName)}" />
+          </label>
+          <label class="field">
+            Email
+            <input id="guestEmail" type="email" value="${escapeHtml(draft.guestEmail)}" />
+          </label>
+        </div>
+        <div class="input-row" style="margin-top: 14px;">
+          <label class="field">
+            Country
+            <input id="guestCountry" type="text" value="${escapeHtml(draft.guestCountry)}" />
+          </label>
+          <label class="field">
+            Notes
+            <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
+          </label>
+        </div>
+        <div class="booking-actions">
+          <button class="button button-primary" type="button" id="bookButton">Reserve and send to Stripe</button>
+          <span class="helper">Temporary hold only until payment is confirmed.</span>
+        </div>
+        <div class="notice">
+          In production this would open Stripe Checkout and confirm the booking through a webhook.
+        </div>
+      </section>
+    `,
+  ];
+
+  wizard.innerHTML = views[draft.currentStep];
+
+  summary.innerHTML = `
+    <div class="summary-hero">
+      <div class="summary-badge">Live summary</div>
+      <h2>${getPackage(draft.packageId).name}</h2>
+      <p class="muted" style="margin-top: 10px;">${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}</p>
+      <div class="summary-list">
+        <div class="summary-item">
+          <div>
+            <strong>Package</strong>
+            <span>
+              ${selectedPackageRows().length
+                ? `${selectedPackagePeopleCount()} people · ${selectedPackageRows()
+                    .map((item) => `${item.name} × ${item.quantity}`)
+                    .join(", ")}`
+                : "No packages selected"}
+            </span>
+          </div>
+          <strong>${money(packagePrice())}</strong>
+        </div>
+        <div class="summary-item">
+          <div>
+            <strong>Room</strong>
+            <span>${getRoom(draft.roomId).name}</span>
+          </div>
+          <strong>${money(roomPrice())}</strong>
+        </div>
+        <div class="summary-item">
+          <div>
+            <strong>Add-ons</strong>
+            <span>${draft.addonIds.length ? draft.addonIds.map((id) => getAddon(id)?.name).filter(Boolean).join(", ") : "None"}</span>
+          </div>
+          <strong>${money(addonPrice())}</strong>
+        </div>
+      </div>
+      <div class="summary-total">
+        <div>
+          <strong>Total</strong>
+          <div class="tiny">Hold first, then charge through Stripe</div>
+        </div>
+        <strong>${money(totalPrice())}</strong>
+      </div>
+      <div class="summary-footer">
+        ${state.camp.bookingRules?.restrictedArrivalDays
+          ? `Arrivals only on ${state.camp.bookingRules.allowedArrivalDays.join(", ")}.`
+          : "Any arrival day is allowed."}
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminPage() {
+  const roomCount = document.getElementById("roomCount");
+  const packageCount = document.getElementById("packageCount");
+  const addonCount = document.getElementById("addonCount");
+  const bookingCount = document.getElementById("bookingCount");
+
+  if (roomCount) roomCount.textContent = `${state.rooms.length} rooms`;
+  if (packageCount) packageCount.textContent = `${state.packages.length} packages`;
+  if (addonCount) addonCount.textContent = `${state.addons.length} add-ons`;
+  if (bookingCount) bookingCount.textContent = `${state.bookings.length} bookings`;
+
+  const roomList = document.getElementById("roomList");
+  const packageList = document.getElementById("packageList");
+  const addonList = document.getElementById("addonList");
+  const bookingList = document.getElementById("bookingList");
+  const campForm = document.getElementById("campForm");
+
+  if (campForm) {
+    campForm.elements.campName.value = state.camp.name;
+    campForm.elements.logoUrl.value = state.camp.logoUrl.startsWith("data:") ? "" : state.camp.logoUrl;
+    campForm.elements.restrictedArrivalDays.checked = !!state.camp.bookingRules?.restrictedArrivalDays;
+    campForm
+      .querySelectorAll('input[name="arrivalDays"]')
+      .forEach((checkbox) => {
+        checkbox.checked = (state.camp.bookingRules?.allowedArrivalDays || []).includes(checkbox.value);
+      });
+  }
+
+  if (roomList) {
+    roomList.innerHTML = state.rooms
+      .map((room) => {
+        const availability = availabilityText(room);
+        return `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${room.name}</strong>
+              <span class="status ${availability.cls || "confirmed"}">${availability.label}</span>
+            </div>
+            <small>${room.description}</small>
+            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests &middot; ${room.totalUnits} units</div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  if (packageList) {
+    packageList.innerHTML = state.packages
+      .map(
+        (item) => `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${item.name}</strong>
+              <span class="pill">${item.nights} nights</span>
+            </div>
+            <small>${item.description}</small>
+            <div class="tiny">${money(item.basePrice)}</div>
+          </div>
+        `,
+      )
+      .join("");
+  }
+
+  if (addonList) {
+    addonList.innerHTML = state.addons
+      .map(
+        (item) => `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${item.name}</strong>
+              <span class="pill">${money(item.price)}</span>
+            </div>
+            <small>${item.description}</small>
+            <div class="tiny">${item.unitLabel}</div>
+          </div>
+        `,
+      )
+      .join("");
+  }
+
+  if (bookingList) {
+    bookingList.innerHTML = state.bookings
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((booking) => {
+        const pkg = getPackage(booking.packageId);
+        const room = getRoom(booking.roomId);
+        const packageSummary = booking.packageQuantities
+          ? Object.entries(booking.packageQuantities)
+              .map(([packageId, quantity]) => `${getPackage(packageId).name} × ${quantity}`)
+              .join(", ")
+          : `${pkg.name} × ${booking.packagePeople || 1}`;
+        return `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${booking.guestName}</strong>
+              <span class="status ${booking.status}">${booking.status}</span>
+            </div>
+            <small>${packageSummary} &middot; ${room.name}</small>
+            <div class="tiny">${formatDate(booking.startDate)} to ${formatDate(booking.endDate)} &middot; ${money(booking.total)}</div>
+            <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDate(booking.holdExpiresAt) : "N/A"}</div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+}
+
+function renderLandingPage() {
+  const form = document.getElementById("signupForm");
+  if (!form) return;
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const lead = {
+      email: form.elements.email.value.trim(),
+      campName: form.elements.campName.value.trim(),
+      notes: form.elements.notes.value.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    state.leads.unshift(lead);
+    saveState();
+    form.reset();
+
+    const message = document.createElement("p");
+    message.className = "notice";
+    message.textContent = "Thanks. Your request has been captured as a demo lead.";
+    form.insertAdjacentElement("beforebegin", message);
+    setTimeout(() => message.remove(), 4000);
+  });
+}
+
+function syncDraftToState() {
+  state.currentStep = draft.currentStep;
+  state.selectedPackageId = draft.packageId;
+  state.packageQuantities = { ...draft.packageQuantities };
+  state.selectedRoomId = draft.roomId;
+  state.selectedAddonIds = [...draft.addonIds];
+  state.startDate = draft.startDate;
+  state.guestName = draft.guestName;
+  state.guestEmail = draft.guestEmail;
+  state.guestCountry = draft.guestCountry;
+  state.notes = draft.notes;
+}
+
+function clampPackageQuantity(value) {
+  return Math.max(0, Math.min(12, Number(value) || 0));
+}
+
+function setPackageQuantity(packageId, quantity) {
+  const nextQuantity = clampPackageQuantity(quantity);
+  draft.packageQuantities = {
+    ...draft.packageQuantities,
+    [packageId]: nextQuantity,
+  };
+
+  if (nextQuantity === 0) {
+    delete draft.packageQuantities[packageId];
+  }
+
+  const activePackageId = selectedPackageRows()[0]?.id || packageId;
+  draft.packageId = activePackageId;
+}
+
+function updateBookPage() {
+  ensureRoomSelection();
+  syncDraftToState();
+  saveState();
+  cleanExpiredHolds();
+  renderBookPage();
+}
+
+function addBookingHold() {
+  const guestName = document.getElementById("guestName")?.value.trim();
+  const guestEmail = document.getElementById("guestEmail")?.value.trim();
+  const guestCountry = document.getElementById("guestCountry")?.value.trim();
+  const notes = document.getElementById("guestNotes")?.value.trim();
+
+  if (!guestName || !guestEmail || !guestCountry) {
+    alert("Please add guest name, email, and country.");
+    return;
+  }
+
+  const startDate = draft.startDate;
+  const endDate = endDateForDraft();
+  if (availableUnits(draft.roomId, startDate, endDate) <= 0) {
+    alert("That room is no longer available for these dates.");
+    return;
+  }
+
+  const now = new Date();
+  state.bookings.unshift({
+    id: `booking-${now.getTime()}`,
+    guestName,
+    guestEmail,
+    guestCountry,
+    packageId: draft.packageId,
+    packageQuantities: { ...draft.packageQuantities },
+    roomId: draft.roomId,
+    addonIds: [...draft.addonIds],
+    startDate,
+    endDate,
+    total: totalPrice(),
+    status: "held",
+    createdAt: now.toISOString(),
+    holdExpiresAt: new Date(now.getTime() + HOLD_MINUTES * 60 * 1000).toISOString(),
+    notes: notes || "Awaiting Stripe Checkout completion.",
+  });
+
+  draft.guestName = guestName;
+  draft.guestEmail = guestEmail;
+  draft.guestCountry = guestCountry;
+  draft.notes = notes;
+  syncDraftToState();
+  saveState();
+  alert("Reservation hold created. In a real app this would now open Stripe Checkout.");
+  renderBookPage();
+}
+
+function initBookInteractions() {
+  document.addEventListener("click", (event) => {
+    const target = event.target.closest(
+      "[data-step], [data-select-package], [data-select-room], [data-toggle-addon], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], #nextFromPackage, #continueToBook",
+    );
+    if (!target) return;
+
+    if (target.dataset.step) {
+      const nextStep = Number(target.dataset.step);
+      if (nextStep <= draft.currentStep) {
+        draft.currentStep = nextStep;
+        updateBookPage();
+      }
+      return;
+    }
+
+    if (target.dataset.monthNav) {
+      draft.calendarMonthOffset += Number(target.dataset.monthNav);
+      renderBookPage();
+      return;
+    }
+
+    if (target.dataset.selectDate) {
+      draft.startDate = target.dataset.selectDate;
+      draft.currentStep = Math.max(draft.currentStep, 2);
+      ensureRoomSelection();
+      updateBookPage();
+      return;
+    }
+
+    if (target.dataset.selectPackage) {
+      draft.packageId = target.dataset.selectPackage;
+      ensureRoomSelection();
+      updateBookPage();
+      return;
+    }
+
+    if (target.dataset.selectRoom) {
+      const roomId = target.dataset.selectRoom;
+      if (availableUnits(roomId, draft.startDate, endDateForDraft()) <= 0) {
+        alert("That room is sold out for the selected dates.");
+        return;
+      }
+      draft.roomId = roomId;
+      draft.currentStep = 3;
+      updateBookPage();
+      return;
+    }
+
+    if (target.dataset.packageRowChange) {
+      const [packageId, delta] = target.dataset.packageRowChange.split(":");
+      setPackageQuantity(packageId, packageQuantity(packageId) + Number(delta));
+      updateBookPage();
+      return;
+    }
+
+    if (target.dataset.packageRowInput) {
+      setPackageQuantity(target.dataset.packageRowInput, target.value);
+      updateBookPage();
+      return;
+    }
+
+    if (target.id === "nextFromPackage") {
+      if (!selectedPackageRows().length) {
+        alert("Please choose at least one package row before continuing.");
+        return;
+      }
+      draft.currentStep = 1;
+      updateBookPage();
+      return;
+    }
+
+    if (target.dataset.toggleAddon) {
+      const addonId = target.dataset.toggleAddon;
+      draft.addonIds = draft.addonIds.includes(addonId)
+        ? draft.addonIds.filter((id) => id !== addonId)
+        : [...draft.addonIds, addonId];
+      updateBookPage();
+    }
+
+    if (target.id === "continueToBook") {
+      draft.currentStep = 4;
+      updateBookPage();
+    }
+  });
+
+  document.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!target) return;
+
+    if (target.id === "startDate") {
+      draft.startDate = target.value;
+      draft.currentStep = Math.max(draft.currentStep, 2);
+      draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+      ensureRoomSelection();
+      updateBookPage();
+      return;
+    }
+
+    if (target.id === "guestName") draft.guestName = target.value;
+    if (target.id === "guestEmail") draft.guestEmail = target.value;
+    if (target.id === "guestCountry") draft.guestCountry = target.value;
+    if (target.id === "guestNotes") draft.notes = target.value;
+    syncDraftToState();
+    saveState();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (event.target?.id === "bookButton") {
+      addBookingHold();
+    }
+  });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function initAdminInteractions() {
+  const campForm = document.getElementById("campForm");
+  const roomForm = document.getElementById("roomForm");
+  const packageForm = document.getElementById("packageForm");
+  const addonForm = document.getElementById("addonForm");
+
+  campForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    state.camp.name = campForm.elements.campName.value.trim() || state.camp.name;
+
+    const restrictedArrivalDays = campForm.elements.restrictedArrivalDays.checked;
+    const allowedArrivalDays = Array.from(campForm.querySelectorAll('input[name="arrivalDays"]:checked')).map(
+      (checkbox) => checkbox.value,
+    );
+    state.camp.bookingRules = {
+      restrictedArrivalDays,
+      allowedArrivalDays: allowedArrivalDays.length ? allowedArrivalDays : seedState.camp.bookingRules.allowedArrivalDays,
+    };
+
+    const logoFile = campForm.elements.logoFile.files?.[0];
+    if (logoFile) {
+      state.camp.logoUrl = await readFileAsDataUrl(logoFile);
+    } else if (campForm.elements.logoUrl.value.trim()) {
+      state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
+    }
+
+    saveState();
+    renderAdminPage();
+  });
+
+  roomForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const imageFile = roomForm.elements.image.files?.[0];
+    let imageUrl =
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80";
+    if (imageFile) imageUrl = await readFileAsDataUrl(imageFile);
+
+    state.rooms.unshift({
+      id: `room-${Date.now()}`,
+      name: roomForm.elements.name.value.trim(),
+      description: roomForm.elements.description.value.trim(),
+      pricePerNight: Number(roomForm.elements.pricePerNight.value),
+      totalUnits: Number(roomForm.elements.totalUnits.value),
+      capacity: Number(roomForm.elements.capacity.value),
+      imageUrl,
+    });
+
+    roomForm.reset();
+    saveState();
+    renderAdminPage();
+  });
+
+  packageForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.packages.unshift({
+      id: `package-${Date.now()}`,
+      name: packageForm.elements.name.value.trim(),
+      description: packageForm.elements.description.value.trim(),
+      nights: Number(packageForm.elements.nights.value),
+      basePrice: Number(packageForm.elements.basePrice.value),
+    });
+
+    packageForm.reset();
+    saveState();
+    renderAdminPage();
+  });
+
+  addonForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.addons.unshift({
+      id: `addon-${Date.now()}`,
+      name: addonForm.elements.name.value.trim(),
+      description: addonForm.elements.description.value.trim(),
+      price: Number(addonForm.elements.price.value),
+      unitLabel: addonForm.elements.unitLabel.value.trim(),
+    });
+
+    addonForm.reset();
+    saveState();
+    renderAdminPage();
+  });
+}
+
+function init() {
+  cleanExpiredHolds();
+  renderLandingPage();
+
+  if (document.getElementById("stepper")) {
+    initBookInteractions();
+    draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+    ensureRoomSelection();
+    renderBookPage();
+  }
+
+  if (document.getElementById("roomForm")) {
+    initAdminInteractions();
+    renderAdminPage();
+  }
+}
+
+init();
+setInterval(() => {
+  cleanExpiredHolds();
+  if (document.getElementById("stepper")) renderBookPage();
+  if (document.getElementById("roomForm")) renderAdminPage();
+}, 30000);

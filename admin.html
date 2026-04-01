@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin | SurfCamp OS</title>
+    <meta
+      name="description"
+      content="Backend area for managing surf camp rooms, packages, add-ons, and bookings."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="page page-admin">
+    <header class="topbar">
+      <div class="brand-mark">SurfCamp OS</div>
+      <nav class="topnav">
+        <a href="./index.html">SaaS</a>
+        <a href="./book.html">Book demo</a>
+      </nav>
+    </header>
+
+    <main class="admin-shell">
+      <section class="panel admin-hero">
+        <div>
+          <p class="eyebrow">Backend editor</p>
+          <h1>Manage the camp setup.</h1>
+          <p class="lede">
+            Set the camp name and logo, create room options, upload images, define prices, and
+            review bookings.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">Camp profile</p>
+            <h2>Branding</h2>
+          </div>
+        </div>
+
+        <form id="campForm" class="admin-form admin-profile">
+          <label>
+            Camp name
+            <input name="campName" type="text" />
+          </label>
+          <label>
+            Logo URL
+            <input name="logoUrl" type="url" placeholder="https://..." />
+          </label>
+          <label>
+            Or upload logo
+            <input name="logoFile" type="file" accept="image/*" />
+          </label>
+          <label class="checkbox-row">
+            <input name="restrictedArrivalDays" type="checkbox" />
+            Only allow arrivals on selected days
+          </label>
+          <div class="day-grid">
+            <label><input type="checkbox" name="arrivalDays" value="Sunday" /> Sun</label>
+            <label><input type="checkbox" name="arrivalDays" value="Monday" /> Mon</label>
+            <label><input type="checkbox" name="arrivalDays" value="Tuesday" /> Tue</label>
+            <label><input type="checkbox" name="arrivalDays" value="Wednesday" /> Wed</label>
+            <label><input type="checkbox" name="arrivalDays" value="Thursday" /> Thu</label>
+            <label><input type="checkbox" name="arrivalDays" value="Friday" /> Fri</label>
+            <label><input type="checkbox" name="arrivalDays" value="Saturday" /> Sat</label>
+          </div>
+          <button class="button button-primary" type="submit">Save branding</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">Camp content</p>
+            <h2>Rooms, packages, and add-ons</h2>
+          </div>
+        </div>
+
+        <div class="admin-grid">
+          <form class="admin-form" id="roomForm">
+            <h3>Create room option</h3>
+            <label>
+              Room name
+              <input name="name" type="text" placeholder="Private Suite" required />
+            </label>
+            <label>
+              Description
+              <textarea name="description" rows="3" placeholder="Private room with ensuite bathroom"></textarea>
+            </label>
+            <div class="two-col">
+              <label>
+                Price per night
+                <input name="pricePerNight" type="number" min="0" step="1" required />
+              </label>
+              <label>
+                Total units
+                <input name="totalUnits" type="number" min="1" step="1" required />
+              </label>
+            </div>
+            <div class="two-col">
+              <label>
+                Guest capacity
+                <input name="capacity" type="number" min="1" step="1" required />
+              </label>
+              <label>
+                Picture
+                <input name="image" type="file" accept="image/*" />
+              </label>
+            </div>
+            <button class="button button-primary" type="submit">Add room</button>
+          </form>
+
+          <form class="admin-form" id="packageForm">
+            <h3>Create package</h3>
+            <label>
+              Package name
+              <input name="name" type="text" placeholder="7-night Surf Retreat" required />
+            </label>
+            <label>
+              Description
+              <textarea name="description" rows="3" placeholder="Breakfast, surf guiding, and yoga"></textarea>
+            </label>
+            <div class="two-col">
+              <label>
+                Nights
+                <input name="nights" type="number" min="1" step="1" required />
+              </label>
+              <label>
+                Base price
+                <input name="basePrice" type="number" min="0" step="1" required />
+              </label>
+            </div>
+            <button class="button button-primary" type="submit">Add package</button>
+          </form>
+
+          <form class="admin-form" id="addonForm">
+            <h3>Create add-on</h3>
+            <label>
+              Add-on name
+              <input name="name" type="text" placeholder="Airport transfer" required />
+            </label>
+            <label>
+              Description
+              <textarea name="description" rows="3" placeholder="One-way transfer from the airport"></textarea>
+            </label>
+            <div class="two-col">
+              <label>
+                Price
+                <input name="price" type="number" min="0" step="1" required />
+              </label>
+              <label>
+                Unit label
+                <input name="unitLabel" type="text" placeholder="per stay" required />
+              </label>
+            </div>
+            <button class="button button-primary" type="submit">Add add-on</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">Current data</p>
+            <h2>Inventory and bookings</h2>
+          </div>
+        </div>
+
+        <div class="inventory-grid">
+          <article class="list-card">
+            <div class="list-head">
+              <h3>Rooms</h3>
+              <span class="pill" id="roomCount"></span>
+            </div>
+            <div id="roomList" class="stack"></div>
+          </article>
+
+          <article class="list-card">
+            <div class="list-head">
+              <h3>Packages</h3>
+              <span class="pill" id="packageCount"></span>
+            </div>
+            <div id="packageList" class="stack"></div>
+          </article>
+
+          <article class="list-card">
+            <div class="list-head">
+              <h3>Add-ons</h3>
+              <span class="pill" id="addonCount"></span>
+            </div>
+            <div id="addonList" class="stack"></div>
+          </article>
+
+          <article class="list-card">
+            <div class="list-head">
+              <h3>Bookings</h3>
+              <span class="pill" id="bookingCount"></span>
+            </div>
+            <div id="bookingList" class="stack"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
