@@ -1009,6 +1009,42 @@ function renderLandingPage() {
   });
 }
 
+function initLandingAuth() {
+  if (!document.getElementById("landingLogin")) return;
+
+  const redirectToAdmin = () => {
+    window.location.assign("./admin.html");
+  };
+
+  const landingLogin = document.getElementById("landingLogin");
+  landingLogin?.addEventListener("click", () => {
+    if (window.netlifyIdentity) {
+      window.netlifyIdentity.open();
+    } else {
+      redirectToAdmin();
+    }
+  });
+
+  if (!window.netlifyIdentity || typeof window.netlifyIdentity.on !== "function") {
+    return;
+  }
+
+  window.netlifyIdentity.on("init", (user) => {
+    if (user) redirectToAdmin();
+  });
+
+  window.netlifyIdentity.on("login", () => {
+    window.netlifyIdentity.close();
+    redirectToAdmin();
+  });
+
+  window.netlifyIdentity.init();
+
+  if (window.netlifyIdentity.currentUser()) {
+    redirectToAdmin();
+  }
+}
+
 function hydrateStateFromWorkspace(workspace) {
   Object.assign(state, normalizeWorkspaceData(workspace));
   applyStateToDraft();
@@ -1502,6 +1538,7 @@ function initAdminInteractions() {
 function init() {
   cleanExpiredHolds();
   renderLandingPage();
+  initLandingAuth();
 
   if (document.getElementById("stepper")) {
     initBookInteractions();

@@ -118,6 +118,12 @@ textarea:focus {
   margin: 0 auto;
 }
 
+.landing-shell-center {
+  min-height: calc(100vh - 44px);
+  display: grid;
+  place-items: center;
+}
+
 .hero-card,
 .panel,
 .feature-card,
@@ -133,6 +139,11 @@ textarea:focus {
 .hero-card {
   padding: 32px;
   margin-bottom: 20px;
+}
+
+.hero-card-center {
+  width: min(720px, 100%);
+  text-align: center;
 }
 
 .eyebrow,
@@ -161,6 +172,14 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 24px;
+}
+
+.landing-actions-center {
+  justify-content: center;
+}
+
+.landing-note {
+  margin-top: 16px;
 }
 
 .button {

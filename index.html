@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SurfCamp OS</title>
+    <title>Campify</title>
     <meta
       name="description"
-      content="A simple SaaS landing page for the surf camp booking engine."
+      content="Campify helps surf camps sell rooms, packages, and bookings from one simple admin."
     />
     <script>
       (function () {
@@ -15,73 +15,25 @@
       })();
     </script>
   </head>
-  <body class="page page-landing">
-    <header class="topbar">
-      <div class="brand-mark">SurfCamp OS</div>
-      <nav class="topnav">
-        <a href="./book.html?camp=amigos-surf-camp" data-booking-link>Book demo</a>
-        <a href="./admin.html">Admin</a>
-      </nav>
-    </header>
-
-    <main class="landing-shell">
-      <section class="hero-card">
-        <p class="eyebrow">Booking software for surf camps</p>
-        <h1>Simple booking software for small surf camps.</h1>
+  <body class="page page-landing page-landing-slim">
+    <main class="landing-shell landing-shell-center">
+      <section class="hero-card hero-card-center">
+        <p class="eyebrow">Campify</p>
+        <h1>Booking software for surf camps.</h1>
         <p class="lede">
-          Give each camp its own rooms, packages, add-ons, Stripe payments, and booking
-          inventory. Keep it calm, clear, and easy to run.
+          A simple, private admin for camp owners and a clean booking flow for guests.
         </p>
 
-        <div class="landing-actions">
-          <a class="button button-primary" href="./book/amigos-surf-camp" data-booking-link>See the booking flow</a>
-          <a class="button button-secondary" href="./admin.html">Open the admin area</a>
-        </div>
-      </section>
-
-      <section class="feature-grid">
-        <article class="feature-card">
-          <h2>For the camp owner</h2>
-          <p>Create room types, set prices, upload photos, and manage inventory without code.</p>
-        </article>
-        <article class="feature-card">
-          <h2>For the guest</h2>
-          <p>A short booking flow with a visible summary and a simple checkout path.</p>
-        </article>
-        <article class="feature-card">
-          <h2>For you</h2>
-          <p>Sell the same software to multiple camps and keep each one separated by workspace.</p>
-        </article>
-      </section>
-
-      <section class="signup-card">
-        <div>
-          <p class="section-label">SaaS sign-up</p>
-          <h2>Request access to the backend</h2>
-          <p class="muted">
-            This can become your admin portal, onboarding form, or lead capture page for new camps.
-          </p>
+        <div class="landing-actions landing-actions-center">
+          <button class="button button-primary" type="button" id="landingLogin">
+            Login / Sign up
+          </button>
+          <a class="button button-secondary" href="./book/amigos-surf-camp">See demo</a>
         </div>
 
-        <form id="signupForm" class="signup-form">
-          <label>
-            Your email
-            <input type="email" name="email" placeholder="hello@surfcamp.com" required />
-          </label>
-          <label>
-            Camp name
-            <input type="text" name="campName" placeholder="Blue Wave Surf Camp" required />
-          </label>
-          <label>
-            Notes
-            <textarea
-              name="notes"
-              rows="4"
-              placeholder="Tell us how many rooms you manage and what you need first."
-            ></textarea>
-          </label>
-          <button class="button button-primary" type="submit">Request access</button>
-        </form>
+        <p class="tiny landing-note">
+          Logged in users are sent straight to the admin editor.
+        </p>
       </section>
     </main>
 
