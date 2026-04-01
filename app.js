@@ -55,10 +55,8 @@ const seedState = {
   },
   currentStep: 0,
   selectedPackageId: "package-7",
-  packageQuantities: {
-    "package-7": 1,
-  },
-  selectedRoomId: "shared-double",
+  packageQuantities: {},
+  selectedRoomId: "",
   selectedAddonIds: [],
   startDate: "",
   guestName: "",
@@ -273,7 +271,7 @@ function normalizeWorkspaceData(data = {}) {
     selectedRoomId:
       structuredClone(seedState.rooms).some((room) => room.id === data.selectedRoomId)
         ? data.selectedRoomId
-        : seedState.selectedRoomId,
+        : "",
     startDate: data.startDate || nextDefaultDate(),
     guestName: data.guestName || "",
     guestPhone: data.guestPhone || "",
@@ -370,6 +368,7 @@ function weekdayName(dateInput) {
 }
 
 function addDays(dateInput, days) {
+  if (!dateInput) return "";
   const date = new Date(dateInput);
   date.setDate(date.getDate() + days);
   return localDateKey(date);
@@ -632,7 +631,7 @@ function getPackage(id) {
 }
 
 function getRoom(id) {
-  return state.rooms.find((item) => item.id === id) || state.rooms[0];
+  return state.rooms.find((item) => item.id === id) || null;
 }
 
 function getAddon(id) {
@@ -640,10 +639,12 @@ function getAddon(id) {
 }
 
 function endDateForDraft() {
+  if (!draft.startDate) return "";
   return addDays(draft.startDate, bookingNights());
 }
 
 function weekKeysBetween(startDate, endDate) {
+  if (!startDate || !endDate) return [];
   const keys = [];
   const cursor = startOfWeek(startDate);
   const endCursor = startOfWeek(addDays(endDate, -1));
@@ -660,12 +661,12 @@ function roomAvailabilityRow(roomId, dateInput) {
 
 function roomNightRate(roomId, dateInput) {
   const room = getRoom(roomId);
-  return Number(roomAvailabilityRow(roomId, dateInput)?.pricePerNight ?? room.pricePerNight ?? 0);
+  return Number(roomAvailabilityRow(roomId, dateInput)?.pricePerNight ?? room?.pricePerNight ?? 0);
 }
 
 function roomAvailableSpots(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
   const room = getRoom(roomId);
-  return availableUnits(roomId, startDate, endDate) * Number(room.capacity || 0);
+  return availableUnits(roomId, startDate, endDate) * Number(room?.capacity || 0);
 }
 
 function roomCanFitParty(
@@ -808,14 +809,13 @@ function firstRoomForParty(
 }
 
 function ensureRoomSelection() {
+  if (!draft.roomId) return;
   if (roomCanFitParty(draft.roomId, draft.startDate, endDateForDraft(), selectedPackagePeopleCount())) return;
-  const replacement = firstRoomForParty();
-  if (replacement) {
-    draft.roomId = replacement;
-  }
+  draft.roomId = "";
 }
 
 function roomPrice() {
+  if (!draft.startDate || !draft.roomId) return 0;
   let total = 0;
   const cursor = new Date(draft.startDate);
   const end = new Date(endDateForDraft());
@@ -966,11 +966,6 @@ function renderDateSelector() {
           : "Any arrival day is allowed."}
       </div>
 
-      <div class="date-footer">
-        <button type="button" class="button button-primary" id="nextFromDate" data-go-step="2">
-          Next
-        </button>
-      </div>
     </section>
   `;
 }
@@ -1070,7 +1065,7 @@ function renderBookPage() {
             <h3>${addon.name}</h3>
             <p>${addon.description}</p>
             <div class="option-meta">
-              <span>${money(addon.price)} ${addon.unitLabel}</span>
+              <span>${money(addon.price)}</span>
               <span>${selected ? "Included" : "Add"}</span>
             </div>
           </div>
@@ -1089,16 +1084,6 @@ function renderBookPage() {
           </div>
         </div>
         <div class="stack">${packageCards}</div>
-        <div class="package-footer">
-          <div class="tiny">${
-            selectedPackageRows().length
-              ? `${selectedPackageRows().length} package types · ${selectedPackagePeopleCount()} people`
-              : "Choose at least one package row to continue."
-          }</div>
-          <button class="button button-primary" type="button" id="nextFromPackage" ${
-            selectedPackageRows().length && firstRoomForParty() ? "" : "disabled"
-          }>Next</button>
-        </div>
       </section>
     `,
     renderDateSelector(),
@@ -1111,9 +1096,6 @@ function renderBookPage() {
           </div>
         </div>
         <div class="card-grid">${roomCards}</div>
-        <div class="booking-actions room-actions">
-          <button class="button button-primary" type="button" id="nextFromRoom">Next</button>
-        </div>
       </section>
     `,
     `
@@ -1125,10 +1107,6 @@ function renderBookPage() {
           </div>
         </div>
         <div class="card-grid">${addonCards}</div>
-        <div class="booking-actions">
-          <button class="button button-primary" type="button" id="continueToBook">Continue to book</button>
-          <span class="helper">Step 5 unlocks after this step is completed.</span>
-        </div>
       </section>
     `,
     `
@@ -1204,11 +1182,21 @@ function renderBookPage() {
   ];
 
   wizard.innerHTML = views[draft.currentStep];
+  const summaryHasData = selectedPackageRows().length > 0 || !!draft.startDate || !!draft.roomId || draft.addonIds.length > 0;
+  const summaryActions =
+    draft.currentStep === 0
+      ? `<button class="button button-primary" type="button" id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Next</button>`
+      : draft.currentStep === 1
+        ? `<button class="button button-primary" type="button" id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Next</button>`
+        : draft.currentStep === 2
+          ? `<button class="button button-primary" type="button" id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Next</button>`
+          : draft.currentStep === 3
+            ? `<button class="button button-primary" type="button" id="continueToBook">Continue to book</button>`
+            : "";
 
   summary.innerHTML = `
     <div class="summary-hero">
-      <h2>${getPackage(draft.packageId).name}</h2>
-      <p class="muted" style="margin-top: 10px;">${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}</p>
+      <h3 class="summary-title">Trip summary</h3>
       <div class="summary-list">
         <div class="summary-item">
           <div>
@@ -1218,31 +1206,41 @@ function renderBookPage() {
                 ? `${selectedPackagePeopleCount()} people · ${selectedPackageRows()
                     .map((item) => `${item.name} × ${item.quantity}`)
                     .join(", ")}`
-                : "No packages selected"}
+                : ""}
             </span>
           </div>
-          <strong>${money(packagePrice())}</strong>
+          <strong>${selectedPackageRows().length ? money(packagePrice()) : ""}</strong>
+        </div>
+        <div class="summary-item">
+          <div>
+            <strong>Date</strong>
+            <span>${draft.startDate ? `${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}` : ""}</span>
+          </div>
+          <strong>${draft.startDate ? "" : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
             <strong>Room</strong>
-            <span>${getRoom(draft.roomId).name}</span>
+            <span>${getRoom(draft.roomId)?.name || ""}</span>
           </div>
-          <strong>${money(roomPrice())}</strong>
+          <strong>${draft.roomId ? money(roomPrice()) : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
-            <strong>Add-ons</strong>
-            <span>${draft.addonIds.length ? draft.addonIds.map((id) => getAddon(id)?.name).filter(Boolean).join(", ") : "None"}</span>
+            <strong>Add-on</strong>
+            <span>${draft.addonIds.length ? draft.addonIds.map((id) => getAddon(id)?.name).filter(Boolean).join(", ") : ""}</span>
           </div>
-          <strong>${money(addonPrice())}</strong>
+          <strong>${draft.addonIds.length ? money(addonPrice()) : ""}</strong>
         </div>
       </div>
       <div class="summary-total">
         <div>
           <strong>Total</strong>
         </div>
-        <strong>${money(totalPrice())}</strong>
+        <strong>${summaryHasData ? money(totalPrice()) : ""}</strong>
+      </div>
+      <div class="summary-actions">
+        ${summaryActions}
       </div>
       <div class="summary-footer">
         ${state.camp.bookingRules?.restrictedArrivalDays
@@ -1906,14 +1904,14 @@ function applyStateToDraft() {
   draft.packageQuantities = { ...(state.packageQuantities || {}) };
   draft.roomId = state.selectedRoomId;
   draft.addonIds = [...(state.selectedAddonIds || [])];
-  draft.startDate = state.startDate || nextDefaultDate();
+  draft.startDate = state.startDate || "";
   draft.guestName = state.guestName || "";
   draft.guestPhone = state.guestPhone || "";
   draft.guestEmail = state.guestEmail || "";
   draft.guestCountry = state.guestCountry || "";
   draft.notes = state.notes || "";
   draft.currentStep = state.currentStep ?? 0;
-  draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+  draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
 }
 
 async function syncWorkspaceToServer() {
@@ -1963,12 +1961,11 @@ function setPackageQuantity(packageId, quantity) {
     delete draft.packageQuantities[packageId];
   }
 
-  const activePackageId = selectedPackageRows()[0]?.id || packageId;
+  const activePackageId = selectedPackageRows()[0]?.id || seedState.selectedPackageId;
   draft.packageId = activePackageId;
 }
 
 function updateBookPage() {
-  ensureRoomSelection();
   syncDraftToState();
   saveState();
   cleanExpiredHolds();
@@ -2121,7 +2118,6 @@ function initBookInteractions() {
     if (target.dataset.selectDate) {
       draft.startDate = target.dataset.selectDate;
       state.bookingConfirmation = null;
-      ensureRoomSelection();
       trackAnalyticsEvent("search", {
         camp: bookingSlug(),
         check_in: draft.startDate,
@@ -2133,7 +2129,6 @@ function initBookInteractions() {
     if (target.dataset.selectPackage) {
       draft.packageId = target.dataset.selectPackage;
       state.bookingConfirmation = null;
-      ensureRoomSelection();
       updateBookPage();
       return;
     }
@@ -2180,6 +2175,10 @@ function initBookInteractions() {
     }
 
     if (target.id === "nextFromDate") {
+      if (!draft.startDate) {
+        alert("Please select a check-in date first.");
+        return;
+      }
       draft.currentStep = 2;
       updateBookPage();
       return;
@@ -2231,7 +2230,6 @@ function initBookInteractions() {
       draft.startDate = target.value;
       draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
       state.bookingConfirmation = null;
-      ensureRoomSelection();
       trackAnalyticsEvent("search", {
         camp: bookingSlug(),
         check_in: draft.startDate,
@@ -2527,7 +2525,6 @@ function init() {
   if (document.getElementById("stepper")) {
     initBookInteractions();
     draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
-    ensureRoomSelection();
     renderBookPage();
     void loadPublicWorkspace();
   }
@@ -2549,3 +2546,8 @@ setInterval(() => {
     void refreshAdminWorkspace({ silent: true });
   }
 }, 30000);
+
+
+
+
+

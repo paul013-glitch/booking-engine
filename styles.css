@@ -559,6 +559,14 @@ textarea:focus {
   background: #fffdf8;
 }
 
+.summary-title {
+  font-family: var(--body-font);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .summary-badge {
   display: inline-flex;
   border-radius: 999px;
@@ -592,6 +600,10 @@ textarea:focus {
   display: block;
 }
 
+.summary-item strong:empty {
+  display: none;
+}
+
 .summary-item span {
   color: var(--muted);
   text-align: right;
@@ -609,6 +621,12 @@ textarea:focus {
 
 .summary-total strong {
   font-size: 1.4rem;
+}
+
+.summary-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .summary-footer {
