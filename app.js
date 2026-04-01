@@ -10,6 +10,7 @@ const authState = {
 
 const adminUiState = {
   availabilityRoomId: "shared-double",
+  activeTab: "bookings",
 };
 
 const logoSvg =
@@ -1238,32 +1239,26 @@ function renderBookPage() {
 }
 
 function renderAdminPage() {
-  const roomCount = document.getElementById("roomCount");
-  const packageCount = document.getElementById("packageCount");
-  const addonCount = document.getElementById("addonCount");
   const bookingCount = document.getElementById("bookingCount");
   const intentCount = document.getElementById("intentCount");
+  const activeTab = adminUiState.activeTab || "bookings";
   document.querySelectorAll("[data-booking-link]").forEach((bookingLink) => {
     bookingLink.setAttribute("href", bookingUrl());
   });
-
-  if (roomCount) roomCount.textContent = `${state.rooms.length} rooms`;
-  if (packageCount) packageCount.textContent = `${state.packages.length} packages`;
-  if (addonCount) addonCount.textContent = `${state.addons.length} add-ons`;
   if (bookingCount) bookingCount.textContent = `${state.bookings.length} bookings`;
   if (intentCount) intentCount.textContent = `${state.bookingIntents.length} intents`;
 
-  const roomList = document.getElementById("roomList");
-  const packageList = document.getElementById("packageList");
-  const addonList = document.getElementById("addonList");
   const bookingList = document.getElementById("bookingList");
   const bookingIntentCard = document.getElementById("bookingIntentCard");
   const bookingIntentList = document.getElementById("bookingIntentList");
   const campForm = document.getElementById("campForm");
+  const analyticsForm = document.getElementById("analyticsForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
   const availabilityBasePrice = document.getElementById("availabilityBasePrice");
   const availabilityMatrix = document.getElementById("availabilityMatrix");
+  const panes = document.querySelectorAll("[data-admin-pane]");
+  const tabButtons = document.querySelectorAll("[data-admin-tab]");
 
   ensureAvailabilityCoverage(state);
 
@@ -1284,8 +1279,6 @@ function renderAdminPage() {
     campForm.elements.accentSoft.value = state.camp.theme?.accentSoft || seedState.camp.theme.accentSoft;
     campForm.elements.titleFont.value = state.camp.theme?.titleFont || seedState.camp.theme.titleFont;
     campForm.elements.bodyFont.value = state.camp.theme?.bodyFont || seedState.camp.theme.bodyFont;
-    campForm.elements.ga4Id.value = state.camp.analytics?.ga4Id || "";
-    campForm.elements.pixelId.value = state.camp.analytics?.pixelId || "";
     if (campForm.elements.showBookingIntents) {
       campForm.elements.showBookingIntents.checked = !!state.camp.showBookingIntents;
     }
@@ -1297,10 +1290,22 @@ function renderAdminPage() {
       });
   }
 
+  if (analyticsForm) {
+    analyticsForm.elements.ga4Id.value = state.camp.analytics?.ga4Id || "";
+    analyticsForm.elements.pixelId.value = state.camp.analytics?.pixelId || "";
+  }
+
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
   }
   applyTheme(state.camp.theme);
+
+  panes.forEach((pane) => {
+    pane.hidden = pane.dataset.adminPane !== activeTab;
+  });
+  tabButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.adminTab === activeTab);
+  });
 
   if (availabilityRoomSelect) {
     availabilityRoomSelect.innerHTML = state.rooms
@@ -1322,58 +1327,6 @@ function renderAdminPage() {
 
   if (availabilityMatrix) {
     availabilityMatrix.innerHTML = renderAvailabilityMatrix(adminUiState.availabilityRoomId);
-  }
-
-  if (roomList) {
-    roomList.innerHTML = state.rooms
-      .map((room) => {
-        const availability = availabilityText(room);
-        return `
-          <div class="stack-item">
-            <div class="stack-item-top">
-              <strong>${room.name}</strong>
-              <span class="status ${availability.cls || "confirmed"}">${availability.label}</span>
-            </div>
-            <small>${room.description}</small>
-            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits * room.capacity} total available</div>
-          </div>
-        `;
-      })
-      .join("");
-  }
-
-  if (packageList) {
-    packageList.innerHTML = state.packages
-      .map(
-        (item) => `
-          <div class="stack-item">
-            <div class="stack-item-top">
-              <strong>${item.name}</strong>
-              <span class="pill">${item.nights} nights</span>
-            </div>
-            <small>${item.description}</small>
-            <div class="tiny">${money(item.basePrice)}</div>
-          </div>
-        `,
-      )
-      .join("");
-  }
-
-  if (addonList) {
-    addonList.innerHTML = state.addons
-      .map(
-        (item) => `
-          <div class="stack-item">
-            <div class="stack-item-top">
-              <strong>${item.name}</strong>
-              <span class="pill">${money(item.price)}</span>
-            </div>
-            <small>${item.description}</small>
-            <div class="tiny">${item.unitLabel}</div>
-          </div>
-        `,
-      )
-      .join("");
   }
 
   if (bookingList) {
@@ -2152,7 +2105,7 @@ function readFileAsDataUrl(file) {
 
 function initAdminInteractions() {
   const campForm = document.getElementById("campForm");
-  const roomForm = document.getElementById("roomForm");
+  const analyticsForm = document.getElementById("analyticsForm");
   const packageForm = document.getElementById("packageForm");
   const addonForm = document.getElementById("addonForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
@@ -2165,6 +2118,13 @@ function initAdminInteractions() {
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
   }
+
+  document.addEventListener("click", (event) => {
+    const tabButton = event.target?.closest?.("[data-admin-tab]");
+    if (!tabButton) return;
+    adminUiState.activeTab = tabButton.dataset.adminTab || "bookings";
+    renderAdminPage();
+  });
 
   availabilityRoomSelect?.addEventListener("change", (event) => {
     adminUiState.availabilityRoomId = event.target.value;
@@ -2240,10 +2200,6 @@ function initAdminInteractions() {
       titleFont: campForm.elements.titleFont.value,
       bodyFont: campForm.elements.bodyFont.value,
     };
-    state.camp.analytics = {
-      ga4Id: campForm.elements.ga4Id.value.trim(),
-      pixelId: campForm.elements.pixelId.value.trim(),
-    };
     state.camp.showBookingIntents = campForm.elements.showBookingIntents?.checked ?? true;
 
     saveState();
@@ -2254,26 +2210,14 @@ function initAdminInteractions() {
     }
   });
 
-  roomForm?.addEventListener("submit", async (event) => {
+  analyticsForm?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const imageFile = roomForm.elements.image.files?.[0];
-    let imageUrl =
-      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80";
-    if (imageFile) imageUrl = await readFileAsDataUrl(imageFile);
-
-    state.rooms.unshift({
-      id: `room-${Date.now()}`,
-      name: roomForm.elements.name.value.trim(),
-      description: roomForm.elements.description.value.trim(),
-      pricePerNight: Number(roomForm.elements.pricePerNight.value),
-      totalUnits: Number(roomForm.elements.totalUnits.value),
-      capacity: Number(roomForm.elements.capacity.value),
-      imageUrl,
-    });
-
-    roomForm.reset();
-    ensureAvailabilityCoverage(state);
+    state.camp.analytics = {
+      ga4Id: analyticsForm.elements.ga4Id.value.trim(),
+      pixelId: analyticsForm.elements.pixelId.value.trim(),
+    };
     saveState();
+    applyTheme(state.camp.theme);
     renderAdminPage();
   });
 
