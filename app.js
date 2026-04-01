@@ -1237,77 +1237,6 @@ function renderBookPage() {
   }
 }
 
-function availabilityRowsForRoom(roomId, count = 12) {
-  const room = getRoom(roomId);
-  const rows = [];
-  const start = startOfWeek(new Date());
-
-  for (let i = 0; i < count; i += 1) {
-    const cursor = new Date(start);
-    cursor.setDate(cursor.getDate() + i * 7);
-    const key = cursor.toISOString().slice(0, 10);
-    const row = state.camp.availability?.[roomId]?.weeks?.[key] || {
-      units: room.totalUnits,
-      pricePerNight: room.pricePerNight,
-    };
-    rows.push({
-      weekKey: key,
-      weekLabel: `${formatDate(key)} to ${formatDate(addDays(key, 6))}`,
-      units: Number(row.units ?? room.totalUnits ?? 0),
-      pricePerNight: Number(row.pricePerNight ?? room.pricePerNight ?? 0),
-    });
-  }
-
-  return rows;
-}
-
-function renderAvailabilityMatrix(roomId) {
-  const room = getRoom(roomId);
-  const rows = availabilityRowsForRoom(roomId);
-  return `
-    <div class="availability-row-header">
-      <span>Week</span>
-      <span>Rooms available</span>
-      <span>Price per night</span>
-    </div>
-    ${rows
-      .map(
-        (row) => `
-          <div class="availability-row">
-            <div>
-              <strong>${escapeHtml(row.weekLabel)}</strong>
-              <div class="tiny">${room.name}</div>
-              <div class="tiny">${bookedUnitsForWeek(roomId, row.weekKey)} booked · ${Math.max(0, row.units - bookedUnitsForWeek(roomId, row.weekKey))} left</div>
-            </div>
-            <label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value="${row.units}"
-                data-availability-units="${row.weekKey}"
-                data-availability-room="${roomId}"
-                aria-label="Rooms available for ${escapeHtml(row.weekLabel)}"
-              />
-            </label>
-            <label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value="${row.pricePerNight}"
-                data-availability-price="${row.weekKey}"
-                data-availability-room="${roomId}"
-                aria-label="Price per night for ${escapeHtml(row.weekLabel)}"
-              />
-            </label>
-          </div>
-        `,
-      )
-      .join("")}
-  `;
-}
-
 function renderAdminPage() {
   const roomCount = document.getElementById("roomCount");
   const packageCount = document.getElementById("packageCount");
@@ -1472,12 +1401,11 @@ function renderAdminPage() {
             <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDateTime(booking.holdExpiresAt) : "N/A"}</div>
             <div class="tiny">Reservation: ${booking.reservationCode || "pending"}</div>
             <div class="tiny">Email: ${booking.confirmationEmail?.status || "not sent"}</div>
+            ${booking.cancelledAt ? `<div class="tiny">Cancelled: ${formatDateTime(booking.cancelledAt)}</div>` : ""}
             ${
-              booking.status !== "cancelled" && booking.status !== "expired"
-                ? `<div class="stack-item-actions"><button type="button" class="button button-secondary" data-cancel-booking="${booking.id}" data-reservation-code="${booking.reservationCode || ""}">Cancel</button></div>`
-                : booking.cancelledAt
-                  ? `<div class="tiny">Cancelled: ${formatDateTime(booking.cancelledAt)}</div>`
-                  : ""
+              booking.status !== "expired"
+                ? `<div class="stack-item-actions"><button type="button" class="button button-secondary" data-cancel-booking="${booking.id}" data-reservation-code="${booking.reservationCode || ""}" data-current-status="${booking.status}">${booking.status === "cancelled" ? "Confirm" : "Cancel"}</button></div>`
+                : ""
             }
           </div>
         `;
@@ -1557,19 +1485,23 @@ function renderAvailabilityMatrix(roomId) {
           <div class="availability-row">
             <div>
               <strong>${escapeHtml(row.weekLabel)}</strong>
-              <div class="tiny">${room.name}</div>
             </div>
-            <div>
-              <strong>${row.units}</strong>
-              <div class="tiny">total</div>
-            </div>
+            <label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value="${row.units}"
+                data-availability-units="${row.weekKey}"
+                data-availability-room="${roomId}"
+                aria-label="Rooms available for ${escapeHtml(row.weekLabel)}"
+              />
+            </label>
             <div>
               <strong>${row.booked}</strong>
-              <div class="tiny">sold</div>
             </div>
             <div>
               <strong>${row.forSale}</strong>
-              <div class="tiny">sellable</div>
             </div>
             <label>
               <input
@@ -1739,21 +1671,28 @@ async function refreshAdminWorkspace({ silent = false } = {}) {
   }
 }
 
-async function cancelBookingReservation(bookingId, reservationCode = "") {
+async function cancelBookingReservation(bookingId, reservationCode = "", currentStatus = "") {
   if (!bookingId) return;
-  const confirmed = window.confirm("Cancel this reservation and release the room back into availability?");
+  const targetStatus = currentStatus === "cancelled" ? "confirmed" : "cancelled";
+  const confirmed = window.confirm(
+    targetStatus === "cancelled"
+      ? "Cancel this reservation and release the room back into availability?"
+      : "Confirm this reservation again and put the room back on sale?",
+  );
   if (!confirmed) return;
 
   try {
     const result = await apiJson("cancel-booking", {
       method: "POST",
       headers: authState.token ? { Authorization: `Bearer ${authState.token}` } : {},
-      body: JSON.stringify({ bookingId, reservationCode }),
+      body: JSON.stringify({ bookingId, reservationCode, targetStatus }),
     });
 
     if (result?.workspace) {
       hydrateStateFromWorkspace(result.workspace);
+      authState.workspace = result.workspace;
       renderAdminPage();
+      updateAdminAuthUI(authState.user);
     }
   } catch (error) {
     alert(error instanceof Error ? error.message : "Could not cancel reservation.");
@@ -2196,6 +2135,7 @@ function initBookInteractions() {
       void cancelBookingReservation(
         cancelBookingButton.dataset.cancelBooking,
         cancelBookingButton.dataset.reservationCode || "",
+        cancelBookingButton.dataset.currentStatus || "",
       );
     }
   });

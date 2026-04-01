@@ -34,11 +34,22 @@ exports.handler = async (event, context) => {
     }
 
     const now = new Date().toISOString();
+    const targetStatus = payload.targetStatus === "confirmed" ? "confirmed" : "cancelled";
     let found = false;
 
     workspace.bookings = (workspace.bookings || []).map((booking) => {
       if (booking.id !== payload.bookingId) return booking;
       found = true;
+      if (targetStatus === "confirmed") {
+        const { cancelledAt, ...rest } = booking;
+        return {
+          ...rest,
+          status: "confirmed",
+          confirmedAt: booking.confirmedAt || now,
+          holdExpiresAt: null,
+        };
+      }
+
       return {
         ...booking,
         status: "cancelled",
@@ -58,13 +69,13 @@ exports.handler = async (event, context) => {
 
       return {
         ...intent,
-        stage: "cancelled",
+        stage: targetStatus === "confirmed" ? "confirmed" : "cancelled",
         updatedAt: now,
       };
     });
 
     const saved = await saveWorkspace(workspace);
-    return response(200, { workspace: saved, cancelledAt: now });
+    return response(200, { workspace: saved, updatedAt: now, status: targetStatus });
   } catch (error) {
     console.error("cancel-booking failed", error);
     return response(500, { error: error instanceof Error ? error.message : "Failed to cancel booking" });
