@@ -1,8 +1,0 @@
-{
-  "name": "booking-engine",
-  "private": true,
-  "version": "0.1.0",
-  "dependencies": {
-    "@netlify/blobs": "^10.0.0"
-  }
-}

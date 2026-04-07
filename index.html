@@ -1,50 +1,1386 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Campify</title>
-    <meta
-      name="description"
-      content="Campify helps surf camps sell rooms, packages, and bookings from one simple admin."
-    />
-    <script>
-      (function () {
-        const base = window.location.protocol === "file:" ? "./" : "/";
-        document.write('<link rel="stylesheet" href="' + base + 'styles.css" />');
-      })();
-    </script>
-  </head>
-  <body class="page page-landing page-landing-slim">
-    <main class="landing-shell landing-shell-center">
-      <section class="hero-card hero-card-center">
-        <p class="eyebrow">Campify</p>
-        <h1>Booking software for surf camps.</h1>
-        <p class="lede">
-          A simple, private admin for camp owners and a clean booking flow for guests.
-        </p>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+<meta http-equiv="Pragma" content="no-cache" />
+  <title>Book now | Brisa Villa Ahangama</title>
 
-        <div class="landing-actions landing-actions-center">
-          <button class="button button-primary" type="button" id="landingLogin">
-            Login / Sign up
-          </button>
-          <a class="button button-secondary" href="./book/amigos-surf-camp">See demo</a>
-        </div>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
-        <p class="tiny landing-note">
-          Logged in users are sent straight to the admin editor.
-        </p>
-      </section>
-    </main>
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet"/>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', sans-serif;
+      background: #f2eae2;
+      margin: 0;
+      padding: 2rem;
+      color: #333;
+    }
 
-    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-    <script>
-      (function () {
-        const base = window.location.protocol === "file:" ? "./" : "/";
-        const script = document.createElement("script");
-        script.src = base + "app.js";
-        document.body.appendChild(script);
-      })();
-    </script>
-  </body>
+.divholder{
+  min-height:80vh;
+}
+
+.flatpickr-day {
+height: 46px !important;
+}
+
+
+.stripeholder {
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    padding-bottom: 1rem;
+    display: flex;
+margin-top:-55px;
+    bottom: 0;
+}
+
+.stripelogo {
+    width: 160px;
+    margin-left:24px;
+    visibility: hidden;
+}
+
+.div-block-294 {
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    padding-bottom: 1rem;
+    padding-left: 1rem;
+    display: flex;
+
+    bottom: 0;
+    margin-left: -2rem;
+}
+
+.image-84 {
+    width: 50px;
+    height: 50px;
+    visibility: hidden;
+}
+
+
+.whatsappbottom {
+    justify-content: flex-end;
+    align-items: center;
+    width: 100%;
+    padding-bottom: 1rem;
+    padding-right: 0rem;
+    display: flex;
+margin-top: -65px;
+    bottom: 0;
+}
+
+.whatsappholder {
+    z-index: 0;
+    background-color: #000;
+    cursor: pointer;
+    border-radius: 120px;
+    justify-content: center;
+    align-items: center;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    position: relative;
+}
+
+.live-icon {
+    z-index: 2;
+    background-color: #00b94a;
+    border-radius: 100%;
+    width: 15px;
+    height: 15px;
+    position: absolute;
+    inset: 0 auto auto 0;
+}
+
+
+
+
+    .step-container {
+      max-width: 480px;
+      margin: auto;
+      background: #fff;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.05);
+      position: relative;
+      z-index: 2;
+      margin-bottom:80px;
+    }
+    .step {
+      display: none;
+    }
+    .step.active {
+      display: block;
+    }
+    label {
+      display: block;
+      margin: 1rem 0 0.25rem;
+      font-weight: 600;
+    }
+    input, select, textarea {
+      width: 95%;
+      padding: 0.6rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-family: inherit;
+    }
+
+       select{
+      width: 100%;
+    }
+
+
+    button {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      width: 100%;
+      background: rgb(17, 17, 17);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background-color: #e11e47;
+    }
+    .back-btn {
+      background: transparent;
+      border: 2px solid rgb(17, 17, 17);
+      color: rgb(17, 17, 17);
+      margin-top: 2rem;
+    }
+    .back-btn:hover {
+      background: #ffe4ea;
+    }
+    .addons-inline {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+    .price-box {
+      background: #f8f8f8;
+      padding: 1rem;
+      border-radius: 12px;
+      margin-top: 1rem;
+      font-size: 1rem;
+    }
+
+        .price-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+    }
+
+    .price-box p {
+      margin: 0.25rem 0;
+    }
+    .input-error {
+      color: #ff385c;
+      font-size: 0.85rem;
+      
+      display: block;
+    }
+    .error {
+      border-color: #ff385c;
+    }
+    .flatpickr-calendar {
+      z-index: 9999 !important;
+    }
+    .flatpickr-day.selected,
+    .flatpickr-day.startRange,
+    .flatpickr-day.endRange {
+      background: #ff385c !important;
+      border-color: #ff385c !important;
+      color: #fff !important;
+    }
+
+
+
+.flatpickr-day.inRange {
+  background: #e6e6e6 !important;
+}
+
+
+.flatpickr-day.startRange.endRange.inRange {
+  background: #ff6b6b !important; /* Your custom red */
+  box-shadow: none !important;
+}
+
+
+.flatpickr-day.selected.startRange + .flatpickr-day.endRange:not(:nth-child(7n+1)),
+.flatpickr-day.startRange.startRange + .flatpickr-day.endRange:not(:nth-child(7n+1)),
+.flatpickr-day.endRange.startRange + .flatpickr-day.endRange:not(:nth-child(7n+1)) {
+  box-shadow: -10px 0 0 #e6e6e6 !important;
+}
+
+
+
+
+    .date-range-display {
+      padding: 1rem;
+      font-size: 1.1rem;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      background: white;
+      margin-bottom: 1rem;
+    }
+    .date-range-display span {
+      flex: 1;
+    }
+    #checkinDate {
+      text-align: left;
+      color: #222;
+    }
+    .to-arrow {
+      flex: 0;
+      padding: 0 0.5rem;
+      color: #888;
+    }
+    #checkoutDate {
+      text-align: right;
+      color: #222;
+    }
+
+    .booking-container {
+      max-width: 480px;
+      margin: 2rem auto;
+      padding: 2rem;
+      background: #fff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.05);
+      border-radius: 12px;
+    }
+
+    h2 {
+      font-size: 1.8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+
+    .date-range-display {
+      padding: 1rem;
+      font-size: 1.1rem;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      background: white;
+      margin-bottom: 1rem;
+      position: relative;
+      z-index: 2;
+    }
+
+    .date-range-display span {
+      flex: 1;
+      text-align: left;
+    }
+
+    #checkinDate {
+      text-align: left;
+      color: #222;
+    }
+
+    #checkoutDate {
+      text-align: right;
+      color: #222;
+    }
+
+    .to-arrow {
+      flex: 0;
+      padding: 0 0.5rem;
+      color: #888;
+    }
+
+    .info-box {
+      padding: 1rem;
+      background: #f8f8f8;
+      border-radius: 12px;
+      margin-top: 0rem;
+      font-size: 1rem;
+    }
+
+    .error {
+      color: #d33;
+      font-weight: 500;
+    }
+
+    .price-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+    }
+
+    .book-btn {
+      margin-top: 1.5rem;
+      width: 100%;
+      padding: 1rem;
+      background-color: #ff385c;
+      color: white;
+      border: none;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border-radius: 12px;
+      cursor: pointer;
+      display: none;
+      transition: background 0.2s;
+    }
+
+    .book-btn:hover {
+      background-color: #e11e47;
+    }
+
+    .flatpickr-calendar {
+      z-index: 9999 !important;
+    }
+
+    /* Make selected check-in and check-out date red */
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: #ff385c !important;
+  border-color: #ff385c !important;
+  color: #fff !important;
+}
+
+
+.div-block-293 {
+    justify-content: center;
+    align-items: center;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    display: flex
+;
+}
+
+.logo {
+    height: 80px;
+}
+
+
+@media (max-width: 768px) {
+  .logo {
+    height: 60px;
+  }
+
+.divholder{
+  min-height:72vh;
+}
+
+.stripelogo {
+
+    margin-left:8px;
+}
+
+
+
+.whatsappbottom {
+
+    width: 98%;
+
+}
+
+  .image-84 {
+    width: 50px;
+    height: 50px;
+}
+
+
+  body {
+      padding: 6px;
+      height: auto;
+    }
+
+
+.div-block-294 {
+    margin-left: -10px;
+  }
+
+    .step-container {
+      padding: 20px;
+    }
+
+    h2 {
+      font-size: 1.8rem;
+      margin-bottom: 20px;
+      margin-top: 10px;
+    }
+
+.mainh{
+  margin-bottom: 30px;
+}
+
+    #checkinDate {
+font-size:14px;
+    }
+    .to-arrow {
+      flex: 0;
+      padding: 0 0.5rem;
+      color: #888;
+    }
+    #checkoutDate {
+font-size:14px;
+    }
+
+
+}
+
+
+
+  </style>
+
+   <link href="https://cdn.prod.website-files.com/67caf48f6b3dffd55c93bbc7/67ef6f8ec1a095529db5df74_Brisa%20website-03.jpg" rel="shortcut icon" type="image/x-icon">
+  <link href="https://cdn.prod.website-files.com/67caf48f6b3dffd55c93bbc7/67ef6f887a235e18bc2b6582_Brisa%20website-02.jpg" rel="apple-touch-icon">
+
+
+<script type="text/javascript">!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.agent='plwebflow';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init', '668270725916333');fbq('track', 'PageView');</script>
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-8RNNK84644"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-8RNNK84644');
+</script>
+
+<body>
+  <div class="divholder">
+<div class="div-block-293"><img loading="lazy" src="https://cdn.prod.website-files.com/67caf48f6b3dffd55c93bbc7/67f0029c1e31e9c7d7d0a8b2_black%20logo.png" alt="" class="logo"></div>
+
+  <div class="step-container">
+
+
+<!-- Step 0: Choose Booking Channel -->
+<div class="step active" id="step0">
+  <h2>Book Brisa Villa</h2>
+
+  <button onclick="gtag('event', 'bookinge_direct'); fbq('trackCustom', 'bookinge_direct'); goToStep(1)">
+    Book Direct (Best Price)
+  </button>
+
+  <a href="https://www.airbnb.com/h/brisa-ahangama" target="_blank"
+     onclick="gtag('event', 'bookinge_airbnb'); fbq('trackCustom', 'bookinge_airbnb');">
+    <button>Book on Airbnb</button>
+  </a>
+
+  <a href="https://www.booking.com/hotel/lk/brisa-ahangama-stunning-4br-private-villa-with-pool-amp-office-room.en-gb.html" target="_blank"
+     onclick="gtag('event', 'bookinge_booking'); fbq('trackCustom', 'bookinge_booking');">
+    <button>Book on Booking.com</button>
+  </a>
+
+  <a href="https://wa.me/94742434691" target="_blank"
+     onclick="gtag('event', 'bookinge_help'); fbq('track', 'Contact'); fbq('trackCustom', 'bookinge_help');">
+    <button class="back-btn">Contact Us</button>
+  </a>
+</div>
+
+
+    <!-- Step 1: Dates -->
+    <div class="step" id="step1">
+      <h2 class="mainh">Reserve Your Stay</h2>
+<div id="promoMessage" style="margin-top:-1rem; margin-bottom: 2.5rem; font-size: 0.95rem; color: #aaa;"></div>
+
+ <label style="font-weight: bold; margin-bottom: 8px; display: block;">Select Dates</label>
+
+<div id="dateRangeDisplay" class="date-range-display" onclick="fp.open()" style="display: flex; gap: 20px; padding: 12px; border: 1px solid #ccc; border-radius: 8px; cursor: pointer; align-items: flex-start;">
+
+  <div style="display: flex; flex-direction: column; text-align: left;">
+    <span style="font-weight: bold; font-size: 14px;">Check in</span>
+    <span id="checkinDate" style="color: #888;">Add dates</span>
+  </div>
+
+  <div style="width: 1px; background: #ddd; height: 30px; align-self: center;"></div> <!-- separator line -->
+
+  <div style="display: flex; flex-direction: column; text-align: left;">
+    <span style="font-weight: bold; font-size: 14px;">Check out</span>
+    <span id="checkoutDate" style="color: #888;">Add dates</span>
+  </div>
+
+</div>
+
+<script>
+function randomDate(start, end) {
+  return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+}
+
+function formatDate(d) {
+  const month = '' + (d.getMonth() + 1);
+  const day = '' + d.getDate();
+  const year = d.getFullYear();
+  return [year, month.padStart(2, '0'), day.padStart(2, '0')].join('-');
+}
+
+</script>
+    <input id="dateRange" style="display: none;" />
+
+
+
+    <div class="info-box" id="pricingBox" style="display: none;">
+      <div class="price-row">
+        <span>Price per night</span>
+        <span id="nightPrice">$400</span>
+      </div>
+
+      <div class="price-row" style="margin-bottom: 1rem;">
+         <span id="totalLabel">Total (3 nights)</span>
+        <strong id="totalPrice">$1200</strong>
+      </div>
+
+      <div style="display:none; margin: 1rem 0; font-size: 0.95rem; color: #555;" id="cancelPolicy">
+        Free cancellation until 22-02-2025
+      </div>
+
+      <div class="price-row" style="display:none; margin-top: 1rem;">
+        <span>Pay now (50% deposit)</span>
+        <strong id="depositPrice">$600</strong>
+      </div>
+    </div>
+
+<button type="button" class="book-btn" id="bookNow" onclick="handleReserveNowClick()">Reserve Now</button>
+
+    <div class="error" id="errorMsg"></div>
+    <p style="color:#aaa;">Secure your stay in 1 minute — no payment required yet.</p>
+  </div>
+
+    <!-- Step 2: Guest Info -->
+    <div class="step" id="step2">
+      <h2>Guest Info</h2>
+
+      <div class="info-box" id="selectedDatesSummary" style="margin-bottom: 20px;">
+  <strong>Selected Stay:</strong>
+  <div id="selectedStayDates">
+    Check-in: <span id="step2Checkin">-</span> &nbsp; → &nbsp; Check-out: <span id="step2Checkout">-</span>
+  </div>
+</div>
+<div id="checkinTimeWrapper">
+       <label>Estimated Check-in Time</label>
+      <select id="checkinTime">
+        <option value="">Select</option>
+        <option>15:00</option>
+        <option>16:00</option>
+        <option>17:00</option>
+        <option>18:00</option>
+        <option>19:00</option>
+        <option>20:00</option>
+        <option>21:00</option>
+        <option>22:00</option>
+        <option>23:00</option>
+      </select>
+</div>
+      <label>Name</label>
+      <input id="guestName">
+      <span class="input-error" id="errorName"></span>
+      <label>Email</label>
+      <input id="guestEmail">
+      <span class="input-error" id="errorEmail"></span>
+      <label>Phone Nr. (whatsapp)</label>
+      <input id="guestPhone">
+      <span class="input-error" id="errorPhone"></span>
+      <label>Nr. of Guests (max 10)</label>
+      <input id="guestCount" type="number" min="1" max="10" value="6">
+      <span class="input-error" id="errorGuests"></span>
+     
+      <span class="input-error" id="errorCheckinTime"></span>
+      <button type="button" class="back-btn" onclick="goToStep(1)">Back</button>
+      <button type="button" style="margin-top:1rem !important;" onclick="validateStep2();">Reserve now!</button>
+      <p style="color:#aaa;">⚡ Popular dates fill fast. Reserve early to secure your stay.</p>
+    </div>
+
+    <!-- Step 3: Add-ons -->
+    <div class="step" id="step3">
+      <h2>Add-ons</h2>
+      <div class="addons-inline">
+        <label><input type="checkbox" id="pickup"> Airport Pickup ($35/p)</label>
+        <label><input type="checkbox" id="groceries"> Groceries ($10/p)</label>
+        <label><input type="checkbox" id="floatingbascket"> Floating fruit basket ($20)</label>
+      </div>
+      <label>Special requests</label>
+      <textarea id="extraRequests" rows="3"></textarea>
+      <button type="button" class="back-btn" onclick="goToStep(2)">Back</button>
+      <button type="button" onclick="goToStep(4)">Continue</button>
+    </div>
+
+    <!-- Step 4: Summary -->
+    <div class="step" id="step4">
+<h3>Thank you! Your Reservation:</h3>
+<p>We will contact you as soon as possible to confirm your reservation.</p>
+<div id="bookingSummary"></div>
+
+      <button type="button" class="back-btn" onclick="fbq('track', 'Contact'); window.open('https://api.whatsapp.com/send?phone=94742434691', '_blank');">Whatsapp us!</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script>
+    gtag('event', 'bookinge_page_loaded');
+    fbq('trackCustom', 'booking_page_loaded');
+       const minStay = 2;
+    const pricePerNight = 500;
+
+
+
+const ENABLE_CHECKIN_TIME = false; // set to true to enable check-in time
+
+// Toggle for direct booking discount
+const ENABLE_DIRECT_BOOKING_DISCOUNT = true;
+const DIRECT_DISCOUNT_RATE = 0.05; // 5%
+
+const ENABLE_LAST_MINUTE_DISCOUNT = true;
+const LAST_MINUTE_DISCOUNT_RATE = 0.10; // 10%
+const LAST_MINUTE_THRESHOLD_DAYS = 14;
+
+  // Check for promo code in URL and skip to step 1
+  const urlParams = new URLSearchParams(window.location.search);
+  const promo = urlParams.get("promo");
+  if (promo) {
+    goToStep(1);
+    fbq('trackCustom', 'promo_code_loaded', { promo: promo.toUpperCase() });
+
+    const promoMsgEl = document.getElementById("promoMessage");
+if (promo && promoMsgEl) {
+promoMsgEl.innerHTML = `Using code <strong>${promo.toUpperCase()}</strong>. Discount shown after dates.`;
+
+}
+
+  }
+
+
+
+document.addEventListener('DOMContentLoaded', function () {
+  if (!ENABLE_CHECKIN_TIME) {
+    document.getElementById("checkinTimeWrapper").style.display = "none";
+  }
+
+
+
+});
+
+
+
+function formatDate(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+let reserveNowClicked = false;
+
+function handleReserveNowClick() {
+  goToStep(2);
+
+  if (!reserveNowClicked) {
+    gtag('event', 'bookinge_reserve_now_press');
+    fbq('trackCustom', 'reserve_now_press');
+
+console.log("reseve now clicked! value next: ")
+//// value test
+  let val = 0;
+
+  const finalRow = document.getElementById("finalRow");
+  if (finalRow) {
+    const strongs = finalRow.querySelectorAll("strong");
+    if (strongs.length >= 2) {
+      val = parseFloat(strongs[1].textContent.replace(/\$/g, '').trim());
+    }
+  } else {
+    const fallback = document.getElementById("totalPrice");
+    if (fallback) {
+      val = parseFloat(fallback.textContent.replace(/\$/g, '').trim());
+    }
+  }
+
+  if (!isNaN(val)) {
+    bookingValue = val;
+    console.log("💰 Booking value saved:", bookingValue);
+  } else {
+    console.warn("❌ Could not extract booking value");
+  }
+
+
+// add to cart
+fbq('track', 'AddToCart', {
+  content_type: 'product',
+  content_name: 'Brisa Villa',
+  currency: 'USD',
+  value: bookingValue
+});
+
+    reserveNowClicked = true;
+  }
+}
+
+
+let blockedDates = ["2025-04-23", "2025-04-24", "2025-04-28","2025-05-21","2025-05-22","2025-05-23"]; // fallback
+
+fetch("blocked-dates.json")
+  .then(res => {
+    if (!res.ok) throw new Error("Failed to fetch");
+    return res.json();
+  })
+  .then(data => {
+    blockedDates = data;
+    console.log("Blocked Dates (fetched):", blockedDates);
+    initCalendar(blockedDates);
+  })
+  .catch(err => {
+    console.warn("Using fallback blockedDates due to error:", err);
+    console.log("Blocked Dates (fallback):", blockedDates);
+    initCalendar(blockedDates);
+  });
+
+
+const dynamicRates = [
+  { start: "2025-04-01", end: "2025-04-30", price: 586 },
+  { start: "2025-05-01", end: "2025-05-31", price: 502 },
+  { start: "2025-06-01", end: "2025-06-30", price: 502 },
+  { start: "2025-07-01", end: "2025-07-31", price: 502 },
+  { start: "2025-08-01", end: "2025-08-31", price: 502 },
+  { start: "2025-09-01", end: "2025-09-30", price: 502 },
+  { start: "2025-10-01", end: "2025-10-31", price: 502 },
+  { start: "2025-11-01", end: "2025-11-22", price: 703 },
+  { start: "2025-11-23", end: "2025-11-30", price: 703 },
+  { start: "2025-12-01", end: "2025-12-19", price: 778 },
+  { start: "2025-12-20", end: "2026-01-10", price: 1029 },
+  { start: "2026-01-11", end: "2026-01-30", price: 854 },
+  { start: "2026-02-01", end: "2026-02-28", price: 586 },
+  { start: "2026-03-01", end: "2026-03-31", price: 586 },
+  { start: "2026-04-01", end: "2026-04-30", price: 586 },
+  { start: "2026-05-01", end: "2026-05-31", price: 502 },
+  { start: "2026-06-01", end: "2026-06-30", price: 502 },
+  { start: "2026-07-01", end: "2026-07-31", price: 502 },
+];
+
+
+
+    const errorMsg = document.getElementById("errorMsg");
+    const pricingBox = document.getElementById("pricingBox");
+    const nightCountEl = document.getElementById("nightCount");
+    const nightPriceEl = document.getElementById("nightPrice");
+    const totalPriceEl = document.getElementById("totalPrice");
+    const depositPriceEl = document.getElementById("depositPrice");
+    const cancelPolicyEl = document.getElementById("cancelPolicy");
+    const bookNowBtn = document.getElementById("bookNow");
+    const checkinDateDisplay = document.getElementById("checkinDate");
+    const checkoutDateDisplay = document.getElementById("checkoutDate");
+
+
+function getCheckoutBlockedDates(blocked) {
+  const dates = blocked.map(d => new Date(d)).sort((a, b) => a - b);
+  const blockedCheckout = new Set();
+
+  for (let i = 0; i < dates.length; i++) {
+    const curr = dates[i];
+    const next = dates[i + 1];
+
+    // Always block the day after the current one
+    const nextDay = new Date(curr);
+    nextDay.setDate(curr.getDate() + 1);
+    blockedCheckout.add(nextDay.toISOString().split("T")[0]);
+
+    // If next exists and is consecutive, block it too
+    if (next) {
+      const diff = (next - curr) / (1000 * 60 * 60 * 24);
+      if (diff === 1) {
+        blockedCheckout.add(next.toISOString().split("T")[0]);
+      }
+    }
+  }
+
+  return Array.from(blockedCheckout);
+}
+
+
+let fp; // define at top level
+let dateSelectedEventFired = false;
+
+
+function initCalendar(blockedDates) {
+  const blockedCheckoutDates = getCheckoutBlockedDates(blockedDates);
+  console.log("Checkout Blocked Dates:", blockedCheckoutDates);
+
+  fp = flatpickr("#dateRange", {
+    mode: "range",
+    dateFormat: "Y-m-d",
+    minDate: "today",
+    disable: blockedDates,
+    static: true,
+    position: "auto center",
+    onChange: function(selectedDates) {
+      pricingBox.style.display = "none";
+      bookNowBtn.style.display = "none";
+      errorMsg.textContent = "";
+      cancelPolicyEl.textContent = "";
+
+if (selectedDates.length === 1) {
+  const checkin = selectedDates[0];
+  const checkinStr = formatDate(checkin);
+
+  const filteredBlockedCheckout = blockedCheckoutDates.filter(d => d !== checkinStr);
+  const filteredBlocked = blockedDates.filter(d => new Date(d) < checkin && d !== checkinStr);
+
+  const updatedDisable = [
+    ...filteredBlockedCheckout,
+    ...filteredBlocked
+  ];
+
+  fp.set("disable", updatedDisable);
+  checkinDateDisplay.textContent = checkinStr;
+}
+
+
+        if (selectedDates.length === 2) {
+          const [start, end] = selectedDates;
+          const keepEnabled = formatDate(selectedDates[1]);
+          const filteredBlocked = blockedDates.filter(d => d !== keepEnabled);
+          fp.set("disable", filteredBlocked);
+
+          checkinDateDisplay.textContent = formatDate(start);
+          checkoutDateDisplay.textContent = formatDate(end);
+
+          const nights = (end - start) / (1000 * 60 * 60 * 24);
+
+          const rangeDates = [];
+          const cursor = new Date(start);
+          while (cursor < end) {
+            cursor.setDate(cursor.getDate() + 1);
+            rangeDates.push(cursor.toISOString().split('T')[0]);
+          }
+
+          const hasBlocked = rangeDates.some(date => blockedDates.includes(date));
+
+          if (hasBlocked) {
+            errorMsg.textContent = "Selected range includes unavailable dates.";
+            return;
+          }
+
+          if (nights < minStay) {
+            errorMsg.textContent = `Minimum stay is ${minStay} nights.`;
+            return;
+          }
+
+          let subtotal = 0;
+const nightlyPrices = [];
+
+rangeDates.forEach(dateStr => {
+  const rate = dynamicRates.find(r =>
+    new Date(dateStr) >= new Date(r.start) && new Date(dateStr) <= new Date(r.end)
+  );
+  const price = rate ? rate.price : 650; // fallback price
+  subtotal += price;
+  nightlyPrices.push(price);
+});
+
+          const deposit = subtotal * 0.5;
+
+          document.getElementById("totalLabel").textContent = `Total (${nights} night${nights > 1 ? 's' : ''})`;
+
+          nightPriceEl.textContent = nightlyPrices.length === 1
+  ? `$${nightlyPrices[0]}`
+  : `$${Math.round(subtotal / nightlyPrices.length)}`;
+
+
+//////////////////////// promo codes get applied ////////////////
+// --- Cleanup old rows ---
+["promoRow", "finalRow", "directRow", "lastMinuteRow"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+});
+
+
+const pricingBox = document.getElementById("pricingBox");
+
+// --- Promo setup ---
+const urlParams = new URLSearchParams(window.location.search);
+const rawPromo = urlParams.get("promo");
+const promo = rawPromo ? rawPromo.toLowerCase() : "";
+const promoCodes = {
+  "zia10": 0.10,
+  "vmsl10": 0.10,
+  "dror10": 0.10,
+  "friend15": 0.15,
+    "island10": 0.10,
+};
+
+const promoRate = promoCodes[promo] || 0;
+const promoDiscount = subtotal * promoRate;
+const promoPercent = promoRate * 100;
+
+// --- Direct Discount (only if no promo) ---
+const applyDirectDiscount = ENABLE_DIRECT_BOOKING_DISCOUNT && promoRate === 0;
+const directRate = applyDirectDiscount ? DIRECT_DISCOUNT_RATE : 0;
+const directDiscount = subtotal * directRate;
+
+const directPercent = directRate * 100;
+
+
+// --- Last Minute Discount ---
+let lastMinuteRate = 0;
+let lastMinuteDiscount = 0;
+let lastMinutePercent = 0;
+let lastMinuteNightCount = 0;
+
+if (ENABLE_LAST_MINUTE_DISCOUNT && selectedDates.length === 2) {
+  const checkin = new Date(selectedDates[0]);
+  const checkout = new Date(selectedDates[1]);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // normalize
+
+  const cursor = new Date(checkin);
+  while (cursor < checkout) {
+    const diffDays = Math.floor((cursor - today) / (1000 * 60 * 60 * 24));
+    if (diffDays >= 0 && diffDays <= LAST_MINUTE_THRESHOLD_DAYS) {
+      lastMinuteNightCount++;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (lastMinuteNightCount > 0) {
+    lastMinuteRate = LAST_MINUTE_DISCOUNT_RATE;
+    lastMinuteDiscount = (subtotal / nights) * lastMinuteNightCount * lastMinuteRate;
+    lastMinutePercent = lastMinuteRate * 100;
+  }
+}
+
+
+
+// --- Final total after discounts ---
+const finalTotal = subtotal - promoDiscount - directDiscount - lastMinuteDiscount;
+
+// --- Show original total ---
+totalPriceEl.textContent = `$${subtotal.toFixed(0)}`;
+
+// --- Promo display (if any) ---
+if (promoRate > 0) {
+  const promoRow = document.createElement("div");
+  promoRow.className = "price-row";
+  promoRow.id = "promoRow";
+  promoRow.style.marginTop = "0.75rem";
+  promoRow.innerHTML = `<span>Promo ${promo.toUpperCase()} (−${promoPercent.toFixed(0)}%)</span><span style="color:#e11e47;">−$${promoDiscount.toFixed(0)}</span>`;
+  pricingBox.appendChild(promoRow);
+}
+
+// --- Direct booking display (only if no promo) ---
+if (directRate > 0) {
+  const directRow = document.createElement("div");
+  directRow.className = "price-row";
+  directRow.id = "directRow";
+  directRow.innerHTML = `<span>Direct Booking (−${directPercent.toFixed(0)}%)</span><span style="color:#e11e47;">−$${directDiscount.toFixed(0)}</span>`;
+  pricingBox.appendChild(directRow);
+}
+
+if (lastMinuteRate > 0) {
+  const lastMinuteRow = document.createElement("div");
+  lastMinuteRow.className = "price-row";
+  lastMinuteRow.id = "lastMinuteRow";
+   lastMinuteRow.innerHTML = `<span>Last-Minute (−${lastMinutePercent.toFixed(0)}%, ${lastMinuteNightCount} night${lastMinuteNightCount > 1 ? 's' : ''})</span><span style="color:#e11e47;">−$${lastMinuteDiscount.toFixed(0)}</span>`;
+  pricingBox.appendChild(lastMinuteRow);
+}
+
+
+
+// --- Final total row (if any discount applied) ---
+if (promoRate > 0 || directRate > 0) {
+  const finalRow = document.createElement("div");
+  finalRow.className = "price-row";
+  finalRow.style.marginTop = "1rem";
+  finalRow.id = "finalRow";
+  finalRow.innerHTML = `<strong>Total after discount</strong><strong>$${finalTotal.toFixed(0)}</strong>`;
+  pricingBox.appendChild(finalRow);
+}
+
+// --- Update deposit
+depositPriceEl.textContent = `$${(finalTotal * 0.5).toFixed(0)}`;
+
+///////////////// end of promo codes //////////////////////////
+
+
+const today = new Date();
+const daysUntilCheckin = (start - today) / (1000 * 60 * 60 * 24);
+
+if (daysUntilCheckin >= 60) {
+  const cancelDate = new Date(start);
+  cancelDate.setDate(cancelDate.getDate() - 60);
+  const cancelStr = cancelDate.toISOString().split('T')[0].split('-').reverse().join('-');
+  cancelPolicyEl.textContent = `Free cancellation until ${cancelStr}`;
+} else {
+  cancelPolicyEl.textContent = ""; // no cancellation info shown
+}
+
+
+          pricingBox.style.display = "block";
+          bookNowBtn.style.display = "block";
+
+        // Fire event only once
+        if (!dateSelectedEventFired) {
+          gtag('event', 'bookinge_dates_selected');
+          fbq('trackCustom', 'dates_selected');
+
+           fbq('track', 'Search', {
+    content_type: 'product',
+    checkin_date: formatDate(start),
+    checkout_date: formatDate(end),
+    content_name: 'Brisa Villa'
+  });
+
+           console.log("📡 fbq Search fired:", {
+  content_type: 'product',
+  checkin_date: formatDate(start),
+  checkout_date: formatDate(end),
+  content_name: 'Brisa Villa'
+});
+
+          dateSelectedEventFired = true;
+        }
+
+        } else {
+            if (selectedDates.length === 1){
+          
+        }else{
+          checkinDateDisplay.textContent = "Select check-in";
+          checkoutDateDisplay.textContent = "Select check-out";
+        }
+  
+        }
+      },
+
+
+onDayCreate: function(dObj, dStr, fp, dayElem) {
+  const date = dayElem.dateObj;
+  const formatted = formatDate(date);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Set to midnight, ignore time differences
+
+  const isPastDate = date < today;
+  const isBlocked = blockedDates.includes(formatted);
+
+  if (!isPastDate && !isBlocked) {
+    const rate = dynamicRates.find(r =>
+      new Date(formatted) >= new Date(r.start) && new Date(formatted) <= new Date(r.end)
+    );
+    const price = rate ? rate.price : 650;
+
+    const priceTag = document.createElement("span");
+    priceTag.textContent = `$${price}`;
+    priceTag.style.fontSize = "9px";
+    priceTag.style.display = "block";
+    priceTag.style.color = "#aaa";
+    priceTag.style.marginTop = "-26px"; // More space under date number
+
+    dayElem.appendChild(priceTag);
+  }
+}
+
+
+    });
+
+}
+
+
+    function validateDates() {
+      if (selectedDates.length !== 2) {
+        document.getElementById("errorDates").textContent = "Please select check-in and check-out dates.";
+        return;
+      }
+      goToStep(2);
+    }
+
+function validateStep2() {
+const fields = [
+  { id: 'guestName', errorId: 'errorName' },
+  { id: 'guestEmail', errorId: 'errorEmail' },
+  { id: 'guestPhone', errorId: 'errorPhone' },
+  { id: 'guestCount', errorId: 'errorGuests' },
+  ...(ENABLE_CHECKIN_TIME ? [{ id: 'checkinTime', errorId: 'errorCheckinTime' }] : [])
+];
+
+  let valid = true;
+  fields.forEach(field => {
+    const input = document.getElementById(field.id);
+    const error = document.getElementById(field.errorId);
+    if (!input.value.trim() || (field.id === 'guestCount' && (input.value < 1 || input.value > 10))) {
+      input.classList.add('error');
+      error.textContent = field.id === 'guestCount' ? "Enter 1–10 guests." : "";
+      valid = false;
+    } else {
+      input.classList.remove('error');
+      error.textContent = "";
+    }
+  });
+
+  if (valid) {
+    // Fire off async save (but don't wait for result)
+    const data = {
+  name: document.getElementById("guestName").value.trim(),
+  email: document.getElementById("guestEmail").value.trim(),
+  phone: document.getElementById("guestPhone").value.trim(),
+  guests: parseInt(document.getElementById("guestCount").value),
+  checkin: document.getElementById("checkinDate").textContent.trim(),
+  checkout: document.getElementById("checkoutDate").textContent.trim(),
+  checkinTime: ENABLE_CHECKIN_TIME ? document.getElementById("checkinTime").value : null,
+  promo: promo || null,
+  total: (document.getElementById("finalRow") || document.getElementById("totalPrice"))
+            .textContent.replace(/\$/g, '').trim()
+};
+
+
+    fetch("/.netlify/functions/save-lead", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(data)
+    })
+    .then(res => res.text())
+    .then(responseText => {
+      console.log("Lead save response:", responseText);
+    })
+    .catch(err => {
+      console.warn("Lead save failed:", err);
+    });
+
+    // Continue immediately
+    goToStep(4);
+    gtag('event', 'bookinge_info_valid');
+    fbq('trackCustom', 'form_info_valid');
+    fbq('track', 'Lead');
+    fbq('track', 'CompleteRegistration', { value: 10, currency: 'USD' });
+  }
+}
+
+    function goToStep(step) {
+      document.querySelectorAll(".step").forEach(el => el.classList.remove("active"));
+      document.getElementById("step" + step).classList.add("active");
+
+       if (step === 2) {
+    // Fill in selected dates
+    document.getElementById("step2Checkin").textContent = document.getElementById("checkinDate").textContent;
+    document.getElementById("step2Checkout").textContent = document.getElementById("checkoutDate").textContent;
+  }
+
+      if (step === 4) fillSummary();
+    }
+
+    function fillSummary() {
+     const name = document.getElementById("guestName").value;
+    const email = document.getElementById("guestEmail").value;
+    const phone = document.getElementById("guestPhone").value;
+    const guests = document.getElementById("guestCount").value;
+    const checkinTime = document.getElementById("checkinTime").value;
+    const pickup = document.getElementById("pickup").checked;
+    const groceries = document.getElementById("groceries").checked;
+    const notes = document.getElementById("extraRequests").value;
+
+    const checkin = document.getElementById("checkinDate").textContent;
+    const checkout = document.getElementById("checkoutDate").textContent;
+    
+const finalEl = document.getElementById("finalRow");
+const total = finalEl
+  ? finalEl.querySelectorAll("strong")[1].textContent.trim()
+  : document.getElementById("totalPrice").textContent.trim();
+
+const deposit = `$${(parseFloat(total.replace('$', '')) * 0.5).toFixed(0)}`;
+
+
+    const summaryHTML = `
+      <p><strong>Check-in:</strong> ${checkin}${ENABLE_CHECKIN_TIME && checkinTime ? ` (${checkinTime})` : ''}</p>
+      <p><strong>Check-out:</strong> ${checkout}</p>
+      <p><strong>Name:</strong> ${name}</p>
+      <p><strong>Email:</strong> ${email}</p>
+      <p><strong>Phone:</strong> ${phone}</p>
+      <p><strong>Guests:</strong> ${guests}</p>
+      <p><strong>Airport pickup:</strong> ${pickup ? 'Yes' : 'No'}</p>
+      <p><strong>Groceries:</strong> ${groceries ? 'Yes' : 'No'}</p>
+      ${notes ? `<p><strong>Other requests:</strong><br>${notes}</p>` : ''}
+      <p><strong>Total:</strong> ${total}</p>
+      <p><strong>Deposit (50%):</strong> ${deposit}</p>
+    `;
+    document.getElementById("bookingSummary").innerHTML = summaryHTML;
+    }
+  </script>
+</div>
+
+<div style="height: 50px;">
+<div class="div-block-294"><img src="https://cdn.prod.website-files.com/67caf48f6b3dffd55c93bbc7/680dfe0c14e9b0b83c37023c_visamm.png" loading="lazy" alt="" class="image-84"></div>
+
+
+  <div class="stripeholder"><div style="width:50%; color:#666; text-align:center;">⭐⭐⭐⭐⭐ <br>
+   5.0 Airbnb • 10/10 Booking.com • 5.0 Google Maps </div>
+ </div>
+
+
+<div class="whatsappbottom"><a href="https://api.whatsapp.com/send?phone=94742434691" target="_blank" class="whatsappholder w-inline-block"><img loading="lazy" src="https://cdn.prod.website-files.com/67caf48f6b3dffd55c93bbc7/67ef70ebec929328d9f0b1ab_whatsapp.svg" alt="" class="whatsapp-icon"><div class="live-icon"></div><div class="code-embed-6 w-embed w-script"><script>
+document.addEventListener('DOMContentLoaded', function() {
+  const whatsappLink = document.querySelector('.whatsappholder');
+  
+  if (whatsappLink) {
+    whatsappLink.addEventListener('click', function() {
+      if (typeof gtag === 'function') {
+        gtag('event', 'bookinge_help');
+      }
+      
+      if (typeof fbq === 'function') {
+        fbq('trackCustom', 'bookinge_help');
+        fbq('track', 'Contact');
+      }
+    });
+  }
+});
+</script>
+
+<style>
+
+.live-icon::after {
+  content: "";
+  position: absolute;
+  top: 7.5px;
+  left: 7.5px;
+  width: 15px;
+  height: 15px;
+  background-color: #279a4b;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: pulse 2s infinite;
+  opacity: 0.4;
+  z-index: 1;
+}
+
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2);
+    opacity: 0;
+  }
+}
+
+</style></div></a></div>
+</div>
+</body>
+
+<script>
+// Helper to lighten a hex color by a percentage
+function lightenColor(hex, percent) {
+  const num = parseInt(hex.replace("#", ""), 16),
+        amt = Math.round(2.55 * percent),
+        R = (num >> 16) + amt,
+        G = (num >> 8 & 0x00FF) + amt,
+        B = (num & 0x0000FF) + amt;
+  return "#" + (
+    0x1000000 +
+    (R<255?R<1?0:R:255)*0x10000 +
+    (G<255?G<1?0:G:255)*0x100 +
+    (B<255?B<1?0:B:255)
+  ).toString(16).slice(1);
+}
+
+async function loadButtonColor() {
+  try {
+    console.log('Loading theme settings...');
+    const response = await fetch('/theme.json');
+    if (!response.ok) {
+      console.warn('No theme.json found, using default CSS');
+      return;
+    }
+
+    const settings = await response.json();
+    console.log('Theme settings loaded:', settings);
+
+    if (!settings.button_color) {
+      console.warn('No button_color in settings, using default CSS');
+      return;
+    }
+
+    applyButtonColor(settings.button_color);
+  } catch (error) {
+    console.error('Error loading theme settings:', error);
+    // Do nothing, fallback to CSS
+  }
+}
+
+function applyButtonColor(color) {
+  console.log('Applying button color:', color);
+  const hoverColor = lightenColor(color, 10); // 10% lighter for hover
+  console.log('Calculated hover color:', hoverColor);
+// Solid background buttons (exclude .back-btn)
+const solidButtons = document.querySelectorAll('button:not(.back-btn), .book-btn');
+console.log('Found solid buttons:', solidButtons.length);
+solidButtons.forEach(btn => {
+  btn.style.backgroundColor = color;
+  btn.style.borderColor = color;
+  btn.addEventListener('mouseenter', () => {
+    btn.style.backgroundColor = hoverColor;
+  });
+  btn.addEventListener('mouseleave', () => {
+    btn.style.backgroundColor = color;
+  });
+});
+
+// Outline buttons (.back-btn only)
+const outlineButtons = document.querySelectorAll('.back-btn');
+console.log('Found outline buttons:', outlineButtons.length);
+outlineButtons.forEach(btn => {
+  btn.style.borderColor = color;
+  btn.style.color = color;
+  btn.style.backgroundColor = 'transparent'; // Initial transparent background
+  // No hover event needed if you want it to stay transparent
+});
+
+
+}
+
+document.addEventListener('DOMContentLoaded', loadButtonColor);
+
+
+  let initiateCheckoutFired = false;
+
+  function trackInitiateCheckoutOnce() {
+    if (!initiateCheckoutFired) {
+      fbq('track', 'InitiateCheckout');
+      initiateCheckoutFired = true;
+      console.log('fbq InitiateCheckout fired');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const fields = ['guestName', 'guestEmail', 'guestPhone', 'guestCount'];
+    fields.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', trackInitiateCheckoutOnce, { once: true });
+      }
+    });
+  });
+
+
+
+</script>
+
+
+
 </html>
