@@ -1,0 +1,16 @@
+[build]
+publish = "."
+functions = "netlify/functions"
+
+[functions]
+node_bundler = "esbuild"
+
+[[redirects]]
+from = "/save-lead.php"
+to = "/.netlify/functions/save-lead"
+status = 200
+
+[[redirects]]
+from = "/succes.php"
+to = "/index.html"
+status = 301
