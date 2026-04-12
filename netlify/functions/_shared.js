@@ -174,7 +174,7 @@ function createDefaultWorkspace(input = {}) {
     guestName: "",
     guestPhone: "",
     guestEmail: "",
-    guestCountry: "Netherlands",
+    guestCountry: "",
     notes: "",
     leads: [],
     bookingIntents: [],
@@ -238,6 +238,13 @@ function normalizeWorkspace(data = {}) {
     selectedRoomId: rooms.some((room) => room.id === data.selectedRoomId)
       ? data.selectedRoomId
       : base.selectedRoomId,
+    guestCountry:
+      data.guestCountry === "Netherlands" &&
+      !data.guestName &&
+      !data.guestEmail &&
+      !data.guestPhone
+        ? ""
+        : data.guestCountry || "",
   };
 }
 
