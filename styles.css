@@ -400,8 +400,8 @@ select {
 }
 
 .package-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px;
   align-items: center;
   border: 1px solid var(--border);
@@ -410,11 +410,35 @@ select {
   background: #fffefb;
 }
 
+.package-more {
+  margin-top: 4px;
+}
+
+.package-more summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 700;
+  list-style: none;
+}
+
+.package-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.package-more p {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
 .package-row-actions {
   display: grid;
   justify-items: end;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.package-row .option-body {
+  min-width: 0;
 }
 
 .package-footer {
@@ -435,6 +459,12 @@ select {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.people-count {
+  min-width: 40px;
+  text-align: center;
+  font-weight: 700;
 }
 
 .people-control input {
@@ -531,6 +561,17 @@ select {
 .field {
   display: grid;
   gap: 8px;
+}
+
+.field.is-invalid {
+  color: #8c2f2c;
+}
+
+.field.is-invalid input,
+.field.is-invalid select {
+  border-color: #c96e62;
+  background: #fff6f4;
+  outline-color: rgba(201, 110, 98, 0.18);
 }
 
 .helper,
@@ -1163,7 +1204,7 @@ select {
 
 @media (max-width: 720px) {
   .page {
-    padding: 16px;
+    padding: 0;
   }
 
   .page-book {
@@ -1202,19 +1243,51 @@ select {
 
   .booking-shell {
     gap: 10px;
+    width: 100%;
+  }
+
+  .wizard-panel {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .wizard-panel .panel-head,
+  .wizard-panel .stepper,
+  .wizard-panel .wizard-step {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+
+  .wizard-panel .stepper {
+    width: calc(100% - 24px);
   }
 
   .summary-panel {
     position: static;
+    margin-top: 10px;
     padding: 12px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    box-shadow: var(--shadow);
   }
 
   .summary-hero {
     padding: 12px;
+    border: 1px solid var(--border);
+    background: #fffaf1;
+    box-shadow: none;
+  }
+
+  .summary-hero-mobile-hidden {
+    display: none;
+  }
+
+  .summary-hero-mobile-visible {
+    display: block;
   }
 
   .summary-title {
-    font-size: 0.7rem;
+    font-size: 0.78rem;
     letter-spacing: 0.14em;
   }
 
@@ -1253,6 +1326,51 @@ select {
     gap: 8px;
   }
 
+  .wizard-step,
+  .package-row,
+  .option-card {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .wizard-step {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  .package-row {
+    gap: 12px;
+    align-items: flex-start;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .stepper {
+    gap: 0;
+    margin-bottom: 8px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .stepper button {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    padding: 8px 0 10px;
+    font-size: 0.76rem;
+    width: 100%;
+  }
+
+  .stepper button.active {
+    background: transparent;
+    border-bottom-color: var(--accent);
+    color: var(--text);
+  }
+
+  .stepper button:disabled {
+    opacity: 0.28;
+  }
+
   .summary-actions-meta {
     display: flex;
     justify-content: space-between;
@@ -1277,7 +1395,6 @@ select {
     font-size: 0.95rem;
   }
 
-  .stepper,
   .input-row,
   .two-col,
   .calendar-grid-wrap,
@@ -1290,39 +1407,76 @@ select {
   }
 
   .package-row {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 6px 12px 0;
   }
 
   .package-row-actions {
-    justify-items: start;
+    justify-items: end;
+    align-self: center;
+    padding-right: 10px;
   }
 
-  .stepper {
-    display: flex;
-    gap: 4px;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    margin-bottom: 10px;
-    border-bottom: 1px solid var(--border);
-    scrollbar-width: none;
+  .package-row .option-body h3 {
+    font-size: 0.96rem;
   }
 
-  .stepper::-webkit-scrollbar {
+  .package-row .option-body p,
+  .package-row .option-meta span {
+    font-size: 0.74rem;
+  }
+
+  .people-control input {
     display: none;
   }
 
+  .package-more {
+    margin-top: 2px;
+  }
+
+  .package-more summary {
+    font-size: 0.74rem;
+  }
+
+  .stepper {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0;
+    padding-bottom: 0;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
   .stepper button {
-    flex: 0 0 auto;
+    width: 100%;
+    flex: none;
     white-space: nowrap;
     font-size: 0.58rem;
     letter-spacing: 0.08em;
-    padding: 5px 8px;
+    padding: 5px 2px 10px;
     min-height: 30px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .stepper button.active {
+    background: transparent;
+    border-bottom-color: var(--accent);
+  }
+
+  .stepper button:disabled {
+    opacity: 0.28;
   }
 
   .wizard-step {
-    padding: 12px;
+    padding: 4px 0 10px;
+    border: 0;
+    background: transparent;
+    border-radius: 0;
   }
 
   .step-title {
@@ -1338,14 +1492,16 @@ select {
   .helper,
   .tiny,
   .calendar-note,
-  .date-summary,
   .option-body p,
   .package-row .option-meta span {
     font-size: 0.8rem;
   }
 
   .calendar-card {
-    padding: 12px;
+    padding: 0 10px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .calendar-head {
@@ -1354,6 +1510,7 @@ select {
 
   .calendar-grid-wrap {
     grid-template-columns: 1fr;
+    padding: 0 10px;
   }
 
   .calendar-grid-wrap .month-card:nth-child(2) {
@@ -1361,7 +1518,9 @@ select {
   }
 
   .month-card {
-    padding: 10px;
+    padding: 0;
+    border: 0;
+    background: transparent;
   }
 
   .weekday-row {
@@ -1375,6 +1534,28 @@ select {
 
   .day-status {
     font-size: 0.52rem;
+  }
+
+  .package-row {
+    padding: 8px 0;
+  }
+
+  .package-more summary {
+    font-size: 0.78rem;
+  }
+
+  .option-card {
+    border: 1px solid var(--border);
+    background: #fffefb;
+    padding: 0;
+  }
+
+  .option-media {
+    margin-bottom: 10px;
+  }
+
+  .option-media img {
+    border-radius: 16px;
   }
 
   .room-card .tiny,

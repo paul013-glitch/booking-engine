@@ -1088,8 +1088,9 @@ function renderBookPage() {
   const stepper = document.getElementById("stepper");
   const wizard = document.getElementById("wizardContent");
   const summary = document.getElementById("summaryPanel");
+  const summaryActionsShell = document.getElementById("summaryActionsShell");
 
-  if (!stepper || !wizard || !summary) return;
+  if (!stepper || !wizard || !summary || !summaryActionsShell) return;
 
   if (logo) logo.src = state.camp.logoUrl;
   if (name) name.textContent = state.camp.name;
@@ -1125,7 +1126,10 @@ function renderBookPage() {
           <div class="option-body">
             <h3>${item.name}</h3>
             <p>${item.nights} nights</p>
-            <p>${item.description}</p>
+            <details class="package-more">
+              <summary>More...</summary>
+              <p>${item.description}</p>
+            </details>
             <div class="option-meta">
               <span>From ${money(item.basePrice)}</span>
             </div>
@@ -1134,14 +1138,7 @@ function renderBookPage() {
             <span class="tiny">People</span>
             <div class="people-control" role="group" aria-label="${item.name} people count">
               <button type="button" class="people-button" data-package-row-change="${item.id}:-1">−</button>
-              <input
-                type="number"
-                min="0"
-                max="12"
-                value="${quantity}"
-                data-package-row-input="${item.id}"
-                aria-label="${item.name} quantity"
-              />
+              <div class="people-count" aria-live="polite" aria-label="${item.name} quantity">${quantity}</div>
               <button type="button" class="people-button" data-package-row-change="${item.id}:1">+</button>
             </div>
           </div>
@@ -1218,7 +1215,7 @@ function renderBookPage() {
       <section class="wizard-step">
         <div class="step-title">
           <div>
-            <h3>4. Add-ons</h3>
+            <h3>4. Booking details</h3>
             <p class="helper">Add extras only if you need them.</p>
           </div>
         </div>
@@ -1262,26 +1259,26 @@ function renderBookPage() {
             `
             : `
               <div class="input-row">
-                <label class="field">
+                <label class="field" id="fieldGuestName">
                   Guest name
                   <input id="guestName" type="text" value="${escapeHtml(draft.guestName)}" />
                 </label>
-                <label class="field">
+                <label class="field" id="fieldGuestEmail">
                   Email
                   <input id="guestEmail" type="email" value="${escapeHtml(draft.guestEmail)}" />
                 </label>
               </div>
               <div class="input-row" style="margin-top: 14px;">
-                <label class="field">
+                <label class="field" id="fieldGuestPhone">
                   Phone
                   <input id="guestPhone" type="tel" value="${escapeHtml(draft.guestPhone)}" />
                 </label>
-                <label class="field">
+                <label class="field" id="fieldGuestCountry">
                   Country
                   <input id="guestCountry" type="text" value="${escapeHtml(draft.guestCountry)}" />
                 </label>
               </div>
-              <label class="field" style="margin-top: 14px;">
+              <label class="field" id="fieldGuestGender" style="margin-top: 14px;">
                 Gender
                 <select id="guestGender">
                   <option value="" ${draft.guestGender ? "" : "selected"}>Select gender</option>
@@ -1289,13 +1286,10 @@ function renderBookPage() {
                   <option value="Male" ${draft.guestGender === "Male" ? "selected" : ""}>Male</option>
                 </select>
               </label>
-              <label class="field" style="margin-top: 14px;">
+              <label class="field" id="fieldGuestNotes" style="margin-top: 14px;">
                 Notes
                 <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
               </label>
-              <div class="booking-actions">
-                <button class="button button-primary" type="button" id="bookButton">Confirm booking</button>
-              </div>
               <div class="notice">
                 Demo mode: this confirms the booking immediately and would hand off to Stripe in production.
               </div>
@@ -1308,6 +1302,7 @@ function renderBookPage() {
   wizard.innerHTML = views[draft.currentStep];
   const summaryHasData = selectedPackageRows().length > 0 || !!draft.startDate || !!draft.roomId || draft.addonIds.length > 0;
   const isMobileSummary = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
+  const showMobileTripSummary = isMobileSummary && draft.currentStep === 4;
   const summaryActions = `
     ${
       isMobileSummary
@@ -1325,9 +1320,10 @@ function renderBookPage() {
         `
         : ""
     }
-    <button class="button button-primary summary-button" type="button" ${draft.currentStep === 0 ? `id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Select dates →` : draft.currentStep === 1 ? `id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Select room →` : draft.currentStep === 2 ? `id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Add-ons →` : draft.currentStep === 3 ? `id="continueToBook">Book now →` : `disabled>Next →`}</button>
+    <button class="button button-primary summary-button" type="button" ${draft.currentStep === 0 ? `id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Select dates >` : draft.currentStep === 1 ? `id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Select room >` : draft.currentStep === 2 ? `id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Add-ons >` : draft.currentStep === 3 ? `id="continueToBook">Booking details >` : draft.currentStep === 4 ? `id="bookButton">Pay deposit 50% >` : `disabled>Next >`}</button>
   `;
 
+  summary.hidden = isMobileSummary && !showMobileTripSummary;
   summary.innerHTML = `
     <div class="summary-hero">
       <h3 class="summary-title">Trip summary</h3>
@@ -1337,8 +1333,8 @@ function renderBookPage() {
             <strong>Package</strong>
             <span>
               ${selectedPackageRows().length
-                ? `${selectedPackagePeopleCount()} people · ${selectedPackageRows()
-                    .map((item) => `${item.name} × ${item.quantity}`)
+                ? `${selectedPackagePeopleCount()} people � ${selectedPackageRows()
+                    .map((item) => `${item.name} � ${item.quantity}`)
                     .join(", ")}`
                 : ""}
             </span>
@@ -1381,18 +1377,16 @@ function renderBookPage() {
         </div>
         <strong>${summaryHasData ? money(totalPrice()) : ""}</strong>
       </div>
-      <div class="summary-actions">
-        ${summaryActions}
-      </div>
       <div class="summary-footer">
         ${state.camp.bookingRules?.restrictedArrivalDays
           ? `Arrivals only on ${state.camp.bookingRules.allowedArrivalDays.join(", ")}.`
           : "Any arrival day is allowed."}
       </div>
+      ${isMobileSummary ? "" : `<div class="summary-actions">${summaryActions}</div>`}
     </div>
   `;
-
-  initAnalytics();
+  summaryActionsShell.hidden = !isMobileSummary;
+  summaryActionsShell.innerHTML = isMobileSummary ? `<div class="summary-actions">${summaryActions}</div>` : "";
   if (!analyticsState.loadTracked && (analyticsConfig().ga4Id || analyticsConfig().pixelId)) {
     trackAnalyticsEvent("booking_engine_load", {
       camp: bookingSlug(),
@@ -2255,6 +2249,20 @@ function scrollBookPageToTop() {
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
+function setBookingFieldErrors(fieldIds = []) {
+  const allFieldIds = [
+    "fieldGuestName",
+    "fieldGuestEmail",
+    "fieldGuestPhone",
+    "fieldGuestCountry",
+    "fieldGuestGender",
+    "fieldGuestNotes",
+  ];
+  for (const id of allFieldIds) {
+    document.getElementById(id)?.classList.toggle("is-invalid", fieldIds.includes(id));
+  }
+}
+
 async function confirmBookingReservation() {
   const guestName = document.getElementById("guestName")?.value.trim();
   const guestPhone = document.getElementById("guestPhone")?.value.trim();
@@ -2263,8 +2271,15 @@ async function confirmBookingReservation() {
   const guestGender = document.getElementById("guestGender")?.value.trim();
   const notes = document.getElementById("guestNotes")?.value.trim();
 
-  if (!guestName || !guestEmail || !guestPhone || !guestCountry || !guestGender) {
-    alert("Please add guest name, phone, email, country, and gender.");
+  const missingFields = [];
+  if (!guestName) missingFields.push("fieldGuestName");
+  if (!guestEmail) missingFields.push("fieldGuestEmail");
+  if (!guestPhone) missingFields.push("fieldGuestPhone");
+  if (!guestCountry) missingFields.push("fieldGuestCountry");
+  if (!guestGender) missingFields.push("fieldGuestGender");
+  setBookingFieldErrors(missingFields);
+
+  if (missingFields.length) {
     return;
   }
 
@@ -2440,13 +2455,6 @@ function initBookInteractions() {
       return;
     }
 
-    if (target.dataset.packageRowInput) {
-      setPackageQuantity(target.dataset.packageRowInput, target.value);
-      state.bookingConfirmation = null;
-      updateBookPage();
-      return;
-    }
-
     if (target.id === "nextFromPackage") {
       if (!selectedPackageRows().length) {
         alert("Please choose at least one package row before continuing.");
@@ -2535,22 +2543,32 @@ function initBookInteractions() {
     if (target.id === "guestName") {
       draft.guestName = target.value;
       upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
     }
     if (target.id === "guestPhone") {
       draft.guestPhone = target.value;
       upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
     }
     if (target.id === "guestEmail") {
       draft.guestEmail = target.value;
       upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
     }
     if (target.id === "guestCountry") {
       draft.guestCountry = target.value;
       upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
     }
     if (target.id === "guestNotes") {
       draft.notes = target.value;
       upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
+    }
+    if (target.id === "guestGender") {
+      draft.guestGender = target.value;
+      upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
     }
     syncDraftToState();
     saveState();
@@ -2968,6 +2986,8 @@ setInterval(() => {
     void refreshAdminWorkspace({ silent: true });
   }
 }, 30000);
+
+
 
 
 
