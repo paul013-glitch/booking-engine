@@ -506,6 +506,20 @@ select {
   box-shadow: none;
 }
 
+.learn-more-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.learn-more-link:hover {
+  text-decoration: underline;
+}
+
 .option-media {
   height: 130px;
   background: #e9dfcf;
@@ -695,6 +709,15 @@ select {
   justify-content: center;
 }
 
+.summary-package-lines {
+  display: grid;
+  gap: 4px;
+}
+
+.summary-package-line {
+  display: block;
+}
+
 .summary-footer {
   margin-top: 16px;
   color: var(--muted);
@@ -812,6 +835,12 @@ select {
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.threshold-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1397,8 +1426,10 @@ select {
 
   .input-row,
   .two-col,
+  .threshold-grid,
   .calendar-grid-wrap,
   .theme-grid,
+  .addon-grid,
   .availability-toolbar,
   .availability-row-header,
   .availability-row,
@@ -1417,6 +1448,11 @@ select {
     justify-items: end;
     align-self: center;
     padding-right: 10px;
+  }
+
+  .addon-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .package-row .option-body h3 {

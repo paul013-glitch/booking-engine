@@ -53,6 +53,9 @@ const seedState = {
     bookingRules: {
       restrictedArrivalDays: true,
       allowedArrivalDays: ["Saturday"],
+      availabilityLowThreshold: 5,
+      availabilityMidThreshold: 15,
+      availabilityCountVisibilityThreshold: null,
     },
   },
   currentStep: 0,
@@ -94,6 +97,7 @@ const seedState = {
       pricePerNight: 95,
       totalUnits: 4,
       capacity: 2,
+      learnMoreUrl: "",
       imageUrl:
         "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
     },
@@ -104,6 +108,7 @@ const seedState = {
       pricePerNight: 75,
       totalUnits: 4,
       capacity: 4,
+      learnMoreUrl: "",
       imageUrl:
         "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80",
     },
@@ -268,6 +273,24 @@ function normalizeWorkspaceData(data = {}) {
       bookingRules: {
         ...seedState.camp.bookingRules,
         ...((data.camp && data.camp.bookingRules) || {}),
+        availabilityLowThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityLowThreshold))
+          ? Math.max(1, Number(data.camp.bookingRules.availabilityLowThreshold))
+          : seedState.camp.bookingRules.availabilityLowThreshold,
+        availabilityMidThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityMidThreshold))
+          ? Math.max(
+              Math.max(
+                1,
+                Number(data?.camp?.bookingRules?.availabilityLowThreshold ?? seedState.camp.bookingRules.availabilityLowThreshold),
+              ),
+              Number(data.camp.bookingRules.availabilityMidThreshold),
+            )
+          : seedState.camp.bookingRules.availabilityMidThreshold,
+        availabilityCountVisibilityThreshold:
+          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === "" ||
+          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === null ||
+          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
+            ? null
+            : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
       },
       availability: {
         ...(seedState.camp.availability || {}),
@@ -347,11 +370,10 @@ function saveState() {
 }
 
 function money(value) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "EUR",
+  const amount = Math.max(0, Number(value) || 0);
+  return `\u20AC ${new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(amount)}`;
 }
 
 function parseDateValue(value) {
@@ -595,6 +617,29 @@ function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules)
   return bookingRules.allowedArrivalDays.includes(weekdayName(dateInput));
 }
 
+function availabilityThresholds(bookingRules = state?.camp?.bookingRules || seedState.camp.bookingRules) {
+  const lowThreshold = Math.max(
+    1,
+    Number.isFinite(Number(bookingRules?.availabilityLowThreshold))
+      ? Number(bookingRules.availabilityLowThreshold)
+      : seedState.camp.bookingRules.availabilityLowThreshold,
+  );
+  const midThreshold = Math.max(
+    lowThreshold,
+    Number.isFinite(Number(bookingRules?.availabilityMidThreshold))
+      ? Number(bookingRules.availabilityMidThreshold)
+      : seedState.camp.bookingRules.availabilityMidThreshold,
+  );
+  const showCountThreshold =
+    bookingRules?.availabilityCountVisibilityThreshold === "" ||
+    bookingRules?.availabilityCountVisibilityThreshold === null ||
+    bookingRules?.availabilityCountVisibilityThreshold === undefined
+      ? null
+      : Math.max(0, Number(bookingRules.availabilityCountVisibilityThreshold));
+
+  return { lowThreshold, midThreshold, showCountThreshold };
+}
+
 function firstAllowedStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
   const cursor = parseDateValue(afterDate) || new Date();
   for (let i = 0; i < 120; i += 1) {
@@ -758,9 +803,9 @@ function roomNightlySurcharge(roomId) {
 function formatSurcharge(value) {
   const amount = Math.max(0, Number(value) || 0);
   if (!amount) return "";
-  return `+${new Intl.NumberFormat("nl-NL", {
+  return `+${new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0,
-  }).format(amount)} €`;
+  }).format(amount)} \u20AC`;
 }
 
 function previewStayNights() {
@@ -788,9 +833,10 @@ function campSpotsLeftForDate(startDate, nights = previewStayNights()) {
 }
 
 function availabilityBandClass(spots) {
+  const { lowThreshold, midThreshold } = availabilityThresholds();
   if (spots <= 0) return "soldout-day";
-  if (spots < 5) return "availability-low";
-  if (spots <= 15) return "availability-mid";
+  if (spots <= lowThreshold) return "availability-low";
+  if (spots <= midThreshold) return "availability-mid";
   return "availability-high";
 }
 
@@ -969,6 +1015,10 @@ function totalPrice() {
 function availabilityText(room) {
   const snapshot = roomAvailabilitySnapshot(room.id);
   if (snapshot.forSale <= 0) return { label: "Sold out", cls: "empty" };
+  const { showCountThreshold } = availabilityThresholds();
+  if (showCountThreshold !== null && snapshot.forSale > showCountThreshold) {
+    return { label: "", cls: "" };
+  }
   if (snapshot.forSale === 1) return { label: "1 for sale", cls: "low" };
   return { label: `${snapshot.forSale} for sale`, cls: "" };
 }
@@ -993,14 +1043,17 @@ function renderDayCell(cellDate, monthDate) {
   const iso = localDateKey(cellDate);
   const inMonth = cellDate.getMonth() === monthDate.getMonth();
   const selected = iso === draft.startDate;
-  const rangeStart = new Date(draft.startDate);
-  const rangeEnd = new Date(endDateForDraft());
-  const inRange = !selected && new Date(iso) > rangeStart && new Date(iso) < rangeEnd;
+  const rangeStart = draft.startDate;
+  const rangeEnd = endDateForDraft();
+  const inRange = !selected && rangeStart && rangeEnd && iso > rangeStart && iso < rangeEnd;
   const isStart = selected;
   const selectable = inMonth && isSelectableDate(iso);
   const spotsLeft = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) ? campSpotsLeftForDate(iso) : 0;
   const soldOut = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) && spotsLeft <= 0;
   const availabilityClass = soldOut ? "soldout-day" : availabilityBandClass(spotsLeft);
+  const { showCountThreshold } = availabilityThresholds();
+  const shouldShowCount = soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold;
+  const dayStatus = soldOut ? "FULL" : shouldShowCount && spotsLeft > 0 ? `${spotsLeft} left` : "";
 
   const classes = [
     "day-cell",
@@ -1021,7 +1074,7 @@ function renderDayCell(cellDate, monthDate) {
       aria-label="${formatDate(iso)}"
     >
       <span class="day-number">${cellDate.getDate()}</span>
-      ${soldOut ? '<span class="day-status">FULL</span>' : spotsLeft > 0 && isArrivalAllowed(iso, state.camp.bookingRules) ? `<span class="day-status">${spotsLeft} left</span>` : ""}
+      ${dayStatus ? `<span class="day-status">${dayStatus}</span>` : ""}
     </button>
   `;
 }
@@ -1062,8 +1115,8 @@ function renderDateSelector() {
       </div>
       <div class="calendar-head">
         <div class="calendar-nav">
-          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month">←</button>
-          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month">→</button>
+          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month">Prev</button>
+          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month">Next</button>
         </div>
       </div>
 
@@ -1137,7 +1190,7 @@ function renderBookPage() {
           <div class="package-row-actions">
             <span class="tiny">People</span>
             <div class="people-control" role="group" aria-label="${item.name} people count">
-              <button type="button" class="people-button" data-package-row-change="${item.id}:-1">−</button>
+              <button type="button" class="people-button" data-package-row-change="${item.id}:-1">-</button>
               <div class="people-count" aria-live="polite" aria-label="${item.name} quantity">${quantity}</div>
               <button type="button" class="people-button" data-package-row-change="${item.id}:1">+</button>
             </div>
@@ -1158,6 +1211,11 @@ function renderBookPage() {
           <div class="option-body">
             <h3>${room.name}</h3>
             <p>${room.description}</p>
+            ${
+              room.learnMoreUrl
+                ? `<a class="learn-more-link" href="${escapeHtml(room.learnMoreUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Learn more</a>`
+                : ""
+            }
             <div class="option-meta">
               <span>${stayPrice ? formatSurcharge(stayPrice) : ""}</span>
             </div>
@@ -1219,7 +1277,7 @@ function renderBookPage() {
             <p class="helper">Add extras only if you need them.</p>
           </div>
         </div>
-        <div class="card-grid">${addonCards}</div>
+        <div class="card-grid addon-grid">${addonCards}</div>
       </section>
     `,
     `
@@ -1331,12 +1389,14 @@ function renderBookPage() {
         <div class="summary-item">
           <div>
             <strong>Package</strong>
-            <span>
-              ${selectedPackageRows().length
-                ? `${selectedPackagePeopleCount()} people � ${selectedPackageRows()
-                    .map((item) => `${item.name} � ${item.quantity}`)
-                    .join(", ")}`
-                : ""}
+            <span class="summary-package-lines">
+              ${selectedPackageRows().length ? `<span class="summary-package-line">${selectedPackagePeopleCount()} people</span>` : ""}
+              ${selectedPackageRows()
+                .map(
+                  (item) =>
+                    `<span class="summary-package-line">${escapeHtml(item.name)} x ${escapeHtml(item.quantity)}</span>`,
+                )
+                .join("")}
             </span>
           </div>
           <strong>${selectedPackageRows().length ? money(packagePrice()) : ""}</strong>
@@ -1459,6 +1519,12 @@ function renderAdminPage() {
     campForm.elements.titleFont.value = state.camp.theme?.titleFont || seedState.camp.theme.titleFont;
     campForm.elements.bodyFont.value = state.camp.theme?.bodyFont || seedState.camp.theme.bodyFont;
     campForm.elements.restrictedArrivalDays.checked = !!state.camp.bookingRules?.restrictedArrivalDays;
+    campForm.elements.availabilityLowThreshold.value =
+      state.camp.bookingRules?.availabilityLowThreshold ?? seedState.camp.bookingRules.availabilityLowThreshold;
+    campForm.elements.availabilityMidThreshold.value =
+      state.camp.bookingRules?.availabilityMidThreshold ?? seedState.camp.bookingRules.availabilityMidThreshold;
+    campForm.elements.availabilityCountVisibilityThreshold.value =
+      state.camp.bookingRules?.availabilityCountVisibilityThreshold ?? "";
     campForm
       .querySelectorAll('input[name="arrivalDays"]')
       .forEach((checkbox) => {
@@ -1530,9 +1596,9 @@ function renderAdminPage() {
         const room = getRoom(booking.roomId);
         const packageSummary = booking.packageQuantities
           ? Object.entries(booking.packageQuantities)
-              .map(([packageId, quantity]) => `${getPackage(packageId).name} × ${quantity}`)
+              .map(([packageId, quantity]) => `${escapeHtml(getPackage(packageId).name)} x ${escapeHtml(quantity)}`)
               .join(", ")
-          : `${pkg.name} × ${booking.packagePeople || 1}`;
+          : `${escapeHtml(pkg.name)} x ${escapeHtml(booking.packagePeople || 1)}`;
         return `
           <div class="stack-item">
             <div class="stack-item-top">
@@ -1597,9 +1663,9 @@ function renderAdminPage() {
         const room = getRoom(booking.roomId);
         const packageSummary = booking.packageQuantities
           ? Object.entries(booking.packageQuantities)
-              .map(([packageId, quantity]) => `${getPackage(packageId).name} × ${quantity}`)
+              .map(([packageId, quantity]) => `${escapeHtml(getPackage(packageId).name)} x ${escapeHtml(quantity)}`)
               .join(", ")
-          : `${pkg.name} × ${booking.packagePeople || 1}`;
+          : `${escapeHtml(pkg.name)} x ${escapeHtml(booking.packagePeople || 1)}`;
         return `
           <tr>
             <td>
@@ -1674,9 +1740,10 @@ function renderAdminPage() {
               <strong>${room.name}</strong>
             </div>
             <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits} rooms</div>
+            ${room.learnMoreUrl ? `<div class="tiny"><a class="learn-more-link" href="${escapeHtml(room.learnMoreUrl)}" target="_blank" rel="noopener noreferrer">Learn more</a></div>` : ""}
             <div class="stack-item-actions">
-              <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="-1">↑</button>
-              <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="1">↓</button>
+              <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="-1">Up</button>
+              <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="1">Down</button>
               <button type="button" class="button button-secondary" data-edit-room="${room.id}">Edit</button>
             </div>
           </div>
@@ -1697,8 +1764,8 @@ function renderAdminPage() {
             </div>
             <div class="tiny">${money(item.basePrice)}</div>
             <div class="stack-item-actions">
-              <button type="button" class="button button-secondary" data-move-package="${item.id}" data-move-direction="-1">↑</button>
-              <button type="button" class="button button-secondary" data-move-package="${item.id}" data-move-direction="1">↓</button>
+              <button type="button" class="button button-secondary" data-move-package="${item.id}" data-move-direction="-1">Up</button>
+              <button type="button" class="button button-secondary" data-move-package="${item.id}" data-move-direction="1">Down</button>
               <button type="button" class="button button-secondary" data-edit-package="${item.id}">Edit</button>
             </div>
           </div>
@@ -1722,8 +1789,8 @@ function renderAdminPage() {
             </div>
             <div class="tiny">${item.unitLabel}</div>
             <div class="stack-item-actions">
-              <button type="button" class="button button-secondary" data-move-addon="${item.id}" data-move-direction="-1">↑</button>
-              <button type="button" class="button button-secondary" data-move-addon="${item.id}" data-move-direction="1">↓</button>
+              <button type="button" class="button button-secondary" data-move-addon="${item.id}" data-move-direction="-1">Up</button>
+              <button type="button" class="button button-secondary" data-move-addon="${item.id}" data-move-direction="1">Down</button>
               <button type="button" class="button button-secondary" data-edit-addon="${item.id}">Edit</button>
             </div>
           </div>
@@ -1753,6 +1820,7 @@ function renderAdminPage() {
       roomForm.elements.capacity.value = editing.capacity || 1;
       roomForm.elements.pricePerNight.value = editing.pricePerNight || 0;
       roomForm.elements.imageUrl.value = editing.imageUrl?.startsWith("data:") ? "" : editing.imageUrl || "";
+      roomForm.elements.learnMoreUrl.value = editing.learnMoreUrl || "";
     }
   }
 
@@ -2756,9 +2824,23 @@ function initAdminInteractions() {
     const allowedArrivalDays = Array.from(campForm.querySelectorAll('input[name="arrivalDays"]:checked')).map(
       (checkbox) => checkbox.value,
     );
+    const lowThreshold = Math.max(
+      1,
+      Number(campForm.elements.availabilityLowThreshold.value || seedState.camp.bookingRules.availabilityLowThreshold),
+    );
+    const midThreshold = Math.max(
+      lowThreshold,
+      Number(campForm.elements.availabilityMidThreshold.value || seedState.camp.bookingRules.availabilityMidThreshold),
+    );
     state.camp.bookingRules = {
       restrictedArrivalDays,
       allowedArrivalDays: allowedArrivalDays.length ? allowedArrivalDays : seedState.camp.bookingRules.allowedArrivalDays,
+      availabilityLowThreshold: lowThreshold,
+      availabilityMidThreshold: midThreshold,
+      availabilityCountVisibilityThreshold:
+        campForm.elements.availabilityCountVisibilityThreshold.value === ""
+          ? null
+          : Math.max(0, Number(campForm.elements.availabilityCountVisibilityThreshold.value)),
     };
 
     const logoFile = campForm.elements.logoFile.files?.[0];
@@ -2840,6 +2922,7 @@ function initAdminInteractions() {
       capacity: Number(roomForm.elements.capacity.value),
       pricePerNight: Number(roomForm.elements.pricePerNight.value),
       imageUrl,
+      learnMoreUrl: roomForm.elements.learnMoreUrl.value.trim(),
       order: existing?.order ?? nextOrderValue(state.rooms),
     };
     state.rooms = orderedItems([...state.rooms.filter((item) => item.id !== id), payload]);
@@ -2931,15 +3014,16 @@ function initAdminInteractions() {
       adminUiState.activeTab = "configure";
       adminUiState.configTab = "rooms";
       roomForm.elements.id.value = item.id;
-      roomForm.elements.name.value = item.name || "";
-      roomForm.elements.description.value = item.description || "";
-      roomForm.elements.totalUnits.value = item.totalUnits || 1;
-      roomForm.elements.capacity.value = item.capacity || 1;
-      roomForm.elements.pricePerNight.value = item.pricePerNight || 0;
-      roomForm.elements.imageUrl.value = item.imageUrl?.startsWith("data:") ? "" : item.imageUrl || "";
-      renderAdminPage();
-      return;
-    }
+    roomForm.elements.name.value = item.name || "";
+    roomForm.elements.description.value = item.description || "";
+    roomForm.elements.totalUnits.value = item.totalUnits || 1;
+    roomForm.elements.capacity.value = item.capacity || 1;
+    roomForm.elements.pricePerNight.value = item.pricePerNight || 0;
+    roomForm.elements.imageUrl.value = item.imageUrl?.startsWith("data:") ? "" : item.imageUrl || "";
+    roomForm.elements.learnMoreUrl.value = item.learnMoreUrl || "";
+    renderAdminPage();
+    return;
+  }
 
     if (editAddonButton && addonForm) {
       const item = state.addons.find((entry) => entry.id === editAddonButton.dataset.editAddon);

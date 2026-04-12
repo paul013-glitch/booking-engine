@@ -22,6 +22,9 @@ const seedCamp = {
   bookingRules: {
     restrictedArrivalDays: true,
     allowedArrivalDays: ["Saturday"],
+    availabilityLowThreshold: 5,
+    availabilityMidThreshold: 15,
+    availabilityCountVisibilityThreshold: null,
   },
   showBookingIntents: true,
   theme: {
@@ -63,6 +66,7 @@ const seedRooms = [
     pricePerNight: 95,
     totalUnits: 4,
     capacity: 2,
+    learnMoreUrl: "",
     imageUrl:
       "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
   },
@@ -73,6 +77,7 @@ const seedRooms = [
     pricePerNight: 75,
     totalUnits: 4,
     capacity: 4,
+    learnMoreUrl: "",
     imageUrl:
       "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80",
   },
@@ -214,6 +219,24 @@ function normalizeWorkspace(data = {}) {
       bookingRules: {
         ...base.camp.bookingRules,
         ...((data.camp && data.camp.bookingRules) || {}),
+        availabilityLowThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityLowThreshold))
+          ? Math.max(1, Number(data.camp.bookingRules.availabilityLowThreshold))
+          : base.camp.bookingRules.availabilityLowThreshold,
+        availabilityMidThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityMidThreshold))
+          ? Math.max(
+              Math.max(
+                1,
+                Number(data?.camp?.bookingRules?.availabilityLowThreshold ?? base.camp.bookingRules.availabilityLowThreshold),
+              ),
+              Number(data.camp.bookingRules.availabilityMidThreshold),
+            )
+          : base.camp.bookingRules.availabilityMidThreshold,
+        availabilityCountVisibilityThreshold:
+          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === "" ||
+          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === null ||
+          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
+            ? null
+            : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
       },
       availability: {
         ...(base.camp.availability || {}),

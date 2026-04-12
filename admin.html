@@ -220,6 +220,26 @@
                 <button class="button button-secondary" type="button" id="copyBookingUrl">Copy link</button>
               </div>
             </label>
+            <div class="threshold-grid">
+              <label>
+                Red threshold
+                <input name="availabilityLowThreshold" type="number" min="1" step="1" placeholder="5" />
+              </label>
+              <label>
+                Yellow threshold
+                <input name="availabilityMidThreshold" type="number" min="1" step="1" placeholder="15" />
+              </label>
+              <label>
+                Show spot count at or below
+                <input
+                  name="availabilityCountVisibilityThreshold"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Always show"
+                />
+              </label>
+            </div>
             <label class="checkbox-row">
               <input name="restrictedArrivalDays" type="checkbox" />
               Only allow arrivals on selected days
@@ -337,6 +357,10 @@
                 <label>
                   Image URL
                   <input name="imageUrl" type="url" placeholder="https://..." />
+                </label>
+                <label>
+                  Learn more URL
+                  <input name="learnMoreUrl" type="url" placeholder="https://..." />
                 </label>
                 <label>
                   Or upload image
