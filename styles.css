@@ -895,6 +895,44 @@ textarea:focus {
   margin-bottom: 12px;
 }
 
+.table-shell {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-table tbody tr:hover {
+  background: var(--panel-soft);
+}
+
+.table-sort-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.table-sort-button::after {
+  content: " ↕";
+  color: var(--muted);
+  font-size: 0.8em;
+}
+
 .status.confirmed {
   color: #4d6a3d;
 }
@@ -944,8 +982,12 @@ textarea:focus {
   background: var(--panel-soft);
   color: var(--text);
   border-radius: 999px;
-  padding: 8px 12px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
   font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .date-summary {
@@ -1019,6 +1061,25 @@ textarea:focus {
   font-size: 0.6rem;
   line-height: 1;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.day-cell.availability-high {
+  background: #e9f3e1;
+  border-color: #bfd7aa;
+  color: #2b4b1e;
+}
+
+.day-cell.availability-mid {
+  background: #fff5c8;
+  border-color: #ead58f;
+  color: #6c5600;
+}
+
+.day-cell.availability-low {
+  background: #f9ddd6;
+  border-color: #d59f95;
+  color: #7f201f;
 }
 
 .day-cell:disabled {
@@ -1031,10 +1092,11 @@ textarea:focus {
 }
 
 .day-cell.soldout-day {
-  opacity: 1;
-  color: #a23434;
-  border-color: #d7a9a9;
-  background: #fff1f1;
+  opacity: 0.72;
+  color: #8f8a82;
+  border-color: #cfc5b7;
+  background: #ece7df;
+  filter: grayscale(1);
 }
 
 .day-cell.muted-day {
@@ -1046,9 +1108,9 @@ textarea:focus {
   background: var(--panel-soft);
 }
 
-.day-cell.range-start,
-.day-cell.range-end {
-  background: var(--accent-soft);
+.day-cell.range-start {
+  border-width: 2px;
+  box-shadow: inset 0 0 0 2px var(--text);
 }
 
 .calendar-note {
@@ -1082,24 +1144,121 @@ textarea:focus {
     padding: 16px;
   }
 
+  .page-book {
+    padding-bottom: 104px;
+  }
+
   .topbar,
   .book-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
+  .book-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .camp-logo {
+    height: 56px;
+    border-radius: 14px;
+  }
+
+  .book-header h1 {
+    font-size: 1.4rem;
+    text-align: right;
+  }
+
   .panel,
   .hero-card,
   .signup-card,
   .admin-hero {
-    padding: 18px;
+    padding: 14px;
+  }
+
+  .booking-shell {
+    gap: 10px;
+  }
+
+  .summary-panel {
+    position: static;
+    padding: 12px;
+  }
+
+  .summary-hero {
+    padding: 12px;
+  }
+
+  .summary-title {
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+  }
+
+  .summary-list {
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .summary-item {
+    padding-bottom: 8px;
+    gap: 8px;
+  }
+
+  .summary-total {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .summary-total strong {
+    font-size: 1.1rem;
+  }
+
+  .summary-actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin-top: 0;
+    z-index: 20;
+    background: var(--bg);
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -10px 24px rgba(63, 47, 28, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .summary-actions-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 10px;
+    padding: 0;
+  }
+
+  .summary-actions-meta strong {
+    display: block;
+    font-size: 0.84rem;
+    line-height: 1.2;
+  }
+
+  .summary-actions-total {
+    text-align: right;
+  }
+
+  .summary-actions .summary-button {
+    min-height: 44px;
+    font-size: 0.95rem;
   }
 
   .stepper,
   .input-row,
   .two-col,
   .calendar-grid-wrap,
-  .date-summary,
   .theme-grid,
   .availability-toolbar,
   .availability-row-header,
@@ -1115,5 +1274,89 @@ textarea:focus {
 
   .package-row-actions {
     justify-items: start;
+  }
+
+  .stepper {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    scrollbar-width: none;
+  }
+
+  .stepper::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stepper button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    padding: 5px 8px;
+    min-height: 30px;
+  }
+
+  .wizard-step {
+    padding: 12px;
+  }
+
+  .step-title {
+    margin-bottom: 10px;
+  }
+
+  .step-title h3,
+  .option-body h3,
+  .calendar-card h3 {
+    font-size: 1rem;
+  }
+
+  .helper,
+  .tiny,
+  .calendar-note,
+  .date-summary,
+  .option-body p,
+  .package-row .option-meta span {
+    font-size: 0.8rem;
+  }
+
+  .calendar-card {
+    padding: 12px;
+  }
+
+  .calendar-head {
+    margin-bottom: 10px;
+  }
+
+  .calendar-grid-wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-grid-wrap .month-card:nth-child(2) {
+    display: none;
+  }
+
+  .month-card {
+    padding: 10px;
+  }
+
+  .weekday-row {
+    font-size: 0.68rem;
+  }
+
+  .day-cell {
+    min-height: 42px;
+    font-size: 0.78rem;
+  }
+
+  .day-status {
+    font-size: 0.52rem;
+  }
+
+  .room-card .tiny,
+  .option-card .tiny {
+    font-size: 0.74rem;
   }
 }
