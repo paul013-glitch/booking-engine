@@ -1125,6 +1125,10 @@ select {
   pointer-events: none;
 }
 
+.day-cell.in-range {
+  background: #fff8ee;
+}
+
 .day-cell.range-start {
   border-width: 3px;
   background: inherit;
