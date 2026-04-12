@@ -995,7 +995,7 @@ function renderDayCell(cellDate, monthDate) {
   const selected = iso === draft.startDate;
   const rangeStart = new Date(draft.startDate);
   const rangeEnd = new Date(endDateForDraft());
-  const inRange = selected || (new Date(iso) > rangeStart && new Date(iso) < rangeEnd);
+  const inRange = !selected && new Date(iso) > rangeStart && new Date(iso) < rangeEnd;
   const isStart = selected;
   const selectable = inMonth && isSelectableDate(iso);
   const spotsLeft = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) ? campSpotsLeftForDate(iso) : 0;
