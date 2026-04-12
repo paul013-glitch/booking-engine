@@ -64,7 +64,8 @@ const seedState = {
   guestName: "",
   guestPhone: "",
   guestEmail: "",
-  guestCountry: "Netherlands",
+  guestCountry: "",
+  guestGender: "",
   notes: "",
   bookingConfirmation: null,
   leads: [],
@@ -139,9 +140,10 @@ const seedState = {
   bookings: [
     {
       id: "demo-001",
-      guestName: "Ava",
+  guestName: "Ava",
       guestEmail: "ava@example.com",
       guestCountry: "Germany",
+      guestGender: "Woman",
       packageId: "package-7",
       roomId: "shared-double",
       addonIds: ["yoga-pack"],
@@ -158,6 +160,7 @@ const seedState = {
       guestName: "Jonas",
       guestEmail: "jonas@example.com",
       guestCountry: "Belgium",
+      guestGender: "Man",
       packageId: "package-7-surf",
       roomId: "shared-dorm-4bed",
       addonIds: ["airport-transfer"],
@@ -223,6 +226,7 @@ const draft = {
   guestName: state.guestName,
   guestEmail: state.guestEmail,
   guestCountry: state.guestCountry,
+  guestGender: state.guestGender,
   notes: state.notes,
   currentStep: state.currentStep ?? 0,
   bookingIntentId: state.bookingIntentId || "",
@@ -292,6 +296,7 @@ function normalizeWorkspaceData(data = {}) {
     guestPhone: data.guestPhone || "",
     guestEmail: data.guestEmail || "",
     guestCountry: data.guestCountry || "",
+    guestGender: data.guestGender || "",
     notes: data.notes || "",
     bookingConfirmation: data.bookingConfirmation || null,
     currentStep: Number.isFinite(data.currentStep) ? data.currentStep : 0,
@@ -1053,8 +1058,7 @@ function renderDateSelector() {
   return `
     <section class="calendar-card">
       <div class="date-intro">
-        <h3>2. Pick a date</h3>
-        <p class="helper">Select your check-in date.</p>
+        <h3>2. Select your check-in date</h3>
       </div>
       <div class="calendar-head">
         <div class="calendar-nav">
@@ -1277,6 +1281,16 @@ function renderBookPage() {
                   <input id="guestCountry" type="text" value="${escapeHtml(draft.guestCountry)}" />
                 </label>
               </div>
+              <label class="field" style="margin-top: 14px;">
+                Gender
+                <select id="guestGender">
+                  <option value="" ${draft.guestGender ? "" : "selected"}>Select gender</option>
+                  <option value="Woman" ${draft.guestGender === "Woman" ? "selected" : ""}>Woman</option>
+                  <option value="Man" ${draft.guestGender === "Man" ? "selected" : ""}>Man</option>
+                  <option value="Non-binary" ${draft.guestGender === "Non-binary" ? "selected" : ""}>Non-binary</option>
+                  <option value="Prefer not to say" ${draft.guestGender === "Prefer not to say" ? "selected" : ""}>Prefer not to say</option>
+                </select>
+              </label>
               <label class="field" style="margin-top: 14px;">
                 Notes
                 <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
@@ -1527,6 +1541,7 @@ function renderAdminPage() {
             </div>
             <small>${packageSummary} &middot; ${room.name}</small>
             <div class="tiny">${booking.guestEmail || "No email"} &middot; ${booking.guestPhone || "No phone"}</div>
+            <div class="tiny">${booking.guestGender || "No gender"} &middot; ${booking.guestCountry || "No country"}</div>
             <div class="tiny">${formatDate(booking.startDate)} to ${formatDate(booking.endDate)} &middot; ${money(booking.total)}</div>
             <div class="tiny">Booked: ${formatDateTime(booking.createdAt)}</div>
             <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDateTime(booking.holdExpiresAt) : "N/A"}</div>
@@ -1590,6 +1605,7 @@ function renderAdminPage() {
             <td>
               <strong>${booking.guestName || "Guest"}</strong>
               <div class="tiny muted">${booking.guestEmail || "No email"}</div>
+              <div class="tiny muted">${booking.guestGender || "No gender"} &middot; ${booking.guestCountry || "No country"}</div>
             </td>
             <td>
               <strong>${formatDate(booking.startDate)}</strong>
@@ -1627,6 +1643,7 @@ function renderAdminPage() {
             <td>
               <strong>${lead.guestName || "Guest lead"}</strong>
               <div class="tiny muted">${lead.guestEmail || "No email"}</div>
+              <div class="tiny muted">${lead.guestGender || "No gender"} &middot; ${lead.guestCountry || "No country"}</div>
             </td>
             <td><span class="status held">${escapeHtml(lead.leadKind || lead.stage || "lead")}</span></td>
             <td>
@@ -2111,6 +2128,7 @@ function syncDraftToState() {
   state.guestPhone = draft.guestPhone;
   state.guestEmail = draft.guestEmail;
   state.guestCountry = draft.guestCountry;
+  state.guestGender = draft.guestGender;
   state.notes = draft.notes;
   state.bookingIntentId = draft.bookingIntentId || "";
 }
@@ -2125,6 +2143,7 @@ function applyStateToDraft() {
   draft.guestPhone = state.guestPhone || "";
   draft.guestEmail = state.guestEmail || "";
   draft.guestCountry = state.guestCountry || "";
+  draft.guestGender = state.guestGender || "";
   draft.notes = state.notes || "";
   draft.currentStep = state.currentStep ?? 0;
   draft.bookingIntentId = state.bookingIntentId || "";
@@ -2142,6 +2161,7 @@ function upsertCheckoutLead(stage = "checkout") {
     guestPhone: draft.guestPhone || existing?.guestPhone || "",
     guestEmail: draft.guestEmail || existing?.guestEmail || "",
     guestCountry: draft.guestCountry || existing?.guestCountry || "",
+    guestGender: draft.guestGender || existing?.guestGender || "",
     packageId: draft.packageId,
     packageQuantities: { ...draft.packageQuantities },
     roomId: draft.roomId,
@@ -2234,10 +2254,11 @@ async function confirmBookingReservation() {
   const guestPhone = document.getElementById("guestPhone")?.value.trim();
   const guestEmail = document.getElementById("guestEmail")?.value.trim();
   const guestCountry = document.getElementById("guestCountry")?.value.trim();
+  const guestGender = document.getElementById("guestGender")?.value.trim();
   const notes = document.getElementById("guestNotes")?.value.trim();
 
-  if (!guestName || !guestEmail || !guestPhone || !guestCountry) {
-    alert("Please add guest name, phone, email, and country.");
+  if (!guestName || !guestEmail || !guestPhone || !guestCountry || !guestGender) {
+    alert("Please add guest name, phone, email, country, and gender.");
     return;
   }
 
@@ -2255,6 +2276,7 @@ async function confirmBookingReservation() {
     guestPhone,
     guestEmail,
     guestCountry,
+    guestGender,
     packageId: draft.packageId,
     packageQuantities: { ...draft.packageQuantities },
     roomId: draft.roomId,
@@ -2271,6 +2293,7 @@ async function confirmBookingReservation() {
   draft.guestPhone = guestPhone;
   draft.guestEmail = guestEmail;
   draft.guestCountry = guestCountry;
+  draft.guestGender = guestGender;
   draft.notes = notes;
 
   try {
@@ -2301,6 +2324,7 @@ async function confirmBookingReservation() {
       confirmedAt: now.toISOString(),
       guestEmail,
       guestName,
+      guestGender,
       reservationCode: result?.reservationCode || result?.booking?.reservationCode || "",
     };
     draft.bookingConfirmation = state.bookingConfirmation;
@@ -2334,6 +2358,7 @@ async function confirmBookingReservation() {
       confirmedAt: now.toISOString(),
       guestEmail,
       guestName,
+      guestGender,
       reservationCode: `R${now.getTime().toString(36).slice(-4).toUpperCase()}`.slice(0, 5),
     };
     draft.bookingConfirmation = state.bookingConfirmation;
