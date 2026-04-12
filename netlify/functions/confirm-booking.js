@@ -301,7 +301,12 @@ exports.handler = async (event) => {
       item.id === intentId ? { ...item, confirmationEmail: email } : item,
     );
 
-    const finalWorkspace = await saveWorkspace(saved);
+    let finalWorkspace = saved;
+    try {
+      finalWorkspace = await saveWorkspace(saved);
+    } catch (persistError) {
+      console.warn("confirm-booking final save failed", persistError);
+    }
 
     return response(200, {
       workspace: finalWorkspace,

@@ -8,6 +8,10 @@ const authState = {
   syncTimer: null,
 };
 
+const bookingUiState = {
+  submitting: false,
+};
+
 const adminUiState = {
   availabilityRoomId: "shared-double",
   activeTab: "bookings",
@@ -1361,6 +1365,42 @@ function renderBookPage() {
   const summaryHasData = selectedPackageRows().length > 0 || !!draft.startDate || !!draft.roomId || draft.addonIds.length > 0;
   const isMobileSummary = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
   const showMobileTripSummary = isMobileSummary && draft.currentStep === 4;
+  const summaryButtonLoading = draft.currentStep === 4 && bookingUiState.submitting;
+  const summaryButton = draft.currentStep === 0
+    ? {
+        id: "nextFromPackage",
+        disabled: !selectedPackageRows().length,
+        label: "Select dates >",
+      }
+    : draft.currentStep === 1
+      ? {
+          id: "nextFromDate",
+          disabled: !draft.startDate,
+          label: "Select room >",
+        }
+      : draft.currentStep === 2
+        ? {
+            id: "nextFromRoom",
+            disabled: !draft.roomId,
+            label: "Add-ons >",
+          }
+        : draft.currentStep === 3
+          ? {
+              id: "continueToBook",
+              disabled: false,
+              label: "Booking details >",
+            }
+          : draft.currentStep === 4
+            ? {
+                id: "bookButton",
+                disabled: summaryButtonLoading,
+                label: summaryButtonLoading ? "Submitting..." : "Pay deposit 50% >",
+              }
+            : {
+                id: null,
+                disabled: true,
+                label: "Next >",
+              };
   const summaryActions = `
     ${
       isMobileSummary
@@ -1374,11 +1414,11 @@ function renderBookPage() {
               <span class="tiny">Total</span>
               <strong>${summaryHasData ? money(totalPrice()) : ""}</strong>
             </div>
-          </div>
-        `
+            </div>
+          `
         : ""
     }
-    <button class="button button-primary summary-button" type="button" ${draft.currentStep === 0 ? `id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Select dates >` : draft.currentStep === 1 ? `id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Select room >` : draft.currentStep === 2 ? `id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Add-ons >` : draft.currentStep === 3 ? `id="continueToBook">Booking details >` : draft.currentStep === 4 ? `id="bookButton">Pay deposit 50% >` : `disabled>Next >`}</button>
+    <button class="button button-primary summary-button${summaryButtonLoading ? " is-loading" : ""}" type="button" ${summaryButton.id ? `id="${summaryButton.id}"` : ""} ${summaryButton.disabled ? "disabled aria-busy=\"true\"" : ""}>${summaryButtonLoading ? `<span class="button-spinner" aria-hidden="true"></span><span>${summaryButton.label}</span>` : summaryButton.label}</button>
   `;
 
   summary.hidden = isMobileSummary && !showMobileTripSummary;
@@ -2332,6 +2372,8 @@ function setBookingFieldErrors(fieldIds = []) {
 }
 
 async function confirmBookingReservation() {
+  if (bookingUiState.submitting) return;
+
   const guestName = document.getElementById("guestName")?.value.trim();
   const guestPhone = document.getElementById("guestPhone")?.value.trim();
   const guestEmail = document.getElementById("guestEmail")?.value.trim();
@@ -2357,6 +2399,9 @@ async function confirmBookingReservation() {
     alert("That room is no longer available for these dates.");
     return;
   }
+
+  bookingUiState.submitting = true;
+  updateBookPage();
 
   const now = new Date();
   const bookingPayload = {
@@ -2460,6 +2505,8 @@ async function confirmBookingReservation() {
     });
     alert(`Booking confirmed locally, but the server could not be reached: ${error instanceof Error ? error.message : "Unknown error"}`);
     window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
+  } finally {
+    bookingUiState.submitting = false;
   }
 }
 
