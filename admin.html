@@ -35,6 +35,7 @@
 
         <section class="panel admin-tabs" aria-label="Admin sections">
           <button type="button" class="admin-tab-button" data-admin-tab="bookings">Bookings</button>
+          <button type="button" class="admin-tab-button" data-admin-tab="leads">Leads</button>
           <button type="button" class="admin-tab-button" data-admin-tab="availability">Availability matrix</button>
           <button type="button" class="admin-tab-button" data-admin-tab="branding">Branding</button>
           <button type="button" class="admin-tab-button" data-admin-tab="analytics">Analytics</button>
@@ -49,23 +50,63 @@
             </div>
           </div>
 
-          <div class="inventory-grid">
-            <article class="list-card">
-              <div class="list-head">
-                <h3>Bookings</h3>
-                <span class="pill" id="bookingCount"></span>
-              </div>
-              <div id="bookingList" class="stack"></div>
-            </article>
+          <article class="list-card">
+            <div class="list-head">
+              <h3>Bookings</h3>
+              <span class="pill" id="bookingCount"></span>
+            </div>
+            <div class="table-shell">
+              <table class="admin-table" aria-label="Bookings table">
+                <thead>
+                  <tr>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="guestName">Guest</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="startDate">Stay</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="room">Room</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="package">Package</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="total">Total</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="status">Status</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="createdAt">Booked</button></th>
+                    <th>Reservation</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="bookingTableBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
 
-            <article class="list-card" id="bookingIntentCard" hidden>
-              <div class="list-head">
-                <h3>Checkout intents</h3>
-                <span class="pill" id="intentCount"></span>
-              </div>
-              <div id="bookingIntentList" class="stack"></div>
-            </article>
+        <section class="panel" data-admin-pane="leads">
+          <div class="panel-head">
+            <div>
+              <p class="section-label">Leads</p>
+              <h2>Unfinished checkouts</h2>
+            </div>
           </div>
+
+          <article class="list-card">
+            <div class="list-head">
+              <h3>Leads</h3>
+              <span class="pill" id="leadCount"></span>
+            </div>
+            <div class="table-shell">
+              <table class="admin-table" aria-label="Leads table">
+                <thead>
+                  <tr>
+                    <th><button type="button" class="table-sort-button" data-lead-sort="guestName">Guest</button></th>
+                    <th><button type="button" class="table-sort-button" data-lead-sort="stage">Stage</button></th>
+                    <th><button type="button" class="table-sort-button" data-lead-sort="startDate">Stay</button></th>
+                    <th><button type="button" class="table-sort-button" data-lead-sort="createdAt">Created</button></th>
+                    <th>Package</th>
+                    <th>Room</th>
+                    <th>Total</th>
+                    <th>Contact</th>
+                  </tr>
+                </thead>
+                <tbody id="leadTableBody"></tbody>
+              </table>
+            </div>
+          </article>
         </section>
 
         <section class="panel" data-admin-pane="availability">
@@ -182,10 +223,6 @@
             <label class="checkbox-row">
               <input name="restrictedArrivalDays" type="checkbox" />
               Only allow arrivals on selected days
-            </label>
-            <label class="checkbox-row">
-              <input name="showBookingIntents" type="checkbox" />
-              Show saved checkout intents in admin
             </label>
             <div class="day-grid">
               <label><input type="checkbox" name="arrivalDays" value="Sunday" /> Sun</label>
@@ -329,6 +366,14 @@
                 <label>
                   Description
                   <textarea name="description" rows="3" placeholder="One-way transfer from the airport"></textarea>
+                </label>
+                <label>
+                  Image URL
+                  <input name="imageUrl" type="url" placeholder="https://..." />
+                </label>
+                <label>
+                  Or upload image
+                  <input name="imageFile" type="file" accept="image/*" />
                 </label>
                 <div class="two-col">
                   <label>

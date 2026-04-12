@@ -12,6 +12,8 @@ const adminUiState = {
   availabilityRoomId: "shared-double",
   activeTab: "bookings",
   configTab: "packages",
+  bookingSort: { key: "createdAt", direction: "desc" },
+  leadSort: { key: "createdAt", direction: "desc" },
 };
 
 const logoSvg =
@@ -112,6 +114,8 @@ const seedState = {
       description: "One-way transfer from the airport to the camp.",
       price: 45,
       unitLabel: "per stay",
+      imageUrl:
+        "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?auto=format&fit=crop&w=1200&q=80",
     },
     {
       id: "board-rental",
@@ -119,6 +123,8 @@ const seedState = {
       description: "Reserve an extra surfboard for the stay.",
       price: 80,
       unitLabel: "per stay",
+      imageUrl:
+        "https://images.unsplash.com/photo-1502680390469-be75c86b636f?auto=format&fit=crop&w=1200&q=80",
     },
     {
       id: "yoga-pack",
@@ -126,6 +132,8 @@ const seedState = {
       description: "Morning yoga session added to the booking.",
       price: 120,
       unitLabel: "per stay",
+      imageUrl:
+        "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=80",
     },
   ],
   bookings: [
@@ -217,6 +225,7 @@ const draft = {
   guestCountry: state.guestCountry,
   notes: state.notes,
   currentStep: state.currentStep ?? 0,
+  bookingIntentId: state.bookingIntentId || "",
 };
 
 function nextDefaultDate() {
@@ -286,6 +295,7 @@ function normalizeWorkspaceData(data = {}) {
     notes: data.notes || "",
     bookingConfirmation: data.bookingConfirmation || null,
     currentStep: Number.isFinite(data.currentStep) ? data.currentStep : 0,
+    bookingIntentId: data.bookingIntentId || "",
   };
 }
 
@@ -591,9 +601,7 @@ function firstAllowedStartDate(afterDate = nextDefaultDate(), bookingRules = see
 }
 
 function hasAvailabilityForDate(startDate) {
-  const nights = getPackage(draft.packageId).nights;
-  const endDate = addDays(startDate, nights);
-  return state.rooms.some((room) => availableUnits(room.id, startDate, endDate) > 0);
+  return campSpotsLeftForDate(startDate) > 0;
 }
 
 function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
@@ -675,6 +683,31 @@ function nextOrderValue(items = []) {
   return orderedItems(items).reduce((max, item) => Math.max(max, item.order), -1) + 1;
 }
 
+function compareAdminValues(a, b) {
+  if (a === b) return 0;
+  if (a === null || a === undefined || a === "") return -1;
+  if (b === null || b === undefined || b === "") return 1;
+  const aDate = parseDateValue(a);
+  const bDate = parseDateValue(b);
+  if (aDate && bDate) return aDate.getTime() - bDate.getTime();
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function sortAdminRows(rows, sortState, accessors) {
+  const key = sortState?.key;
+  const direction = sortState?.direction === "asc" ? 1 : -1;
+  const accessor = accessors?.[key] || (() => "");
+  return [...rows].sort((a, b) => compareAdminValues(accessor(a), accessor(b)) * direction);
+}
+
+function toggleSortState(sortState, key) {
+  if (!sortState || sortState.key !== key) {
+    return { key, direction: "asc" };
+  }
+  return { key, direction: sortState.direction === "asc" ? "desc" : "asc" };
+}
+
 function moveOrderedItem(collectionName, itemId, direction) {
   const items = orderedItems(state[collectionName] || []);
   const index = items.findIndex((item) => item.id === itemId);
@@ -711,6 +744,49 @@ function roomAvailabilityRow(roomId, dateInput) {
 function roomNightRate(roomId, dateInput) {
   const room = getRoom(roomId);
   return Number(roomAvailabilityRow(roomId, dateInput)?.pricePerNight ?? room?.pricePerNight ?? 0);
+}
+
+function roomNightlySurcharge(roomId) {
+  return Number(getRoom(roomId)?.pricePerNight ?? 0);
+}
+
+function formatSurcharge(value) {
+  const amount = Math.max(0, Number(value) || 0);
+  if (!amount) return "";
+  return `+${new Intl.NumberFormat("nl-NL", {
+    maximumFractionDigits: 0,
+  }).format(amount)} €`;
+}
+
+function previewStayNights() {
+  return bookingNights() || Number(orderedItems(state.packages)[0]?.nights || seedState.packages[0]?.nights || 7);
+}
+
+function campSpotsLeftForDate(startDate, nights = previewStayNights()) {
+  if (!startDate) return 0;
+
+  const endDate = addDays(startDate, nights);
+  const weeks = weekKeysBetween(startDate, endDate);
+  if (!weeks.length) return 0;
+
+  const rooms = orderedItems(state.rooms);
+  const weekTotals = weeks.map((weekKey) =>
+    rooms.reduce((sum, room) => {
+      const row = state.camp.availability?.[room.id]?.weeks?.[weekKey];
+      const totalRooms = Number(row?.units ?? room.totalUnits ?? 0);
+      const bookedRooms = bookedUnitsForWeek(room.id, weekKey);
+      return sum + Math.max(0, totalRooms - bookedRooms) * Number(room.capacity || 0);
+    }, 0),
+  );
+
+  return Math.max(0, Math.min(...weekTotals));
+}
+
+function availabilityBandClass(spots) {
+  if (spots <= 0) return "soldout-day";
+  if (spots < 5) return "availability-low";
+  if (spots <= 15) return "availability-mid";
+  return "availability-high";
 }
 
 function roomAvailableSpots(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
@@ -868,15 +944,9 @@ function ensureRoomSelection() {
 
 function roomPrice() {
   if (!draft.startDate || !draft.roomId) return 0;
-  let total = 0;
-  const cursor = new Date(draft.startDate);
-  const end = new Date(endDateForDraft());
-  while (cursor < end) {
-    const iso = localDateKey(cursor);
-    total += roomNightRate(draft.roomId, iso);
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return total;
+  const nights = bookingNights();
+  if (!nights) return 0;
+  return roomNightlySurcharge(draft.roomId) * nights;
 }
 
 function packagePrice() {
@@ -922,18 +992,18 @@ function renderDayCell(cellDate, monthDate) {
   const rangeEnd = new Date(endDateForDraft());
   const inRange = selected || (new Date(iso) > rangeStart && new Date(iso) < rangeEnd);
   const isStart = selected;
-  const isEnd = iso === endDateForDraft();
   const selectable = inMonth && isSelectableDate(iso);
-  const soldOut = inMonth && isSoldOutStartDate(iso);
+  const spotsLeft = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) ? campSpotsLeftForDate(iso) : 0;
+  const soldOut = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) && spotsLeft <= 0;
+  const availabilityClass = soldOut ? "soldout-day" : availabilityBandClass(spotsLeft);
 
   const classes = [
     "day-cell",
     inMonth ? "" : "muted-day",
     selectable ? "" : "disabled-day",
-    soldOut ? "soldout-day" : "",
+    availabilityClass,
     inRange ? "in-range" : "",
     isStart ? "range-start" : "",
-    isEnd ? "range-end" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -946,7 +1016,7 @@ function renderDayCell(cellDate, monthDate) {
       aria-label="${formatDate(iso)}"
     >
       <span class="day-number">${cellDate.getDate()}</span>
-      ${soldOut ? '<span class="day-status">FULL</span>' : ""}
+      ${soldOut ? '<span class="day-status">FULL</span>' : spotsLeft > 0 && isArrivalAllowed(iso, state.camp.bookingRules) ? `<span class="day-status">${spotsLeft} left</span>` : ""}
     </button>
   `;
 }
@@ -978,6 +1048,7 @@ function renderMonthCard(monthDate) {
 function renderDateSelector() {
   const baseMonth = addMonths(startOfMonth(new Date()), draft.calendarMonthOffset);
   const nextMonth = addMonths(baseMonth, 1);
+  const singleMonth = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
 
   return `
     <section class="calendar-card">
@@ -985,31 +1056,16 @@ function renderDateSelector() {
         <h3>2. Pick a date</h3>
         <p class="helper">Select your check-in date.</p>
       </div>
-      <div class="date-summary">
-        <div>
-          <span class="tiny">Check-in</span>
-          <strong>${draft.startDate ? formatDate(draft.startDate) : ""}</strong>
-        </div>
-        <div>
-          <span class="tiny">Check-out</span>
-          <strong>${draft.startDate ? formatDate(endDateForDraft()) : ""}</strong>
-        </div>
-        <div>
-          <span class="tiny">Nights</span>
-          <strong>${bookingNights() ? bookingNights() : ""}</strong>
-        </div>
-      </div>
-
       <div class="calendar-head">
         <div class="calendar-nav">
-          <button type="button" class="nav-button" data-month-nav="-1">Prev</button>
-          <button type="button" class="nav-button" data-month-nav="1">Next</button>
+          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month">←</button>
+          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month">→</button>
         </div>
       </div>
 
       <div class="calendar-grid-wrap">
         ${renderMonthCard(baseMonth)}
-        ${renderMonthCard(nextMonth)}
+        ${singleMonth ? "" : renderMonthCard(nextMonth)}
       </div>
 
       <div class="calendar-note">
@@ -1094,6 +1150,7 @@ function renderBookPage() {
     .map((room) => {
       const selected = room.id === draft.roomId;
       const fitsParty = roomCanFitParty(room.id);
+      const stayPrice = draft.startDate && bookingNights() ? roomNightlySurcharge(room.id) * bookingNights() : 0;
       return `
         <article class="option-card ${selected ? "selected" : ""} ${fitsParty ? "" : "unavailable"}" data-select-room="${room.id}" ${fitsParty ? "" : 'aria-disabled="true"'}>
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
@@ -1101,7 +1158,7 @@ function renderBookPage() {
             <h3>${room.name}</h3>
             <p>${room.description}</p>
             <div class="option-meta">
-              <span>${money(room.pricePerNight)} / night</span>
+              <span>${stayPrice ? formatSurcharge(stayPrice) : ""}</span>
             </div>
             <div class="tiny">${room.capacity} guests per room</div>
           </div>
@@ -1115,6 +1172,7 @@ function renderBookPage() {
       const selected = draft.addonIds.includes(addon.id);
       return `
         <article class="option-card ${selected ? "selected" : ""}" data-toggle-addon="${addon.id}">
+          <div class="option-media">${addon.imageUrl ? `<img src="${addon.imageUrl}" alt="${addon.name}" />` : ""}</div>
           <div class="option-body">
             <h3>${addon.name}</h3>
             <p>${addon.description}</p>
@@ -1237,16 +1295,26 @@ function renderBookPage() {
 
   wizard.innerHTML = views[draft.currentStep];
   const summaryHasData = selectedPackageRows().length > 0 || !!draft.startDate || !!draft.roomId || draft.addonIds.length > 0;
-  const summaryActions =
-    draft.currentStep === 0
-      ? `<button class="button button-primary summary-button" type="button" id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Select dates →</button>`
-      : draft.currentStep === 1
-        ? `<button class="button button-primary summary-button" type="button" id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Select room →</button>`
-        : draft.currentStep === 2
-          ? `<button class="button button-primary summary-button" type="button" id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Add-ons →</button>`
-          : draft.currentStep === 3
-            ? `<button class="button button-primary summary-button" type="button" id="continueToBook">Book now →</button>`
-            : "";
+  const isMobileSummary = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
+  const summaryActions = `
+    ${
+      isMobileSummary
+        ? `
+          <div class="summary-actions-meta">
+            <div>
+              <span class="tiny">Check-in</span>
+              <strong>${draft.startDate ? formatDate(draft.startDate) : "Select a date"}</strong>
+            </div>
+            <div class="summary-actions-total">
+              <span class="tiny">Total</span>
+              <strong>${summaryHasData ? money(totalPrice()) : ""}</strong>
+            </div>
+          </div>
+        `
+        : ""
+    }
+    <button class="button button-primary summary-button" type="button" ${draft.currentStep === 0 ? `id="nextFromPackage" ${selectedPackageRows().length ? "" : "disabled"}>Select dates →` : draft.currentStep === 1 ? `id="nextFromDate" ${draft.startDate ? "" : "disabled"}>Select room →` : draft.currentStep === 2 ? `id="nextFromRoom" ${draft.roomId ? "" : "disabled"}>Add-ons →` : draft.currentStep === 3 ? `id="continueToBook">Book now →` : `disabled>Next →`}</button>
+  `;
 
   summary.innerHTML = `
     <div class="summary-hero">
@@ -1277,7 +1345,7 @@ function renderBookPage() {
             <strong>Room</strong>
             <span>${getRoom(draft.roomId)?.name || ""}</span>
           </div>
-          <strong>${draft.roomId ? money(roomPrice()) : ""}</strong>
+          <strong>${draft.roomId ? formatSurcharge(roomPrice()) : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
@@ -1319,7 +1387,7 @@ function renderAdminPage() {
   const packageCount = document.getElementById("packageCount");
   const addonCount = document.getElementById("addonCount");
   const bookingCount = document.getElementById("bookingCount");
-  const intentCount = document.getElementById("intentCount");
+  const leadCount = document.getElementById("leadCount");
   const activeTab = adminUiState.activeTab || "bookings";
   document.querySelectorAll("[data-booking-link]").forEach((bookingLink) => {
     bookingLink.setAttribute("href", bookingUrl());
@@ -1328,13 +1396,21 @@ function renderAdminPage() {
   if (packageCount) packageCount.textContent = `${state.packages.length} packages`;
   if (addonCount) addonCount.textContent = `${state.addons.length} add-ons`;
   if (bookingCount) bookingCount.textContent = `${state.bookings.length} bookings`;
-  if (intentCount) intentCount.textContent = `${state.bookingIntents.length} intents`;
+  const leadRows = [
+    ...state.bookingIntents
+      .filter((intent) => intent.stage !== "confirmed")
+      .map((intent) => ({ ...intent, leadKind: "Checkout lead" })),
+    ...state.leads.map((lead) => ({ ...lead, leadKind: "Contact lead", stage: "contact" })),
+  ];
+  if (leadCount) leadCount.textContent = `${leadRows.length} leads`;
 
   const topbarActions = document.getElementById("topbarActions");
   const topbarBookingUrl = document.getElementById("topbarBookingUrl");
   const bookingList = document.getElementById("bookingList");
   const bookingIntentCard = document.getElementById("bookingIntentCard");
   const bookingIntentList = document.getElementById("bookingIntentList");
+  const bookingTableBody = document.getElementById("bookingTableBody");
+  const leadTableBody = document.getElementById("leadTableBody");
   const campForm = document.getElementById("campForm");
   const analyticsForm = document.getElementById("analyticsForm");
   const packageForm = document.getElementById("packageForm");
@@ -1368,9 +1444,6 @@ function renderAdminPage() {
     campForm.elements.accentSoft.value = state.camp.theme?.accentSoft || seedState.camp.theme.accentSoft;
     campForm.elements.titleFont.value = state.camp.theme?.titleFont || seedState.camp.theme.titleFont;
     campForm.elements.bodyFont.value = state.camp.theme?.bodyFont || seedState.camp.theme.bodyFont;
-    if (campForm.elements.showBookingIntents) {
-      campForm.elements.showBookingIntents.checked = !!state.camp.showBookingIntents;
-    }
     campForm.elements.restrictedArrivalDays.checked = !!state.camp.bookingRules?.restrictedArrivalDays;
     campForm
       .querySelectorAll('input[name="arrivalDays"]')
@@ -1471,27 +1544,101 @@ function renderAdminPage() {
       .join("");
   }
 
-  if (bookingIntentCard && bookingIntentList) {
-    bookingIntentCard.hidden = !state.camp.showBookingIntents && state.bookingIntents.length === 0;
-    bookingIntentList.innerHTML = state.bookingIntents
-      .slice()
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .map((intent) => {
-        const pkg = getPackage(intent.packageId);
-        const room = getRoom(intent.roomId);
+  const bookingSort = adminUiState.bookingSort || { key: "createdAt", direction: "desc" };
+  const leadSort = adminUiState.leadSort || { key: "createdAt", direction: "desc" };
+  const bookingsForTable = sortAdminRows(state.bookings, bookingSort, {
+    guestName: (item) => item.guestName || "",
+    startDate: (item) => item.startDate || "",
+    room: (item) => getRoom(item.roomId)?.name || "",
+    package: (item) => {
+      const pkg = getPackage(item.packageId);
+      return item.packageQuantities ? Object.keys(item.packageQuantities).length : pkg?.name || "";
+    },
+    total: (item) => Number(item.total || 0),
+    status: (item) => item.status || "",
+    createdAt: (item) => item.createdAt || "",
+  });
+
+  const leadsForTable = sortAdminRows(
+    [
+      ...state.bookingIntents
+        .filter((intent) => intent.stage !== "confirmed")
+        .map((intent) => ({ ...intent, leadKind: "Checkout lead" })),
+      ...state.leads.map((lead) => ({ ...lead, leadKind: "Contact lead", stage: "contact" })),
+    ],
+    leadSort,
+    {
+      guestName: (item) => item.guestName || "",
+      stage: (item) => item.stage || item.leadKind || "",
+      startDate: (item) => item.startDate || "",
+      createdAt: (item) => item.createdAt || "",
+    },
+  );
+
+  if (bookingTableBody) {
+    bookingTableBody.innerHTML = bookingsForTable
+      .map((booking) => {
+        const pkg = getPackage(booking.packageId);
+        const room = getRoom(booking.roomId);
+        const packageSummary = booking.packageQuantities
+          ? Object.entries(booking.packageQuantities)
+              .map(([packageId, quantity]) => `${getPackage(packageId).name} × ${quantity}`)
+              .join(", ")
+          : `${pkg.name} × ${booking.packagePeople || 1}`;
         return `
-          <div class="stack-item">
-            <div class="stack-item-top">
-              <strong>${intent.guestName || "Guest lead"}</strong>
-              <span class="status held">intent</span>
-            </div>
-            <small>${pkg.name} &middot; ${room.name}</small>
-            <div class="tiny">${intent.guestEmail || "No email"} &middot; ${intent.guestPhone || "No phone"}</div>
-            <div class="tiny">${formatDate(intent.startDate)} to ${formatDate(intent.endDate)} &middot; ${money(intent.total)}</div>
-            <div class="tiny">Created: ${formatDateTime(intent.createdAt)}</div>
-            <div class="tiny">Updated: ${formatDateTime(intent.updatedAt || intent.createdAt)}</div>
-            <div class="tiny">Reservation: ${intent.reservationCode || "pending"}</div>
-          </div>
+          <tr>
+            <td>
+              <strong>${booking.guestName || "Guest"}</strong>
+              <div class="tiny muted">${booking.guestEmail || "No email"}</div>
+            </td>
+            <td>
+              <strong>${formatDate(booking.startDate)}</strong>
+              <div class="tiny muted">${formatDate(booking.endDate)}</div>
+            </td>
+            <td><strong>${room?.name || booking.roomId || ""}</strong></td>
+            <td><div>${packageSummary}</div></td>
+            <td><strong>${money(booking.total)}</strong></td>
+            <td><span class="status ${booking.status}">${booking.status}</span></td>
+            <td><div class="tiny">${formatDateTime(booking.createdAt)}</div></td>
+            <td>
+              <div class="tiny">${booking.reservationCode || "pending"}</div>
+              <div class="tiny">${booking.confirmationEmail?.status || "not sent"}</div>
+            </td>
+            <td>
+              ${
+                booking.status !== "expired"
+                  ? `<button type="button" class="button button-secondary" data-cancel-booking="${booking.id}" data-reservation-code="${booking.reservationCode || ""}" data-current-status="${booking.status}">${booking.status === "cancelled" ? "Confirm" : "Cancel"}</button>`
+                  : ""
+              }
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  if (leadTableBody) {
+    leadTableBody.innerHTML = leadsForTable
+      .map((lead) => {
+        const pkg = getPackage(lead.packageId);
+        const room = getRoom(lead.roomId);
+        return `
+          <tr>
+            <td>
+              <strong>${lead.guestName || "Guest lead"}</strong>
+              <div class="tiny muted">${lead.guestEmail || "No email"}</div>
+            </td>
+            <td><span class="status held">${escapeHtml(lead.leadKind || lead.stage || "lead")}</span></td>
+            <td>
+              <strong>${formatDate(lead.startDate)}</strong>
+              <div class="tiny muted">${formatDate(lead.endDate)}</div>
+            </td>
+            <td><div class="tiny">${formatDateTime(lead.createdAt)}</div></td>
+            <td>${pkg?.name || lead.packageId || ""}</td>
+            <td>${room?.name || lead.roomId || ""}</td>
+            <td>${lead.total ? money(lead.total) : ""}</td>
+            <td><div class="tiny">${lead.guestPhone || "No phone"}</div></td>
+          </tr>
         `;
       })
       .join("");
@@ -1549,6 +1696,9 @@ function renderAdminPage() {
       .map(
         (item) => `
           <div class="stack-item">
+            <div class="stack-item-media">
+              ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${item.name}" />` : ""}
+            </div>
             <div class="stack-item-top">
               <strong>${item.name}</strong>
               <span class="pill">${money(item.price)}</span>
@@ -1597,6 +1747,7 @@ function renderAdminPage() {
       addonForm.elements.description.value = editing.description || "";
       addonForm.elements.price.value = editing.price || 0;
       addonForm.elements.unitLabel.value = editing.unitLabel || "per stay";
+      addonForm.elements.imageUrl.value = editing.imageUrl?.startsWith("data:") ? "" : editing.imageUrl || "";
     }
   }
 }
@@ -1961,6 +2112,7 @@ function syncDraftToState() {
   state.guestEmail = draft.guestEmail;
   state.guestCountry = draft.guestCountry;
   state.notes = draft.notes;
+  state.bookingIntentId = draft.bookingIntentId || "";
 }
 
 function applyStateToDraft() {
@@ -1975,7 +2127,40 @@ function applyStateToDraft() {
   draft.guestCountry = state.guestCountry || "";
   draft.notes = state.notes || "";
   draft.currentStep = state.currentStep ?? 0;
+  draft.bookingIntentId = state.bookingIntentId || "";
   draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
+}
+
+function upsertCheckoutLead(stage = "checkout") {
+  const now = new Date().toISOString();
+  const id = draft.bookingIntentId || `intent-${Date.now()}`;
+  draft.bookingIntentId = id;
+  const existing = state.bookingIntents.find((item) => item.id === id);
+  const payload = {
+    id,
+    guestName: draft.guestName || existing?.guestName || "",
+    guestPhone: draft.guestPhone || existing?.guestPhone || "",
+    guestEmail: draft.guestEmail || existing?.guestEmail || "",
+    guestCountry: draft.guestCountry || existing?.guestCountry || "",
+    packageId: draft.packageId,
+    packageQuantities: { ...draft.packageQuantities },
+    roomId: draft.roomId,
+    addonIds: [...draft.addonIds],
+    startDate: draft.startDate,
+    endDate: endDateForDraft(),
+    total: totalPrice(),
+    notes: draft.notes || existing?.notes || "",
+    stage,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+
+  state.bookingIntents = orderedItems([
+    ...state.bookingIntents.filter((item) => item.id !== id),
+    payload,
+  ]).sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  saveState();
+  return payload;
 }
 
 async function syncWorkspaceToServer() {
@@ -2037,6 +2222,13 @@ function updateBookPage() {
   renderBookPage();
 }
 
+function scrollBookPageToTop() {
+  if (typeof window === "undefined") return;
+  const isMobile = window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
+  if (!isMobile) return;
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
 async function confirmBookingReservation() {
   const guestName = document.getElementById("guestName")?.value.trim();
   const guestPhone = document.getElementById("guestPhone")?.value.trim();
@@ -2093,7 +2285,7 @@ async function confirmBookingReservation() {
     if (result?.workspace) {
       hydrateStateFromWorkspace(result.workspace);
     } else {
-      state.bookingIntents.unshift({ ...bookingPayload, stage: "confirmed" });
+      upsertCheckoutLead("confirmed");
       state.bookings.unshift({
         id: `booking-${now.getTime()}`,
         ...bookingPayload,
@@ -2127,7 +2319,7 @@ async function confirmBookingReservation() {
     );
     window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
   } catch (error) {
-    state.bookingIntents.unshift({ ...bookingPayload, stage: "confirmed" });
+    upsertCheckoutLead("confirmed");
     state.bookings.unshift({
       id: `booking-${now.getTime()}`,
       ...bookingPayload,
@@ -2235,6 +2427,7 @@ function initBookInteractions() {
       }
       draft.currentStep = 1;
       updateBookPage();
+      scrollBookPageToTop();
       return;
     }
 
@@ -2245,6 +2438,7 @@ function initBookInteractions() {
       }
       draft.currentStep = 2;
       updateBookPage();
+      scrollBookPageToTop();
       return;
     }
 
@@ -2261,12 +2455,14 @@ function initBookInteractions() {
         check_in: draft.startDate,
       });
       updateBookPage();
+      scrollBookPageToTop();
       return;
     }
 
     if (target.dataset.goStep) {
       draft.currentStep = Number(target.dataset.goStep);
       updateBookPage();
+      scrollBookPageToTop();
       return;
     }
 
@@ -2282,7 +2478,9 @@ function initBookInteractions() {
     if (target.id === "continueToBook") {
       draft.currentStep = 4;
       state.bookingConfirmation = null;
+      upsertCheckoutLead("checkout");
       updateBookPage();
+      scrollBookPageToTop();
     }
   });
 
@@ -2299,14 +2497,30 @@ function initBookInteractions() {
         check_in: draft.startDate,
       });
       updateBookPage();
+      scrollBookPageToTop();
       return;
     }
 
-    if (target.id === "guestName") draft.guestName = target.value;
-    if (target.id === "guestPhone") draft.guestPhone = target.value;
-    if (target.id === "guestEmail") draft.guestEmail = target.value;
-    if (target.id === "guestCountry") draft.guestCountry = target.value;
-    if (target.id === "guestNotes") draft.notes = target.value;
+    if (target.id === "guestName") {
+      draft.guestName = target.value;
+      upsertCheckoutLead("checkout");
+    }
+    if (target.id === "guestPhone") {
+      draft.guestPhone = target.value;
+      upsertCheckoutLead("checkout");
+    }
+    if (target.id === "guestEmail") {
+      draft.guestEmail = target.value;
+      upsertCheckoutLead("checkout");
+    }
+    if (target.id === "guestCountry") {
+      draft.guestCountry = target.value;
+      upsertCheckoutLead("checkout");
+    }
+    if (target.id === "guestNotes") {
+      draft.notes = target.value;
+      upsertCheckoutLead("checkout");
+    }
     syncDraftToState();
     saveState();
   });
@@ -2355,6 +2569,20 @@ function initAdminInteractions() {
   }
 
   document.addEventListener("click", (event) => {
+    const bookingSortButton = event.target?.closest?.("[data-booking-sort]");
+    if (bookingSortButton) {
+      adminUiState.bookingSort = toggleSortState(adminUiState.bookingSort, bookingSortButton.dataset.bookingSort || "createdAt");
+      renderAdminPage();
+      return;
+    }
+
+    const leadSortButton = event.target?.closest?.("[data-lead-sort]");
+    if (leadSortButton) {
+      adminUiState.leadSort = toggleSortState(adminUiState.leadSort, leadSortButton.dataset.leadSort || "createdAt");
+      renderAdminPage();
+      return;
+    }
+
     const tabButton = event.target?.closest?.("[data-admin-tab]");
     if (!tabButton) return;
     adminUiState.activeTab = tabButton.dataset.adminTab || "bookings";
@@ -2450,7 +2678,6 @@ function initAdminInteractions() {
       state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
     }
     state.camp.theme = nextTheme;
-    state.camp.showBookingIntents = campForm.elements.showBookingIntents?.checked ?? true;
     applyTheme(state.camp.theme);
     saveState();
     if (bookingUrlInput) {
@@ -2505,8 +2732,6 @@ function initAdminInteractions() {
       titleFont: campForm.elements.titleFont.value,
       bodyFont: campForm.elements.bodyFont.value,
     };
-    state.camp.showBookingIntents = campForm.elements.showBookingIntents?.checked ?? true;
-
     saveState();
     applyTheme(state.camp.theme);
     renderAdminPage();
@@ -2576,16 +2801,25 @@ function initAdminInteractions() {
     renderAdminPage();
   });
 
-  addonForm?.addEventListener("submit", (event) => {
+  addonForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = addonForm.elements.id.value || `addon-${Date.now()}`;
     const existing = state.addons.find((item) => item.id === id);
+    const imageFile = addonForm.elements.imageFile.files?.[0];
+    let imageUrl = addonForm.elements.imageUrl.value.trim();
+    if (imageFile) {
+      imageUrl = await readFileAsDataUrl(imageFile);
+    }
+    if (!imageUrl) {
+      imageUrl = existing?.imageUrl || logoSvg;
+    }
     const payload = {
       id,
       name: addonForm.elements.name.value.trim(),
       description: addonForm.elements.description.value.trim(),
       price: Number(addonForm.elements.price.value),
       unitLabel: addonForm.elements.unitLabel.value.trim(),
+      imageUrl,
       order: existing?.order ?? nextOrderValue(state.addons),
     };
     state.addons = orderedItems([...state.addons.filter((item) => item.id !== id), payload]);
@@ -2703,6 +2937,8 @@ setInterval(() => {
     void refreshAdminWorkspace({ silent: true });
   }
 }, 30000);
+
+
 
 
 
