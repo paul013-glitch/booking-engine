@@ -143,7 +143,7 @@ const seedState = {
   guestName: "Ava",
       guestEmail: "ava@example.com",
       guestCountry: "Germany",
-      guestGender: "Woman",
+      guestGender: "Female",
       packageId: "package-7",
       roomId: "shared-double",
       addonIds: ["yoga-pack"],
@@ -160,7 +160,7 @@ const seedState = {
       guestName: "Jonas",
       guestEmail: "jonas@example.com",
       guestCountry: "Belgium",
-      guestGender: "Man",
+      guestGender: "Male",
       packageId: "package-7-surf",
       roomId: "shared-dorm-4bed",
       addonIds: ["airport-transfer"],
@@ -1285,10 +1285,8 @@ function renderBookPage() {
                 Gender
                 <select id="guestGender">
                   <option value="" ${draft.guestGender ? "" : "selected"}>Select gender</option>
-                  <option value="Woman" ${draft.guestGender === "Woman" ? "selected" : ""}>Woman</option>
-                  <option value="Man" ${draft.guestGender === "Man" ? "selected" : ""}>Man</option>
-                  <option value="Non-binary" ${draft.guestGender === "Non-binary" ? "selected" : ""}>Non-binary</option>
-                  <option value="Prefer not to say" ${draft.guestGender === "Prefer not to say" ? "selected" : ""}>Prefer not to say</option>
+                  <option value="Female" ${draft.guestGender === "Female" ? "selected" : ""}>Female</option>
+                  <option value="Male" ${draft.guestGender === "Male" ? "selected" : ""}>Male</option>
                 </select>
               </label>
               <label class="field" style="margin-top: 14px;">
