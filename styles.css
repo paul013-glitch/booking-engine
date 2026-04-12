@@ -608,6 +608,10 @@ textarea:focus {
   text-align: right;
 }
 
+.summary-addon-line {
+  display: block;
+}
+
 .summary-total {
   margin-top: 16px;
   padding-top: 16px;

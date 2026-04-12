@@ -1364,7 +1364,15 @@ function renderBookPage() {
         <div class="summary-item">
           <div>
             <strong>Add-on</strong>
-            <span>${draft.addonIds.length ? draft.addonIds.map((id) => getAddon(id)?.name).filter(Boolean).join(", ") : ""}</span>
+            <span>
+              ${draft.addonIds.length
+                ? draft.addonIds
+                    .map((id) => getAddon(id)?.name)
+                    .filter(Boolean)
+                    .map((name) => `<div class="summary-addon-line">- ${escapeHtml(name)}</div>`)
+                    .join("")
+                : ""}
+            </span>
           </div>
           <strong>${draft.addonIds.length ? money(addonPrice()) : ""}</strong>
         </div>
