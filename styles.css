@@ -932,6 +932,12 @@ select {
   min-width: 0;
 }
 
+.panel[data-admin-pane="business"] .list-card,
+.panel[data-admin-pane="bookings"] .list-card {
+  width: min(100%, 80vw);
+  max-width: 80vw;
+}
+
 .admin-form h3,
 .list-card h3 {
   margin-bottom: 8px;
