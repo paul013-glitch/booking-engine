@@ -1697,6 +1697,9 @@ function overlappingBookings(roomId, startDate, endDate) {
 
 function availableUnits(roomId, startDate, endDate) {
   const room = getRoom(roomId);
+  if (!startDate || !endDate) {
+    return Math.max(0, Number(room?.totalUnits ?? 0));
+  }
   const rows = weekKeysBetween(startDate, endDate);
   const booked = overlappingBookings(roomId, startDate, endDate).reduce(
     (sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId),
@@ -1725,6 +1728,14 @@ function bookedUnitsForWeek(roomId, weekKey) {
 
 function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
   const room = getRoom(roomId);
+  if (!startDate || !endDate) {
+    const available = Math.max(0, Number(room?.totalUnits ?? 0));
+    return {
+      available,
+      booked: 0,
+      forSale: available,
+    };
+  }
   const weeks = weekKeysBetween(startDate, endDate);
 
   if (!weeks.length) {
@@ -2178,11 +2189,13 @@ function renderBookPage() {
       const quantity = roomAllocationQuantity(room.id);
       const otherAllocatedGuests = allocatedRoomGuests - quantity;
       const remainingGuests = Math.max(0, addonGuestLimit - otherAllocatedGuests);
-      const maxForRoom = Math.min(roomAvailableSpots(room.id), remainingGuests);
+      const roomAvailability = roomAvailableSpots(room.id);
+      const isUnavailable = Boolean(draft.startDate && roomAvailability <= 0);
+      const maxForRoom = Math.min(roomAvailability, remainingGuests);
       const canIncrease = quantity < maxForRoom;
       const stayPrice = draft.startDate && bookingNights() ? roomNightlySurcharge(room.id) * bookingNights() : 0;
       return `
-        <article class="option-card addon-card ${quantity > 0 ? "selected" : ""}">
+        <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
           <div class="option-body">
             <h3>${room.name}</h3>

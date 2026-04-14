@@ -541,7 +541,6 @@ select {
 }
 
 .option-card.unavailable {
-  filter: grayscale(1);
   opacity: 0.48;
   cursor: not-allowed;
 }
@@ -549,6 +548,11 @@ select {
 .option-card.unavailable:hover {
   transform: none;
   box-shadow: none;
+}
+
+.option-card.unavailable .option-media img {
+  filter: grayscale(1);
+  opacity: 0.45;
 }
 
 .learn-more-link {
