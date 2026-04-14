@@ -1,4 +1,4 @@
-const { createDefaultWorkspace, isPlatformOwnerUser, saveWorkspace } = require("./_shared");
+const { createDefaultWorkspace, getWorkspaceForIdentity, isPlatformOwnerUser, saveWorkspace } = require("./_shared");
 
 exports.handler = async (event) => {
   let userPayload = {};
@@ -13,13 +13,16 @@ exports.handler = async (event) => {
   const ownerId = userPayload.sub || email || `identity-${Date.now()}`;
 
   try {
-    await saveWorkspace(
-      createDefaultWorkspace({
-        ownerId,
-        email,
-        name: userPayload.user_metadata?.full_name || email.split("@")[0] || "New Surf Camp",
-      }),
-    );
+    const existing = await getWorkspaceForIdentity({ ownerId, email });
+    if (!existing) {
+      await saveWorkspace(
+        createDefaultWorkspace({
+          ownerId,
+          email,
+          name: userPayload.user_metadata?.full_name || email.split("@")[0] || "New Surf Camp",
+        }),
+      );
+    }
   } catch {
     // Never block login because workspace creation failed.
   }

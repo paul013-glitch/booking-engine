@@ -387,6 +387,46 @@ async function getWorkspaceForOwner(ownerId) {
   return await getWorkspaceById(ownerEntry.workspaceId);
 }
 
+async function getWorkspaceForIdentity({ ownerId, email } = {}) {
+  const normalizedOwnerId = String(ownerId || "").trim();
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+
+  const byOwnerId = await getWorkspaceForOwner(normalizedOwnerId);
+  if (byOwnerId) return byOwnerId;
+
+  if (normalizedEmail && normalizedEmail !== normalizedOwnerId) {
+    const byEmailOwner = await getWorkspaceForOwner(normalizedEmail);
+    if (byEmailOwner) return byEmailOwner;
+  }
+
+  const allWorkspaces = await listWorkspaces({ includeArchived: true });
+  const matched = allWorkspaces
+    .filter((workspace) => {
+      const workspaceOwnerId = String(workspace.ownerId || "").trim();
+      const workspaceOwnerEmail = String(workspace.ownerEmail || "").trim().toLowerCase();
+      return (
+        workspaceOwnerId === normalizedOwnerId ||
+        workspaceOwnerEmail === normalizedEmail ||
+        (normalizedEmail && workspaceOwnerId.toLowerCase() === normalizedEmail)
+      );
+    })
+    .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))[0];
+
+  if (matched?.id) {
+    if (normalizedOwnerId) {
+      const { owners } = stores();
+      await owners.setJSON(getOwnerKey(normalizedOwnerId), { workspaceId: matched.id });
+    }
+    if (normalizedEmail && normalizedEmail !== normalizedOwnerId) {
+      const { owners } = stores();
+      await owners.setJSON(getOwnerKey(normalizedEmail), { workspaceId: matched.id });
+    }
+    return matched;
+  }
+
+  return null;
+}
+
 async function listWorkspaces({ includeArchived = false } = {}) {
   const { workspaces } = stores();
   const { blobs } = await workspaces.list();
@@ -433,6 +473,9 @@ async function saveWorkspace(workspace) {
   await workspaces.setJSON(getWorkspaceKey(normalized.id), normalized);
   await slugs.setJSON(getSlugKey(normalized.camp.slug), { workspaceId: normalized.id });
   await owners.setJSON(getOwnerKey(normalized.ownerId), { workspaceId: normalized.id });
+  if (normalized.ownerEmail && String(normalized.ownerEmail).trim() !== String(normalized.ownerId).trim()) {
+    await owners.setJSON(getOwnerKey(normalized.ownerEmail), { workspaceId: normalized.id });
+  }
   return normalized;
 }
 
@@ -497,6 +540,7 @@ module.exports = {
   getWorkspaceById,
   getWorkspaceBySlug,
   getWorkspaceForOwner,
+  getWorkspaceForIdentity,
   listWorkspaces,
   normalizeWorkspace,
   deleteWorkspaceById,
