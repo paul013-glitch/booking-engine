@@ -3876,8 +3876,7 @@ function renderMasterPage() {
             <td><strong>${escapeHtml(workspace.campName)}</strong></td>
             <td>${escapeHtml(workspace.ownerEmail || "Unknown")}</td>
             <td>
-              <div>${escapeHtml(workspace.slug || "")}</div>
-              ${bookingLink ? `<a href="${escapeHtml(bookingLink)}" target="_blank" rel="noreferrer">${escapeHtml(bookingLink)}</a>` : ""}
+              ${bookingLink ? `<a href="${escapeHtml(bookingLink)}" target="_blank" rel="noreferrer">${escapeHtml(workspace.slug || "")}</a>` : escapeHtml(workspace.slug || "")}
             </td>
             <td><span class="status ${escapeHtml(workspace.billing?.status || "trialing")}">${escapeHtml(workspace.billing?.status || "trialing")}</span>${archived ? ' <span class="pill">Archived</span>' : ""}</td>
             <td>${escapeHtml(daysLabel)}</td>
