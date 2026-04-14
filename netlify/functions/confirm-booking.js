@@ -112,6 +112,24 @@ function addonSummary(workspace, booking) {
   return addonNames.length ? addonNames.join(", ") : "None";
 }
 
+function customerDetailsSummary(workspace, booking) {
+  const details = booking.customerDetails || {};
+  const fieldMap = new Map((workspace.camp?.customerFields || []).map((field) => [field.key, field]));
+  const lines = [];
+  const dateOfBirth = details.dateOfBirth || {};
+  const dob = [dateOfBirth.day, dateOfBirth.month, dateOfBirth.year].filter(Boolean).join("/");
+
+  if (dob) lines.push(`Date of birth: ${dob}`);
+
+  Object.entries(details.customFields || {}).forEach(([key, value]) => {
+    if (!String(value || "").trim()) return;
+    const field = fieldMap.get(key);
+    lines.push(`${field?.label || key}: ${value}`);
+  });
+
+  return lines;
+}
+
 function buildEmail({ workspace, booking }) {
   const fromName = process.env.RESEND_FROM_NAME || workspace.camp?.name || "Campify";
   const fromEmail = process.env.RESEND_FROM_EMAIL;
@@ -126,6 +144,7 @@ function buildEmail({ workspace, booking }) {
     `Package: ${packageSummary(workspace, booking)}`,
     `Room: ${(workspace.rooms || []).find((item) => item.id === booking.roomId)?.name || booking.roomId}`,
     `Add-ons: ${addonSummary(workspace, booking)}`,
+    ...customerDetailsSummary(workspace, booking),
     `Total: ${formatMoney(booking.total)}`,
     "",
     `Guest name: ${booking.guestName}`,
@@ -147,6 +166,9 @@ function buildEmail({ workspace, booking }) {
         <li><strong>Package:</strong> ${packageSummary(workspace, booking)}</li>
         <li><strong>Room:</strong> ${(workspace.rooms || []).find((item) => item.id === booking.roomId)?.name || booking.roomId}</li>
         <li><strong>Add-ons:</strong> ${addonSummary(workspace, booking)}</li>
+        ${customerDetailsSummary(workspace, booking)
+          .map((line) => `<li>${line}</li>`)
+          .join("")}
         <li><strong>Total:</strong> ${formatMoney(booking.total)}</li>
       </ul>
       <p><strong>Guest name:</strong> ${booking.guestName}<br />
@@ -239,7 +261,19 @@ exports.handler = async (event) => {
 
     const normalized = normalizeWorkspace(workspace);
     const booking = payload.booking || {};
-    const required = ["guestName", "guestEmail", "guestPhone", "guestCountry", "packageId", "roomId", "startDate", "endDate"];
+    const required = [
+      "guestName",
+      "guestEmail",
+      "guestPhone",
+      "guestCountry",
+      "guestBirthDay",
+      "guestBirthMonth",
+      "guestBirthYear",
+      "packageId",
+      "roomId",
+      "startDate",
+      "endDate",
+    ];
     const missing = required.filter((key) => !String(booking[key] || "").trim());
     if (missing.length) {
       return response(400, { error: `Missing booking fields: ${missing.join(", ")}` });

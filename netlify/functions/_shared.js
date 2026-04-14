@@ -107,6 +107,8 @@ const seedAddons = [
   },
 ];
 
+const seedPromos = [];
+
 function startOfWeek(dateInput) {
   const date = new Date(dateInput);
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
@@ -168,6 +170,7 @@ function createDefaultWorkspace(input = {}) {
       name,
       slug: input.slug || randomSlug("camp"),
       logoUrl: seedCamp.logoUrl,
+      customerFields: [],
       bookingRules: { ...seedCamp.bookingRules },
       availability: createDefaultAvailability(seedRooms),
     },
@@ -183,6 +186,7 @@ function createDefaultWorkspace(input = {}) {
     notes: "",
     leads: [],
     bookingIntents: [],
+    promos: structuredClone(seedPromos),
     packages: structuredClone(seedPackages),
     rooms: structuredClone(seedRooms),
     addons: structuredClone(seedAddons),
@@ -242,6 +246,7 @@ function normalizeWorkspace(data = {}) {
         ...(base.camp.availability || {}),
         ...((data.camp && data.camp.availability) || {}),
       },
+      customerFields: Array.isArray(data?.camp?.customerFields) ? data.camp.customerFields : base.camp.customerFields,
       slug: (data.camp && data.camp.slug) || data.slug || base.camp.slug,
     },
     packages: Array.isArray(data.packages) ? data.packages : base.packages,
@@ -250,6 +255,7 @@ function normalizeWorkspace(data = {}) {
     bookings: Array.isArray(data.bookings) ? data.bookings : base.bookings,
     leads: Array.isArray(data.leads) ? data.leads : [],
     bookingIntents: Array.isArray(data.bookingIntents) ? data.bookingIntents : [],
+    promos: Array.isArray(data.promos) ? data.promos : base.promos,
     selectedAddonIds: Array.isArray(data.selectedAddonIds)
       ? data.selectedAddonIds.filter((id) => id !== "airport-transfer")
       : base.selectedAddonIds,

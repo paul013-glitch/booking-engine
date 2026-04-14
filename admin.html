@@ -290,6 +290,8 @@
             <button type="button" class="config-tab-button" data-config-tab="packages">Packages</button>
             <button type="button" class="config-tab-button" data-config-tab="rooms">Rooms</button>
             <button type="button" class="config-tab-button" data-config-tab="addons">Add-ons</button>
+            <button type="button" class="config-tab-button" data-config-tab="promos">Promo codes</button>
+            <button type="button" class="config-tab-button" data-config-tab="customerFields">Customer fields</button>
           </div>
 
           <div class="config-pane" data-config-pane="packages">
@@ -378,9 +380,9 @@
             </div>
           </div>
 
-          <div class="config-pane" data-config-pane="addons">
-            <div class="admin-grid">
-              <form class="admin-form" id="addonForm">
+            <div class="config-pane" data-config-pane="addons">
+              <div class="admin-grid">
+                <form class="admin-form" id="addonForm">
                 <h3>Create / edit add-on</h3>
                 <input type="hidden" name="id" />
                 <label>
@@ -417,6 +419,94 @@
                   <span class="pill" id="addonCount"></span>
                 </div>
                 <div id="addonList" class="stack"></div>
+              </article>
+              </div>
+            </div>
+
+          <div class="config-pane" data-config-pane="promos">
+            <div class="admin-grid">
+              <form class="admin-form" id="promoForm">
+                  <h3>Create / edit promo</h3>
+                  <input type="hidden" name="id" />
+                  <label>
+                    Promo code
+                    <input name="code" type="text" placeholder="WELCOME10" required />
+                  </label>
+                  <div class="two-col">
+                    <label>
+                      Type
+                      <select name="type" required>
+                        <option value="percent">Percent discount</option>
+                        <option value="free-addon">Free add-on</option>
+                      </select>
+                    </label>
+                    <label>
+                      Discount %
+                      <input name="percent" type="number" min="1" max="100" step="1" placeholder="10" />
+                    </label>
+                  </div>
+                  <label>
+                    Free add-on
+                    <select name="addonId">
+                      <option value="">Select add-on</option>
+                    </select>
+                  </label>
+                  <button class="button button-primary" type="submit">Save promo</button>
+                </form>
+                <article class="list-card">
+                  <div class="list-head">
+                    <h3>Promo codes</h3>
+                    <span class="pill" id="promoCount"></span>
+                  </div>
+                  <div id="promoList" class="stack"></div>
+              </article>
+            </div>
+          </div>
+
+          <div class="config-pane" data-config-pane="customerFields">
+            <div class="admin-grid">
+              <form class="admin-form" id="customerFieldForm">
+                <h3>Create / edit customer field</h3>
+                <input type="hidden" name="id" />
+                <label>
+                  Label
+                  <input name="label" type="text" placeholder="Flight number" required />
+                </label>
+                <div class="two-col">
+                  <label>
+                    Key
+                    <input name="key" type="text" placeholder="flightNumber" />
+                  </label>
+                  <label>
+                    Type
+                    <select name="type" required>
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                      <option value="textarea">Textarea</option>
+                      <option value="select">Dropdown</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  Options
+                  <textarea name="options" rows="3" placeholder="Beginner&#10;Intermediate&#10;Advanced"></textarea>
+                </label>
+                <label>
+                  Placeholder
+                  <input name="placeholder" type="text" placeholder="Optional helper text" />
+                </label>
+                <label class="checkbox-row">
+                  <input name="required" type="checkbox" />
+                  Required
+                </label>
+                <button class="button button-primary" type="submit">Save customer field</button>
+              </form>
+              <article class="list-card">
+                <div class="list-head">
+                  <h3>Customer fields</h3>
+                  <span class="pill" id="customerFieldCount"></span>
+                </div>
+                <div id="customerFieldList" class="stack"></div>
               </article>
             </div>
           </div>

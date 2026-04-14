@@ -399,6 +399,31 @@ select {
   gap: 12px;
 }
 
+.addon-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.addon-grid .addon-card {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.addon-grid .addon-card .option-media {
+  height: auto;
+  min-height: 100%;
+}
+
+.addon-grid .addon-card .option-body {
+  display: grid;
+  align-content: start;
+}
+
+.addon-grid .addon-card .addon-row-actions {
+  align-self: center;
+  padding: 0 18px 0 0;
+}
+
 .package-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -435,6 +460,11 @@ select {
   justify-items: end;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.addon-row-actions {
+  padding: 0 14px 14px;
+  margin-top: 4px;
 }
 
 .package-row .option-body {
@@ -481,6 +511,12 @@ select {
   color: var(--text);
   font-size: 1.1rem;
   font-weight: 700;
+}
+
+.people-button:disabled,
+.nav-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .option-card {
@@ -570,6 +606,12 @@ select {
 .input-row,
 .two-col {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.three-col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .field {
@@ -677,7 +719,13 @@ select {
 
 .summary-item span {
   color: var(--muted);
-  text-align: right;
+  text-align: left;
+}
+
+.customer-fields {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
 }
 
 .summary-addon-line {
@@ -740,6 +788,60 @@ select {
 
 .summary-package-line {
   display: block;
+}
+
+.summary-promo {
+  margin-top: 16px;
+}
+
+.summary-promo-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.promo-entry {
+  display: grid;
+  gap: 10px;
+}
+
+.promo-row {
+  gap: 10px;
+}
+
+.promo-row input {
+  flex: 1 1 auto;
+}
+
+.promo-apply-button {
+  white-space: nowrap;
+}
+
+.promo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.promo-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.promo-error {
+  color: #9b3f3f;
+  font-size: 0.88rem;
+}
+
+.mobile-only {
+  display: none;
 }
 
 .summary-footer {
@@ -1448,8 +1550,17 @@ select {
     font-size: 0.95rem;
   }
 
+  .mobile-only {
+    display: block;
+  }
+
+  .promo-entry-mobile {
+    margin-top: 14px;
+  }
+
   .input-row,
   .two-col,
+  .three-col,
   .threshold-grid,
   .calendar-grid-wrap,
   .theme-grid,
@@ -1477,6 +1588,28 @@ select {
   .addon-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .addon-grid .addon-card {
+    grid-template-columns: 1fr;
+    padding: 0;
+  }
+
+  .addon-grid .addon-card .option-media {
+    height: 120px;
+    min-height: 0;
+  }
+
+  .addon-grid .addon-card .option-body {
+    padding-bottom: 0;
+  }
+
+  .addon-grid .addon-card .addon-row-actions {
+    padding: 0 14px 14px;
+  }
+
+  .addon-grid .addon-card .option-meta {
+    flex-wrap: wrap;
   }
 
   .package-row .option-body h3 {

@@ -54,6 +54,7 @@ const seedState = {
       ga4Id: "",
       pixelId: "",
     },
+    customerFields: [],
     bookingRules: {
       restrictedArrivalDays: true,
       allowedArrivalDays: ["Saturday"],
@@ -67,16 +68,21 @@ const seedState = {
   packageQuantities: {},
   selectedRoomId: "",
   selectedAddonIds: [],
+  customerFieldValues: {},
   startDate: "",
   guestName: "",
   guestPhone: "",
   guestEmail: "",
   guestCountry: "",
+  guestBirthDay: "",
+  guestBirthMonth: "",
+  guestBirthYear: "",
   guestGender: "",
   notes: "",
   bookingConfirmation: null,
   leads: [],
   bookingIntents: [],
+  promos: [],
   packages: [
     {
       id: "package-7",
@@ -230,13 +236,20 @@ const draft = {
   packageQuantities: { ...(state.packageQuantities || {}) },
   roomId: state.selectedRoomId,
   addonIds: [...state.selectedAddonIds],
+  customerFieldValues: { ...(state.customerFieldValues || {}) },
   startDate: state.startDate || "",
   calendarMonthOffset: 0,
   guestName: state.guestName,
   guestEmail: state.guestEmail,
   guestCountry: state.guestCountry,
+  guestBirthDay: state.guestBirthDay || "",
+  guestBirthMonth: state.guestBirthMonth || "",
+  guestBirthYear: state.guestBirthYear || "",
   guestGender: state.guestGender,
   notes: state.notes,
+  promoCodeInput: state.promoCodeInput || "",
+  promoCodes: [...(state.promoCodes || [])],
+  promoError: state.promoError || "",
   currentStep: state.currentStep ?? 0,
   bookingIntentId: state.bookingIntentId || "",
 };
@@ -274,6 +287,9 @@ function normalizeWorkspaceData(data = {}) {
         ...seedState.camp.analytics,
         ...((data.camp && data.camp.analytics) || {}),
       },
+      customerFields: Array.isArray(data?.camp?.customerFields)
+        ? data.camp.customerFields.map(normalizeCustomerField)
+        : structuredClone(seedState.camp.customerFields || []),
       bookingRules: {
         ...seedState.camp.bookingRules,
         ...((data.camp && data.camp.bookingRules) || {}),
@@ -311,10 +327,15 @@ function normalizeWorkspaceData(data = {}) {
     addons: Array.isArray(data.addons)
       ? normalizeOrderedCollection(data.addons)
       : normalizeOrderedCollection(structuredClone(seedState.addons)),
+    promos: Array.isArray(data.promos)
+      ? normalizeOrderedCollection(data.promos)
+      : normalizeOrderedCollection(structuredClone(seedState.promos || [])),
     bookings: Array.isArray(data.bookings) ? data.bookings : structuredClone(seedState.bookings),
     leads: Array.isArray(data.leads) ? data.leads : [],
     bookingIntents: Array.isArray(data.bookingIntents) ? data.bookingIntents : [],
     selectedAddonIds: [],
+    customerFieldValues:
+      data.customerFieldValues && typeof data.customerFieldValues === "object" ? data.customerFieldValues : {},
     selectedPackageId: data.selectedPackageId || seedState.selectedPackageId,
     packageQuantities: {},
     selectedRoomId: "",
@@ -323,12 +344,143 @@ function normalizeWorkspaceData(data = {}) {
     guestPhone: data.guestPhone || "",
     guestEmail: data.guestEmail || "",
     guestCountry: data.guestCountry || "",
+    guestBirthDay: data.guestBirthDay || "",
+    guestBirthMonth: data.guestBirthMonth || "",
+    guestBirthYear: data.guestBirthYear || "",
     guestGender: data.guestGender || "",
     notes: data.notes || "",
     bookingConfirmation: data.bookingConfirmation || null,
+    promoCodeInput: data.promoCodeInput || "",
+    promoCodes: Array.isArray(data.promoCodes) ? data.promoCodes.map(normalizePromoCode).filter(Boolean) : [],
+    promoError: data.promoError || "",
     currentStep: Number.isFinite(data.currentStep) ? data.currentStep : 0,
     bookingIntentId: data.bookingIntentId || "",
   };
+}
+
+function normalizePromoCode(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase();
+}
+
+function parsePromoCodes(value) {
+  return Array.from(
+    new Set(
+      String(value || "")
+        .split(/[\s,;]+/)
+        .map(normalizePromoCode)
+        .filter(Boolean),
+    ),
+  );
+}
+
+function promoMatchesCode(promo, code) {
+  return normalizePromoCode(promo?.code) === normalizePromoCode(code);
+}
+
+function selectedPromos() {
+  const codes = Array.isArray(draft.promoCodes) ? draft.promoCodes : [];
+  return codes
+    .map((code) => ({
+      code,
+      promo: orderedItems(state.promos).find((item) => promoMatchesCode(item, code)) || null,
+    }))
+    .filter((item) => item.promo);
+}
+
+function selectedPromoCodes() {
+  return selectedPromos().map((item) => item.code);
+}
+
+function selectedFreeAddonIds() {
+  return Array.from(
+    new Set(
+      selectedPromos()
+        .filter((item) => item.promo.type === "free-addon")
+        .map((item) => item.promo.addonId)
+        .filter(Boolean),
+    ),
+  );
+}
+
+function selectedPercentPromos() {
+  return selectedPromos()
+    .filter((item) => item.promo.type === "percent")
+    .map((item) => Math.max(0, Math.min(100, Number(item.promo.percent) || 0)))
+    .filter((value) => value > 0);
+}
+
+function selectedPromoCodeLabel() {
+  return selectedPromoCodes().join(", ");
+}
+
+function promoAddonLabel(addonId) {
+  return selectedFreeAddonIds().includes(addonId) ? "Free with promo" : "";
+}
+
+function promoFreeAddonValue(addonId) {
+  return selectedFreeAddonIds().includes(addonId) ? 0 : Number(getAddon(addonId)?.price || 0);
+}
+
+function promoTotals() {
+  const packageTotal = packagePrice();
+  const roomTotal = roomPrice();
+  const baseAddonTotal = draft.addonIds.reduce((sum, addonId) => sum + Number(getAddon(addonId)?.price || 0), 0);
+  const freeAddonDiscount = draft.addonIds.reduce(
+    (sum, addonId) => sum + (selectedFreeAddonIds().includes(addonId) ? Number(getAddon(addonId)?.price || 0) : 0),
+    0,
+  );
+  const subtotal = packageTotal + roomTotal + baseAddonTotal - freeAddonDiscount;
+  const percentPromos = selectedPercentPromos();
+  const totalAfterPercent = percentPromos.reduce((running, percent) => running - running * (percent / 100), subtotal);
+  const roundedTotal = Math.max(0, Math.round(totalAfterPercent));
+  return {
+    packageTotal,
+    roomTotal,
+    baseAddonTotal,
+    freeAddonDiscount,
+    percentPromos,
+    subtotal,
+    total: roundedTotal,
+    discountTotal: Math.max(0, subtotal - roundedTotal),
+  };
+}
+
+function promoBookingSummary() {
+  const totals = promoTotals();
+  return {
+    codes: selectedPromoCodes(),
+    freeAddonIds: selectedFreeAddonIds(),
+    percentPromos: selectedPercentPromos(),
+    subtotal: totals.subtotal,
+    discountTotal: totals.discountTotal,
+    total: totals.total,
+  };
+}
+
+function applyPromoCodesFromInput(rawValue) {
+  const codes = parsePromoCodes(rawValue);
+  const validCodes = [];
+  const invalidCodes = [];
+  const promos = orderedItems(state.promos);
+
+  codes.forEach((code) => {
+    if (promos.some((item) => promoMatchesCode(item, code))) {
+      validCodes.push(normalizePromoCode(code));
+    } else {
+      invalidCodes.push(normalizePromoCode(code));
+    }
+  });
+
+  draft.promoCodeInput = rawValue;
+  draft.promoCodes = validCodes;
+  draft.promoError = invalidCodes.length ? `Unknown promo code${invalidCodes.length > 1 ? "s" : ""}: ${invalidCodes.join(", ")}` : "";
+  state.bookingConfirmation = null;
+  syncDraftToState();
+  upsertCheckoutLead("checkout");
+  saveState();
+  updateBookPage();
 }
 
 function applyTheme(theme = {}) {
@@ -774,6 +926,90 @@ function moveOrderedItem(collectionName, itemId, direction) {
   return true;
 }
 
+function normalizeCustomerField(field = {}, index = 0) {
+  const label = String(field.label || "").trim();
+  const key = String(field.key || "").trim() || slugify(label) || `field-${index + 1}`;
+  const type = ["text", "number", "textarea", "select"].includes(field.type) ? field.type : "text";
+  const options = Array.isArray(field.options)
+    ? field.options.map((option) => String(option || "").trim()).filter(Boolean)
+    : String(field.options || "")
+        .split(/[\n,]+/)
+        .map((option) => String(option || "").trim())
+        .filter(Boolean);
+
+  return {
+    id: field.id || `customer-field-${key}`,
+    key,
+    label,
+    type,
+    required: !!field.required,
+    placeholder: String(field.placeholder || ""),
+    options,
+    order: Number.isFinite(Number(field.order)) ? Number(field.order) : index,
+  };
+}
+
+function customerFieldDefinitions() {
+  return orderedItems(state.camp.customerFields || []).map(normalizeCustomerField);
+}
+
+function customerFieldDomId(field) {
+  return `customerField_${field.id || field.key}`;
+}
+
+function customerFieldValue(fieldKey) {
+  return String(draft.customerFieldValues?.[fieldKey] ?? "");
+}
+
+function countryOptions() {
+  try {
+    if (typeof Intl !== "undefined" && typeof Intl.supportedValuesOf === "function") {
+      const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
+      return Intl.supportedValuesOf("region")
+        .map((code) => {
+          const label = displayNames.of(code);
+          return label && label !== code ? { value: label, label } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+  } catch {
+    // Fall back to a curated list below.
+  }
+
+  return [
+    "Argentina",
+    "Australia",
+    "Belgium",
+    "Brazil",
+    "Canada",
+    "Chile",
+    "Denmark",
+    "Egypt",
+    "Finland",
+    "France",
+    "Germany",
+    "Greece",
+    "India",
+    "Ireland",
+    "Italy",
+    "Japan",
+    "Mexico",
+    "Morocco",
+    "Netherlands",
+    "New Zealand",
+    "Norway",
+    "Portugal",
+    "South Africa",
+    "Spain",
+    "Sweden",
+    "Switzerland",
+    "Thailand",
+    "United Kingdom",
+    "United States",
+  ].map((name) => ({ value: name, label: name }));
+}
+
 function endDateForDraft() {
   if (!draft.startDate) return "";
   return addDays(draft.startDate, bookingNights());
@@ -902,6 +1138,42 @@ function selectedPackagePeopleCount() {
   return selectedPackageRows().reduce((sum, item) => sum + item.quantity, 0);
 }
 
+function addonQuantity(addonId) {
+  return draft.addonIds.filter((id) => id === addonId).length;
+}
+
+function selectedAddonRows() {
+  return orderedItems(state.addons)
+    .map((item) => ({
+      ...item,
+      quantity: addonQuantity(item.id),
+    }))
+    .filter((item) => item.quantity > 0);
+}
+
+function normalizeAddonSelections() {
+  const guestLimit = selectedPackagePeopleCount();
+  if (!draft.addonIds.length || guestLimit <= 0) {
+    draft.addonIds = [];
+    return;
+  }
+
+  const counts = new Map();
+  draft.addonIds = draft.addonIds.filter((addonId) => {
+    const nextCount = (counts.get(addonId) || 0) + 1;
+    if (nextCount > guestLimit) return false;
+    counts.set(addonId, nextCount);
+    return true;
+  });
+}
+
+function setAddonQuantity(addonId, quantity) {
+  const guestLimit = selectedPackagePeopleCount();
+  const nextQuantity = Math.max(0, Math.min(guestLimit, Number(quantity) || 0));
+  const remaining = draft.addonIds.filter((id) => id !== addonId);
+  draft.addonIds = [...remaining, ...Array.from({ length: nextQuantity }, () => addonId)];
+}
+
 function bookingNights() {
   if (!draft.startDate || !selectedPackageRows().length) {
     return 0;
@@ -1009,11 +1281,11 @@ function packagePrice() {
 }
 
 function addonPrice() {
-  return draft.addonIds.reduce((sum, addonId) => sum + (getAddon(addonId)?.price || 0), 0);
+  return promoTotals().baseAddonTotal - promoTotals().freeAddonDiscount;
 }
 
 function totalPrice() {
-  return packagePrice() + roomPrice() + addonPrice();
+  return promoTotals().total;
 }
 
 function availabilityText(room) {
@@ -1119,8 +1391,8 @@ function renderDateSelector() {
       </div>
       <div class="calendar-head">
         <div class="calendar-nav">
-          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month">Prev</button>
-          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month">Next</button>
+          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month">&lt;</button>
+          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month">&gt;</button>
         </div>
       </div>
 
@@ -1136,6 +1408,129 @@ function renderDateSelector() {
       </div>
 
     </section>
+  `;
+}
+
+function renderPromoEntry({ variant = "desktop" } = {}) {
+  const inputId = variant === "mobile" ? "promoCodeInputMobile" : "promoCodeInputDesktop";
+  const applyId = variant === "mobile" ? "applyPromoCodeMobile" : "applyPromoCodeDesktop";
+  const promos = selectedPromos();
+
+  return `
+    <div class="promo-entry ${variant === "mobile" ? "promo-entry-mobile" : "promo-entry-desktop"}">
+      <label class="field promo-field">
+        Promo code
+        <div class="copy-row promo-row">
+          <input id="${inputId}" type="text" value="${escapeHtml(draft.promoCodeInput || "")}" placeholder="Enter code" />
+          <button type="button" class="button button-secondary promo-apply-button" id="${applyId}" data-apply-promo="${variant}">
+            Apply
+          </button>
+        </div>
+      </label>
+      ${draft.promoError ? `<div class="promo-error">${escapeHtml(draft.promoError)}</div>` : ""}
+      ${
+        promos.length
+          ? `<div class="promo-chips">${promos
+              .map((item) => {
+                const label =
+                  item.promo.type === "percent"
+                    ? `${item.code} · ${item.promo.percent}% off`
+                    : `${item.code} · free ${getAddon(item.promo.addonId)?.name || "add-on"}`;
+                return `<span class="promo-chip">${escapeHtml(label)}</span>`;
+              })
+              .join("")}</div>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function customerDetailsPayload() {
+  const customFields = {};
+  for (const field of customerFieldDefinitions()) {
+    customFields[field.key] = customerFieldValue(field.key);
+  }
+
+  return {
+    country: draft.guestCountry || "",
+    dateOfBirth: {
+      day: draft.guestBirthDay || "",
+      month: draft.guestBirthMonth || "",
+      year: draft.guestBirthYear || "",
+    },
+    gender: draft.guestGender || "",
+    notes: draft.notes || "",
+    customFields,
+  };
+}
+
+function customerDetailsSummaryText(customerDetails = {}) {
+  const parts = [];
+  const dateOfBirth = customerDetails.dateOfBirth || {};
+  const dobParts = [dateOfBirth.day, dateOfBirth.month, dateOfBirth.year].filter(Boolean);
+  if (dobParts.length) {
+    parts.push(`DOB ${dobParts.join("/")}`);
+  }
+
+  const customFields = customerDetails.customFields || {};
+  for (const [key, value] of Object.entries(customFields)) {
+    if (value) {
+      const field = customerFieldDefinitions().find((entry) => entry.key === key);
+      parts.push(`${field?.label || key}: ${value}`);
+    }
+  }
+
+  return parts.join(" · ");
+}
+
+function renderCustomerFieldControl(field) {
+  const fieldId = customerFieldDomId(field);
+  const value = customerFieldValue(field.key);
+  const options = field.options || [];
+  const required = field.required ? "required" : "";
+
+  if (field.type === "textarea") {
+    return `
+      <label class="field" id="${fieldId}">
+        ${escapeHtml(field.label)}
+        <textarea
+          data-customer-field="${escapeHtml(field.key)}"
+          placeholder="${escapeHtml(field.placeholder || "")}"
+          ${required}
+        >${escapeHtml(value)}</textarea>
+      </label>
+    `;
+  }
+
+  if (field.type === "select") {
+    return `
+      <label class="field" id="${fieldId}">
+        ${escapeHtml(field.label)}
+        <select data-customer-field="${escapeHtml(field.key)}" ${required}>
+          <option value="">Select ${escapeHtml(field.label.toLowerCase())}</option>
+          ${options
+            .map(
+              (option) => `
+                <option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>
+              `,
+            )
+            .join("")}
+        </select>
+      </label>
+    `;
+  }
+
+  return `
+    <label class="field" id="${fieldId}">
+      ${escapeHtml(field.label)}
+      <input
+        data-customer-field="${escapeHtml(field.key)}"
+        type="${field.type === "number" ? "number" : "text"}"
+        value="${escapeHtml(value)}"
+        placeholder="${escapeHtml(field.placeholder || "")}"
+        ${required}
+      />
+    </label>
   `;
 }
 
@@ -1159,6 +1554,10 @@ function renderBookPage() {
   const orderedPackages = orderedItems(state.packages);
   const orderedRooms = orderedItems(state.rooms);
   const orderedAddons = orderedItems(state.addons);
+  const addonGuestLimit = selectedPackagePeopleCount();
+  const addonRows = selectedAddonRows();
+  const customerFields = customerFieldDefinitions();
+  const countryChoices = countryOptions();
 
   stepper.innerHTML = ["Package", "Date", "Room", "Add-ons", "Book"]
     .map(
@@ -1232,16 +1631,26 @@ function renderBookPage() {
 
   const addonCards = orderedAddons
     .map((addon) => {
-      const selected = draft.addonIds.includes(addon.id);
+      const quantity = addonQuantity(addon.id);
+      const canIncrease = quantity < addonGuestLimit;
+      const promoFree = promoFreeAddonValue(addon.id) === 0;
       return `
-        <article class="option-card ${selected ? "selected" : ""}" data-toggle-addon="${addon.id}">
+        <article class="option-card addon-card ${quantity > 0 ? "selected" : ""}">
           <div class="option-media">${addon.imageUrl ? `<img src="${addon.imageUrl}" alt="${addon.name}" />` : ""}</div>
           <div class="option-body">
             <h3>${addon.name}</h3>
             <p>${addon.description}</p>
             <div class="option-meta">
-              <span>${money(addon.price)}</span>
-              <span>${selected ? "Included" : "Add"}</span>
+              <span>${promoFree ? "Free with promo" : money(addon.price)}</span>
+              <span>${addon.unitLabel || "per stay"}</span>
+            </div>
+          </div>
+          <div class="package-row-actions addon-row-actions">
+            <span class="tiny">People</span>
+            <div class="people-control" role="group" aria-label="${addon.name} quantity">
+              <button type="button" class="people-button" data-addon-row-change="${addon.id}:-1" ${quantity <= 0 ? "disabled" : ""} aria-label="Decrease ${addon.name}">-</button>
+              <div class="people-count" aria-live="polite" aria-label="${addon.name} quantity">${quantity}</div>
+              <button type="button" class="people-button" data-addon-row-change="${addon.id}:1" ${canIncrease ? "" : "disabled"} aria-label="Increase ${addon.name}">+</button>
             </div>
           </div>
         </article>
@@ -1259,6 +1668,9 @@ function renderBookPage() {
           </div>
         </div>
         <div class="stack">${packageCards}</div>
+        <div class="mobile-only">
+          ${renderPromoEntry({ variant: "mobile" })}
+        </div>
       </section>
     `,
     renderDateSelector(),
@@ -1277,8 +1689,8 @@ function renderBookPage() {
       <section class="wizard-step">
         <div class="step-title">
           <div>
-            <h3>4. Booking details</h3>
-            <p class="helper">Add extras only if you need them.</p>
+            <h3>4. Select add-ons</h3>
+            <p class="helper">Choose quantities up to the number of guests in your booking.</p>
           </div>
         </div>
         <div class="card-grid addon-grid">${addonCards}</div>
@@ -1337,8 +1749,74 @@ function renderBookPage() {
                 </label>
                 <label class="field" id="fieldGuestCountry">
                   Country
-                  <input id="guestCountry" type="text" value="${escapeHtml(draft.guestCountry)}" />
+                  <select id="guestCountry">
+                    <option value="">Select country</option>
+                    ${countryChoices
+                      .map(
+                        (country) =>
+                          `<option value="${escapeHtml(country.value)}" ${draft.guestCountry === country.value ? "selected" : ""}>${escapeHtml(country.label)}</option>`,
+                      )
+                      .join("")}
+                    ${
+                      draft.guestCountry && !countryChoices.some((country) => country.value === draft.guestCountry)
+                        ? `<option value="${escapeHtml(draft.guestCountry)}" selected>${escapeHtml(draft.guestCountry)}</option>`
+                        : ""
+                    }
+                  </select>
                 </label>
+              </div>
+              <div class="three-col dob-row" style="margin-top: 14px;">
+                <div class="field" id="fieldGuestBirthDate" style="grid-column: 1 / -1;">
+                  Birth date
+                  <div class="three-col" style="margin-top: 8px;">
+                    <label class="field" id="fieldGuestBirthDay">
+                      <input
+                        id="guestBirthDay"
+                        type="number"
+                        min="1"
+                        max="31"
+                        step="1"
+                        placeholder="Day"
+                        value="${escapeHtml(draft.guestBirthDay)}"
+                      />
+                    </label>
+                    <label class="field" id="fieldGuestBirthMonth">
+                      <select id="guestBirthMonth">
+                        <option value="">Month</option>
+                        ${[
+                          "January",
+                          "February",
+                          "March",
+                          "April",
+                          "May",
+                          "June",
+                          "July",
+                          "August",
+                          "September",
+                          "October",
+                          "November",
+                          "December",
+                        ]
+                          .map(
+                            (month, index) =>
+                              `<option value="${String(index + 1)}" ${String(draft.guestBirthMonth) === String(index + 1) ? "selected" : ""}>${month}</option>`,
+                          )
+                          .join("")}
+                      </select>
+                    </label>
+                    <label class="field" id="fieldGuestBirthYear">
+                      <input
+                        id="guestBirthYear"
+                        type="number"
+                        min="1900"
+                        max="${new Date().getFullYear()}"
+                        step="1"
+                        placeholder="Year"
+                        value="${escapeHtml(draft.guestBirthYear)}"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
               <label class="field" id="fieldGuestGender" style="margin-top: 14px;">
                 Gender
@@ -1348,6 +1826,15 @@ function renderBookPage() {
                   <option value="Male" ${draft.guestGender === "Male" ? "selected" : ""}>Male</option>
                 </select>
               </label>
+              ${
+                customerFields.length
+                  ? `
+                    <div class="customer-fields">
+                      ${customerFields.map((field) => renderCustomerFieldControl(field)).join("")}
+                    </div>
+                  `
+                  : ""
+              }
               <label class="field" id="fieldGuestNotes" style="margin-top: 14px;">
                 Notes
                 <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
@@ -1459,17 +1946,34 @@ function renderBookPage() {
           <div>
             <strong>Add-on</strong>
             <span>
-              ${draft.addonIds.length
-                ? draft.addonIds
-                    .map((id) => getAddon(id)?.name)
-                    .filter(Boolean)
-                    .map((name) => `<div class="summary-addon-line">- ${escapeHtml(name)}</div>`)
+              ${addonRows.length
+                ? addonRows
+                    .map((item) => {
+                      const isFree = promoFreeAddonValue(item.id) === 0;
+                      return `<div class="summary-addon-line">- ${escapeHtml(item.name)} x ${escapeHtml(item.quantity)}${isFree ? " (free with promo)" : ""}</div>`;
+                    })
                     .join("")
                 : ""}
             </span>
           </div>
           <strong>${draft.addonIds.length ? money(addonPrice()) : ""}</strong>
         </div>
+        ${
+          selectedPromos().length
+            ? `
+              <div class="summary-item">
+                <div>
+                  <strong>Promo</strong>
+                  <span>${escapeHtml(selectedPromoCodeLabel())}</span>
+                </div>
+                <strong>-${money(promoTotals().discountTotal)}</strong>
+              </div>
+            `
+            : ""
+        }
+      </div>
+      <div class="summary-promo">
+        ${renderPromoEntry({ variant: "desktop" })}
       </div>
       <div class="summary-total">
         <div>
@@ -1530,6 +2034,7 @@ function renderAdminPage() {
   const packageForm = document.getElementById("packageForm");
   const roomForm = document.getElementById("roomForm");
   const addonForm = document.getElementById("addonForm");
+  const promoForm = document.getElementById("promoForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
   const availabilityBasePrice = document.getElementById("availabilityBasePrice");
@@ -1648,6 +2153,7 @@ function renderAdminPage() {
             <small>${packageSummary} &middot; ${room.name}</small>
             <div class="tiny">${booking.guestEmail || "No email"} &middot; ${booking.guestPhone || "No phone"}</div>
             <div class="tiny">${booking.guestGender || "No gender"} &middot; ${booking.guestCountry || "No country"}</div>
+            ${booking.customerDetails ? `<div class="tiny">${escapeHtml(customerDetailsSummaryText(booking.customerDetails))}</div>` : ""}
             <div class="tiny">${formatDate(booking.startDate)} to ${formatDate(booking.endDate)} &middot; ${money(booking.total)}</div>
             <div class="tiny">Booked: ${formatDateTime(booking.createdAt)}</div>
             <div class="tiny">Hold expires: ${booking.holdExpiresAt ? formatDateTime(booking.holdExpiresAt) : "N/A"}</div>
@@ -1712,6 +2218,8 @@ function renderAdminPage() {
               <strong>${booking.guestName || "Guest"}</strong>
               <div class="tiny muted">${booking.guestEmail || "No email"}</div>
               <div class="tiny muted">${booking.guestGender || "No gender"} &middot; ${booking.guestCountry || "No country"}</div>
+              ${booking.customerDetails ? `<div class="tiny muted">${escapeHtml(customerDetailsSummaryText(booking.customerDetails))}</div>` : ""}
+              ${booking.promoCodes?.length ? `<div class="tiny">Promo: ${escapeHtml(booking.promoCodes.join(", "))}</div>` : ""}
             </td>
             <td>
               <strong>${formatDate(booking.startDate)}</strong>
@@ -1750,6 +2258,8 @@ function renderAdminPage() {
               <strong>${lead.guestName || "Guest lead"}</strong>
               <div class="tiny muted">${lead.guestEmail || "No email"}</div>
               <div class="tiny muted">${lead.guestGender || "No gender"} &middot; ${lead.guestCountry || "No country"}</div>
+              ${lead.customerDetails ? `<div class="tiny muted">${escapeHtml(customerDetailsSummaryText(lead.customerDetails))}</div>` : ""}
+              ${lead.promoCodes?.length ? `<div class="tiny">Promo: ${escapeHtml(lead.promoCodes.join(", "))}</div>` : ""}
             </td>
             <td><span class="status held">${escapeHtml(lead.leadKind || lead.stage || "lead")}</span></td>
             <td>
@@ -1839,6 +2349,71 @@ function renderAdminPage() {
       .join("");
   }
 
+  const promoList = document.getElementById("promoList");
+  const promoCount = document.getElementById("promoCount");
+  if (promoCount) {
+    promoCount.textContent = `${orderedItems(state.promos).length} promos`;
+  }
+  if (promoList) {
+    promoList.innerHTML = orderedItems(state.promos)
+      .map((item) => {
+        const targetAddon = getAddon(item.addonId);
+        const label =
+          item.type === "free-addon"
+            ? `Free ${targetAddon?.name || "add-on"}`
+            : `${Math.max(0, Number(item.percent) || 0)}% discount`;
+        return `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${item.code}</strong>
+              <span class="pill">${label}</span>
+            </div>
+            <div class="tiny">${item.type === "free-addon" ? targetAddon?.name || "No add-on set" : "Applies to subtotal"}</div>
+            <div class="stack-item-actions">
+              <button type="button" class="button button-secondary" data-move-promo="${item.id}" data-move-direction="-1">Up</button>
+              <button type="button" class="button button-secondary" data-move-promo="${item.id}" data-move-direction="1">Down</button>
+              <button type="button" class="button button-secondary" data-edit-promo="${item.id}">Edit</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  const customerFieldForm = document.getElementById("customerFieldForm");
+  const customerFieldList = document.getElementById("customerFieldList");
+  const customerFieldCount = document.getElementById("customerFieldCount");
+  const orderedCustomerFields = customerFieldDefinitions();
+  if (customerFieldCount) {
+    customerFieldCount.textContent = `${orderedCustomerFields.length} fields`;
+  }
+  if (customerFieldList) {
+    customerFieldList.innerHTML = orderedCustomerFields
+      .map((field) => {
+        const summary =
+          field.type === "select"
+            ? `Dropdown ${field.options?.length ? `· ${field.options.length} options` : ""}`
+            : field.type.charAt(0).toUpperCase() + field.type.slice(1);
+        return `
+          <div class="stack-item">
+            <div class="stack-item-top">
+              <strong>${field.label}</strong>
+              <span class="pill">${field.required ? "Required" : "Optional"}</span>
+            </div>
+            <div class="tiny">${field.key} · ${summary}</div>
+            ${field.placeholder ? `<div class="tiny">${escapeHtml(field.placeholder)}</div>` : ""}
+            ${field.type === "select" && field.options?.length ? `<div class="tiny">${escapeHtml(field.options.join(", "))}</div>` : ""}
+            <div class="stack-item-actions">
+              <button type="button" class="button button-secondary" data-move-customer-field="${field.id}" data-move-direction="-1">Up</button>
+              <button type="button" class="button button-secondary" data-move-customer-field="${field.id}" data-move-direction="1">Down</button>
+              <button type="button" class="button button-secondary" data-edit-customer-field="${field.id}">Edit</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
   if (packageForm) {
     const editId = packageForm.elements.id.value;
     const editing = state.packages.find((item) => item.id === editId);
@@ -1873,6 +2448,39 @@ function renderAdminPage() {
       addonForm.elements.price.value = editing.price || 0;
       addonForm.elements.unitLabel.value = editing.unitLabel || "per stay";
       addonForm.elements.imageUrl.value = editing.imageUrl?.startsWith("data:") ? "" : editing.imageUrl || "";
+    }
+  }
+
+  if (promoForm) {
+    const addonSelect = promoForm.elements.addonId;
+    if (addonSelect) {
+      addonSelect.innerHTML = `
+        <option value="">Select add-on</option>
+        ${orderedItems(state.addons)
+          .map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`)
+          .join("")}
+      `;
+    }
+    const editId = promoForm.elements.id.value;
+    const editing = state.promos.find((item) => item.id === editId);
+    if (editing) {
+      promoForm.elements.code.value = editing.code || "";
+      promoForm.elements.type.value = editing.type || "percent";
+      promoForm.elements.percent.value = editing.percent || "";
+      promoForm.elements.addonId.value = editing.addonId || "";
+    }
+  }
+
+  if (customerFieldForm) {
+    const editId = customerFieldForm.elements.id.value;
+    const editing = customerFieldDefinitions().find((item) => item.id === editId);
+    if (editing) {
+      customerFieldForm.elements.label.value = editing.label || "";
+      customerFieldForm.elements.key.value = editing.key || "";
+      customerFieldForm.elements.type.value = editing.type || "text";
+      customerFieldForm.elements.options.value = Array.isArray(editing.options) ? editing.options.join("\n") : "";
+      customerFieldForm.elements.placeholder.value = editing.placeholder || "";
+      customerFieldForm.elements.required.checked = !!editing.required;
     }
   }
 }
@@ -2231,13 +2839,20 @@ function syncDraftToState() {
   state.packageQuantities = { ...draft.packageQuantities };
   state.selectedRoomId = draft.roomId;
   state.selectedAddonIds = [...draft.addonIds];
+  state.customerFieldValues = { ...(draft.customerFieldValues || {}) };
   state.startDate = draft.startDate;
   state.guestName = draft.guestName;
   state.guestPhone = draft.guestPhone;
   state.guestEmail = draft.guestEmail;
   state.guestCountry = draft.guestCountry;
+  state.guestBirthDay = draft.guestBirthDay;
+  state.guestBirthMonth = draft.guestBirthMonth;
+  state.guestBirthYear = draft.guestBirthYear;
   state.guestGender = draft.guestGender;
   state.notes = draft.notes;
+  state.promoCodeInput = draft.promoCodeInput || "";
+  state.promoCodes = [...(draft.promoCodes || [])];
+  state.promoError = draft.promoError || "";
   state.bookingIntentId = draft.bookingIntentId || "";
 }
 
@@ -2246,16 +2861,24 @@ function applyStateToDraft() {
   draft.packageQuantities = { ...(state.packageQuantities || {}) };
   draft.roomId = state.selectedRoomId;
   draft.addonIds = [...(state.selectedAddonIds || [])];
+  draft.customerFieldValues = { ...(state.customerFieldValues || {}) };
   draft.startDate = state.startDate || "";
   draft.guestName = state.guestName || "";
   draft.guestPhone = state.guestPhone || "";
   draft.guestEmail = state.guestEmail || "";
   draft.guestCountry = state.guestCountry || "";
+  draft.guestBirthDay = state.guestBirthDay || "";
+  draft.guestBirthMonth = state.guestBirthMonth || "";
+  draft.guestBirthYear = state.guestBirthYear || "";
   draft.guestGender = state.guestGender || "";
   draft.notes = state.notes || "";
+  draft.promoCodeInput = state.promoCodeInput || "";
+  draft.promoCodes = [...(state.promoCodes || [])];
+  draft.promoError = state.promoError || "";
   draft.currentStep = state.currentStep ?? 0;
   draft.bookingIntentId = state.bookingIntentId || "";
   draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
+  normalizeAddonSelections();
 }
 
 function upsertCheckoutLead(stage = "checkout") {
@@ -2274,9 +2897,13 @@ function upsertCheckoutLead(stage = "checkout") {
     packageQuantities: { ...draft.packageQuantities },
     roomId: draft.roomId,
     addonIds: [...draft.addonIds],
+    customerFieldValues: { ...(draft.customerFieldValues || {}) },
+    customerDetails: customerDetailsPayload(),
     startDate: draft.startDate,
     endDate: endDateForDraft(),
     total: totalPrice(),
+    promoCodes: [...(draft.promoCodes || [])],
+    promoSummary: promoBookingSummary(),
     notes: draft.notes || existing?.notes || "",
     stage,
     createdAt: existing?.createdAt || now,
@@ -2340,6 +2967,7 @@ function setPackageQuantity(packageId, quantity) {
 
   const activePackageId = selectedPackageRows()[0]?.id || seedState.selectedPackageId;
   draft.packageId = activePackageId;
+  normalizeAddonSelections();
 }
 
 function updateBookPage() {
@@ -2363,8 +2991,12 @@ function setBookingFieldErrors(fieldIds = []) {
     "fieldGuestEmail",
     "fieldGuestPhone",
     "fieldGuestCountry",
+    "fieldGuestBirthDay",
+    "fieldGuestBirthMonth",
+    "fieldGuestBirthYear",
     "fieldGuestGender",
     "fieldGuestNotes",
+    ...customerFieldDefinitions().map((field) => customerFieldDomId(field)),
   ];
   for (const id of allFieldIds) {
     document.getElementById(id)?.classList.toggle("is-invalid", fieldIds.includes(id));
@@ -2378,6 +3010,9 @@ async function confirmBookingReservation() {
   const guestPhone = document.getElementById("guestPhone")?.value.trim();
   const guestEmail = document.getElementById("guestEmail")?.value.trim();
   const guestCountry = document.getElementById("guestCountry")?.value.trim();
+  const guestBirthDay = document.getElementById("guestBirthDay")?.value.trim();
+  const guestBirthMonth = document.getElementById("guestBirthMonth")?.value.trim();
+  const guestBirthYear = document.getElementById("guestBirthYear")?.value.trim();
   const guestGender = document.getElementById("guestGender")?.value.trim();
   const notes = document.getElementById("guestNotes")?.value.trim();
 
@@ -2386,7 +3021,15 @@ async function confirmBookingReservation() {
   if (!guestEmail) missingFields.push("fieldGuestEmail");
   if (!guestPhone) missingFields.push("fieldGuestPhone");
   if (!guestCountry) missingFields.push("fieldGuestCountry");
+  if (!guestBirthDay) missingFields.push("fieldGuestBirthDay");
+  if (!guestBirthMonth) missingFields.push("fieldGuestBirthMonth");
+  if (!guestBirthYear) missingFields.push("fieldGuestBirthYear");
   if (!guestGender) missingFields.push("fieldGuestGender");
+  for (const field of customerFieldDefinitions()) {
+    if (field.required && !String(draft.customerFieldValues?.[field.key] || "").trim()) {
+      missingFields.push(customerFieldDomId(field));
+    }
+  }
   setBookingFieldErrors(missingFields);
 
   if (missingFields.length) {
@@ -2410,14 +3053,21 @@ async function confirmBookingReservation() {
     guestPhone,
     guestEmail,
     guestCountry,
+    guestBirthDay,
+    guestBirthMonth,
+    guestBirthYear,
     guestGender,
     packageId: draft.packageId,
     packageQuantities: { ...draft.packageQuantities },
     roomId: draft.roomId,
     addonIds: [...draft.addonIds],
+    customerFieldValues: { ...(draft.customerFieldValues || {}) },
+    customerDetails: customerDetailsPayload(),
     startDate,
     endDate,
     total: totalPrice(),
+    promoCodes: [...(draft.promoCodes || [])],
+    promoSummary: promoBookingSummary(),
     notes: notes || "",
     stage: "checkout",
     createdAt: now.toISOString(),
@@ -2427,6 +3077,9 @@ async function confirmBookingReservation() {
   draft.guestPhone = guestPhone;
   draft.guestEmail = guestEmail;
   draft.guestCountry = guestCountry;
+  draft.guestBirthDay = guestBirthDay;
+  draft.guestBirthMonth = guestBirthMonth;
+  draft.guestBirthYear = guestBirthYear;
   draft.guestGender = guestGender;
   draft.notes = notes;
 
@@ -2459,6 +3112,9 @@ async function confirmBookingReservation() {
       guestEmail,
       guestName,
       guestGender,
+      customerDetails: customerDetailsPayload(),
+      promoCodes: [...(draft.promoCodes || [])],
+      promoSummary: promoBookingSummary(),
       reservationCode: result?.reservationCode || result?.booking?.reservationCode || "",
     };
     draft.bookingConfirmation = state.bookingConfirmation;
@@ -2493,6 +3149,9 @@ async function confirmBookingReservation() {
       guestEmail,
       guestName,
       guestGender,
+      customerDetails: customerDetailsPayload(),
+      promoCodes: [...(draft.promoCodes || [])],
+      promoSummary: promoBookingSummary(),
       reservationCode: `R${now.getTime().toString(36).slice(-4).toUpperCase()}`.slice(0, 5),
     };
     draft.bookingConfirmation = state.bookingConfirmation;
@@ -2513,9 +3172,9 @@ async function confirmBookingReservation() {
 function initBookInteractions() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest(
-    "[data-step], [data-select-package], [data-select-room], [data-toggle-addon], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], #nextFromPackage, #nextFromDate, #nextFromRoom, #continueToBook",
-    );
-    if (!target) return;
+      "[data-step], [data-select-package], [data-select-room], [data-addon-row-change], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], [data-apply-promo], #nextFromPackage, #nextFromDate, #nextFromRoom, #continueToBook",
+      );
+      if (!target) return;
 
     if (target.dataset.step) {
       const nextStep = Number(target.dataset.step);
@@ -2620,13 +3279,13 @@ function initBookInteractions() {
       return;
     }
 
-    if (target.dataset.toggleAddon) {
-      const addonId = target.dataset.toggleAddon;
-      draft.addonIds = draft.addonIds.includes(addonId)
-        ? draft.addonIds.filter((id) => id !== addonId)
-        : [...draft.addonIds, addonId];
+    if (target.dataset.addonRowChange) {
+      const [addonId, delta] = target.dataset.addonRowChange.split(":");
+      setAddonQuantity(addonId, addonQuantity(addonId) + Number(delta));
+      normalizeAddonSelections();
       state.bookingConfirmation = null;
       updateBookPage();
+      return;
     }
 
     if (target.id === "continueToBook") {
@@ -2635,6 +3294,15 @@ function initBookInteractions() {
       upsertCheckoutLead("checkout");
       updateBookPage();
       scrollBookPageToTop();
+      return;
+    }
+
+    if (target.dataset.applyPromo !== undefined) {
+      const promoInput = document.getElementById(
+        target.dataset.applyPromo === "mobile" ? "promoCodeInputMobile" : "promoCodeInputDesktop",
+      );
+      applyPromoCodesFromInput(promoInput?.value || "");
+      return;
     }
   });
 
@@ -2675,6 +3343,21 @@ function initBookInteractions() {
       upsertCheckoutLead("checkout");
       setBookingFieldErrors([]);
     }
+    if (target.id === "guestBirthDay") {
+      draft.guestBirthDay = target.value;
+      upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
+    }
+    if (target.id === "guestBirthMonth") {
+      draft.guestBirthMonth = target.value;
+      upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
+    }
+    if (target.id === "guestBirthYear") {
+      draft.guestBirthYear = target.value;
+      upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
+    }
     if (target.id === "guestNotes") {
       draft.notes = target.value;
       upsertCheckoutLead("checkout");
@@ -2684,6 +3367,21 @@ function initBookInteractions() {
       draft.guestGender = target.value;
       upsertCheckoutLead("checkout");
       setBookingFieldErrors([]);
+    }
+    if (target.dataset.customerField) {
+      draft.customerFieldValues = {
+        ...(draft.customerFieldValues || {}),
+        [target.dataset.customerField]: target.value,
+      };
+      upsertCheckoutLead("checkout");
+      setBookingFieldErrors([]);
+    }
+    if (target.id === "promoCodeInputDesktop" || target.id === "promoCodeInputMobile") {
+      draft.promoCodeInput = target.value;
+      draft.promoError = "";
+      syncDraftToState();
+      saveState();
+      return;
     }
     syncDraftToState();
     saveState();
@@ -3008,6 +3706,99 @@ function initAdminInteractions() {
     renderAdminPage();
   });
 
+  promoForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const id = promoForm.elements.id.value || `promo-${Date.now()}`;
+    const existing = state.promos.find((item) => item.id === id);
+    const type = promoForm.elements.type.value;
+    const code = normalizePromoCode(promoForm.elements.code.value);
+    if (!code) {
+      alert("Please enter a promo code.");
+      return;
+    }
+    const duplicate = state.promos.find((item) => normalizePromoCode(item.code) === code && item.id !== id);
+    if (duplicate) {
+      alert("That promo code already exists.");
+      return;
+    }
+    if (type === "percent" && Math.max(0, Number(promoForm.elements.percent.value || 0)) <= 0) {
+      alert("Please enter a discount percentage.");
+      return;
+    }
+    if (type === "free-addon" && !promoForm.elements.addonId.value) {
+      alert("Please choose an add-on for the free add-on promo.");
+      return;
+    }
+    const payload = {
+      id,
+      code,
+      type,
+      percent: type === "percent" ? Math.max(0, Number(promoForm.elements.percent.value || 0)) : 0,
+      addonId: type === "free-addon" ? promoForm.elements.addonId.value : "",
+      order: existing?.order ?? nextOrderValue(state.promos),
+    };
+
+    state.promos = orderedItems([...state.promos.filter((item) => item.id !== id), payload]);
+    promoForm.reset();
+    promoForm.elements.id.value = "";
+    promoForm.elements.type.value = "percent";
+    saveState();
+    renderAdminPage();
+  });
+
+  customerFieldForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const id = customerFieldForm.elements.id.value || `customer-field-${Date.now()}`;
+    const existing = customerFieldDefinitions().find((item) => item.id === id);
+    const label = customerFieldForm.elements.label.value.trim();
+    const keyInput = customerFieldForm.elements.key.value.trim();
+    const key = slugify(keyInput || label) || `field-${Date.now()}`;
+    const type = customerFieldForm.elements.type.value;
+    const options = String(customerFieldForm.elements.options.value || "")
+      .split(/[\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (!label) {
+      alert("Please enter a field label.");
+      return;
+    }
+    if (type === "select" && !options.length) {
+      alert("Please add at least one option for the dropdown field.");
+      return;
+    }
+
+    const duplicate = customerFieldDefinitions().find((item) => item.key === key && item.id !== id);
+    if (duplicate) {
+      alert("That field key already exists.");
+      return;
+    }
+
+    const payload = normalizeCustomerField(
+      {
+        id,
+        label,
+        key,
+        type,
+        options,
+        placeholder: customerFieldForm.elements.placeholder.value.trim(),
+        required: !!customerFieldForm.elements.required.checked,
+        order: existing?.order ?? nextOrderValue(state.camp.customerFields || []),
+      },
+      existing?.order ?? nextOrderValue(state.camp.customerFields || []),
+    );
+
+    state.camp.customerFields = orderedItems([
+      ...(state.camp.customerFields || []).filter((item) => item.id !== id),
+      payload,
+    ]);
+    customerFieldForm.reset();
+    customerFieldForm.elements.id.value = "";
+    customerFieldForm.elements.type.value = "text";
+    saveState();
+    renderAdminPage();
+  });
+
   document.addEventListener("click", (event) => {
     const editPackageButton = event.target?.closest?.("[data-edit-package]");
     const editRoomButton = event.target?.closest?.("[data-edit-room]");
@@ -3015,6 +3806,10 @@ function initAdminInteractions() {
     const movePackageButton = event.target?.closest?.("[data-move-package]");
     const moveRoomButton = event.target?.closest?.("[data-move-room]");
     const moveAddonButton = event.target?.closest?.("[data-move-addon]");
+    const editPromoButton = event.target?.closest?.("[data-edit-promo]");
+    const movePromoButton = event.target?.closest?.("[data-move-promo]");
+    const editCustomerFieldButton = event.target?.closest?.("[data-edit-customer-field]");
+    const moveCustomerFieldButton = event.target?.closest?.("[data-move-customer-field]");
 
     if (movePackageButton) {
       if (moveOrderedItem("packages", movePackageButton.dataset.movePackage, Number(movePackageButton.dataset.moveDirection || 0))) {
@@ -3035,6 +3830,28 @@ function initAdminInteractions() {
 
     if (moveAddonButton) {
       if (moveOrderedItem("addons", moveAddonButton.dataset.moveAddon, Number(moveAddonButton.dataset.moveDirection || 0))) {
+        saveState();
+        renderAdminPage();
+      }
+      return;
+    }
+
+    if (movePromoButton) {
+      if (moveOrderedItem("promos", movePromoButton.dataset.movePromo, Number(movePromoButton.dataset.moveDirection || 0))) {
+        saveState();
+        renderAdminPage();
+      }
+      return;
+    }
+
+    if (moveCustomerFieldButton) {
+      const customerFields = orderedItems(state.camp.customerFields || []);
+      const index = customerFields.findIndex((item) => item.id === moveCustomerFieldButton.dataset.moveCustomerField);
+      const swapIndex = index + Number(moveCustomerFieldButton.dataset.moveDirection || 0);
+      if (index >= 0 && swapIndex >= 0 && swapIndex < customerFields.length) {
+        const nextItems = customerFields.slice();
+        [nextItems[index], nextItems[swapIndex]] = [nextItems[swapIndex], nextItems[index]];
+        state.camp.customerFields = nextItems.map((item, order) => ({ ...item, order }));
         saveState();
         renderAdminPage();
       }
@@ -3082,6 +3899,34 @@ function initAdminInteractions() {
       addonForm.elements.description.value = item.description || "";
       addonForm.elements.price.value = item.price || 0;
       addonForm.elements.unitLabel.value = item.unitLabel || "per stay";
+      renderAdminPage();
+    }
+
+    if (editPromoButton && promoForm) {
+      const item = state.promos.find((entry) => entry.id === editPromoButton.dataset.editPromo);
+      if (!item) return;
+      adminUiState.activeTab = "configure";
+      adminUiState.configTab = "promos";
+      promoForm.elements.id.value = item.id;
+      promoForm.elements.code.value = item.code || "";
+      promoForm.elements.type.value = item.type || "percent";
+      promoForm.elements.percent.value = item.percent || "";
+      promoForm.elements.addonId.value = item.addonId || "";
+      renderAdminPage();
+    }
+
+    if (editCustomerFieldButton && customerFieldForm) {
+      const item = customerFieldDefinitions().find((entry) => entry.id === editCustomerFieldButton.dataset.editCustomerField);
+      if (!item) return;
+      adminUiState.activeTab = "configure";
+      adminUiState.configTab = "customerFields";
+      customerFieldForm.elements.id.value = item.id;
+      customerFieldForm.elements.label.value = item.label || "";
+      customerFieldForm.elements.key.value = item.key || "";
+      customerFieldForm.elements.type.value = item.type || "text";
+      customerFieldForm.elements.options.value = Array.isArray(item.options) ? item.options.join("\n") : "";
+      customerFieldForm.elements.placeholder.value = item.placeholder || "";
+      customerFieldForm.elements.required.checked = !!item.required;
       renderAdminPage();
     }
   });
