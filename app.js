@@ -73,6 +73,7 @@ const seedState = {
   selectedPackageId: "package-7",
   packageQuantities: {},
   selectedRoomId: "",
+  roomAllocations: {},
   selectedAddonIds: [],
   customerFieldValues: {},
   startDate: "",
@@ -242,6 +243,7 @@ const draft = {
   packageId: state.selectedPackageId,
   packageQuantities: { ...(state.packageQuantities || {}) },
   roomId: state.selectedRoomId,
+  roomAllocations: { ...(state.roomAllocations || {}) },
   addonIds: [...state.selectedAddonIds],
   customerFieldValues: { ...(state.customerFieldValues || {}) },
   startDate: state.startDate || "",
@@ -816,7 +818,7 @@ function firstAllowedStartDate(afterDate = nextDefaultDate(), bookingRules = see
 }
 
 function hasAvailabilityForDate(startDate) {
-  return campSpotsLeftForDate(startDate) > 0;
+  return campSpotsLeftForDate(startDate) >= Math.max(1, selectedPackagePeopleCount());
 }
 
 function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
@@ -1077,6 +1079,41 @@ function bookingPackageSummary(booking = {}) {
   return `${fallback?.name || booking.packageId || ""} x ${Math.max(1, Number(booking.packagePeople || 1))}`;
 }
 
+function bookingRoomAllocationSummary(booking = {}) {
+  const allocations = booking.roomAllocations && typeof booking.roomAllocations === "object" ? booking.roomAllocations : null;
+  if (allocations) {
+    const rows = Object.entries(allocations)
+      .map(([roomId, quantity]) => {
+        const room = getRoom(roomId);
+        if (!room || !quantity) return null;
+        return `${room.name} x ${quantity}`;
+      })
+      .filter(Boolean);
+    if (rows.length) return rows.join(", ");
+  }
+
+  const fallbackRoom = getRoom(booking.roomId);
+  return fallbackRoom ? `${fallbackRoom.name} x ${bookingGuestCount(booking)}` : booking.roomId || "";
+}
+
+function bookingRoomAllocationEntries(booking = {}) {
+  if (booking.roomAllocations && typeof booking.roomAllocations === "object") {
+    return Object.entries(booking.roomAllocations)
+      .map(([roomId, quantity]) => [roomId, Math.max(0, Number(quantity) || 0)])
+      .filter(([, quantity]) => quantity > 0);
+  }
+
+  if (booking.roomId) {
+    return [[booking.roomId, bookingGuestCount(booking)]];
+  }
+
+  return [];
+}
+
+function bookingRoomAllocationCountForRoom(booking = {}, roomId = "") {
+  return bookingRoomAllocationEntries(booking).find(([entryRoomId]) => entryRoomId === roomId)?.[1] || 0;
+}
+
 function bookingAddonSummary(booking = {}) {
   const addonIds = Array.isArray(booking.addonIds) ? booking.addonIds : [];
   if (!addonIds.length) return "";
@@ -1127,6 +1164,7 @@ function bookingSearchFilterText(booking) {
     booking.guestBirthYear,
     getRoom(booking.roomId)?.name,
     booking.roomId,
+    bookingRoomAllocationSummary(booking),
     bookingPackageSummary(booking),
     bookingAddonSummary(booking),
     booking.status,
@@ -1179,7 +1217,7 @@ function businessGuestCapacityForDate(checkInDate) {
   return state.rooms.reduce((sum, room) => {
     const row = state.camp.availability?.[room.id]?.weeks?.[weekKeyForDate(checkInDate)];
     const units = Number(row?.units ?? room.totalUnits ?? 0);
-    return sum + Math.max(0, units) * Math.max(0, Number(room.capacity || 0));
+    return sum + Math.max(0, units);
   }, 0);
 }
 
@@ -1248,7 +1286,6 @@ function bookingsToCsv(rows = []) {
   const lines = [headers.map(csvEscape).join(",")];
   rows.forEach((booking) => {
     const bookingTime = formatDateTimeParts(booking.createdAt);
-    const room = getRoom(booking.roomId);
     lines.push(
       [
         bookingTime.label,
@@ -1259,7 +1296,7 @@ function bookingsToCsv(rows = []) {
         formatDateShort(booking.startDate),
         booking.guestEmail || "",
         booking.guestPhone || "",
-        room?.name || booking.roomId || "",
+        bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "",
       ]
         .map(csvEscape)
         .join(","),
@@ -1343,12 +1380,7 @@ function campSpotsLeftForDate(startDate, nights = previewStayNights()) {
 
   const rooms = orderedItems(state.rooms);
   const weekTotals = weeks.map((weekKey) =>
-    rooms.reduce((sum, room) => {
-      const row = state.camp.availability?.[room.id]?.weeks?.[weekKey];
-      const totalRooms = Number(row?.units ?? room.totalUnits ?? 0);
-      const bookedRooms = bookedUnitsForWeek(room.id, weekKey);
-      return sum + Math.max(0, totalRooms - bookedRooms) * Number(room.capacity || 0);
-    }, 0),
+    rooms.reduce((sum, room) => sum + Math.max(0, roomAvailableSpots(room.id, startDate, endDate)), 0),
   );
 
   return Math.max(0, Math.min(...weekTotals));
@@ -1363,8 +1395,7 @@ function availabilityBandClass(spots) {
 }
 
 function roomAvailableSpots(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
-  const room = getRoom(roomId);
-  return availableUnits(roomId, startDate, endDate) * Number(room?.capacity || 0);
+  return availableUnits(roomId, startDate, endDate);
 }
 
 function roomCanFitParty(
@@ -1433,6 +1464,66 @@ function selectedAddonRows() {
     .filter((item) => item.quantity > 0);
 }
 
+function roomAllocationQuantity(roomId, allocations = draft.roomAllocations) {
+  return Math.max(0, Number(allocations?.[roomId] || 0));
+}
+
+function selectedRoomAllocationRows() {
+  return orderedItems(state.rooms)
+    .map((room) => ({
+      ...room,
+      quantity: roomAllocationQuantity(room.id),
+    }))
+    .filter((room) => room.quantity > 0);
+}
+
+function selectedRoomAllocationPeopleCount() {
+  return selectedRoomAllocationRows().reduce((sum, room) => sum + room.quantity, 0);
+}
+
+function normalizeRoomAllocations() {
+  const guestLimit = selectedPackagePeopleCount();
+  if (!guestLimit) {
+    draft.roomAllocations = {};
+    draft.roomId = "";
+    return;
+  }
+
+  const nextAllocations = {};
+  let remaining = guestLimit;
+  for (const room of orderedItems(state.rooms)) {
+    const current = roomAllocationQuantity(room.id);
+    const maxForRoom = Math.min(roomAvailableSpots(room.id, draft.startDate, endDateForDraft()), remaining);
+    const next = Math.max(0, Math.min(current, maxForRoom));
+    if (next > 0) {
+      nextAllocations[room.id] = next;
+      remaining -= next;
+    }
+  }
+
+  draft.roomAllocations = nextAllocations;
+  draft.roomId = selectedRoomAllocationRows()[0]?.id || "";
+}
+
+function setRoomAllocationQuantity(roomId, quantity) {
+  const guestLimit = selectedPackagePeopleCount();
+  const current = roomAllocationQuantity(roomId);
+  const otherAllocated = selectedRoomAllocationPeopleCount() - current;
+  const maxForRoom = Math.min(
+    roomAvailableSpots(roomId, draft.startDate, endDateForDraft()),
+    Math.max(0, guestLimit - otherAllocated),
+  );
+  const nextQuantity = Math.max(0, Math.min(maxForRoom, Number(quantity) || 0));
+  draft.roomAllocations = {
+    ...(draft.roomAllocations || {}),
+    [roomId]: nextQuantity,
+  };
+  if (nextQuantity <= 0) {
+    delete draft.roomAllocations[roomId];
+  }
+  normalizeRoomAllocations();
+}
+
 function normalizeAddonSelections() {
   const guestLimit = selectedPackagePeopleCount();
   if (!draft.addonIds.length || guestLimit <= 0) {
@@ -1470,7 +1561,7 @@ function bookingNights() {
 
 function overlappingBookings(roomId, startDate, endDate) {
   return state.bookings.filter((booking) => {
-    if (booking.roomId !== roomId) return false;
+    if (!bookingRoomAllocationCountForRoom(booking, roomId)) return false;
     if (!blocksInventory(booking)) return false;
     return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
   });
@@ -1479,7 +1570,10 @@ function overlappingBookings(roomId, startDate, endDate) {
 function availableUnits(roomId, startDate, endDate) {
   const room = getRoom(roomId);
   const rows = weekKeysBetween(startDate, endDate);
-  const booked = overlappingBookings(roomId, startDate, endDate).length;
+  const booked = overlappingBookings(roomId, startDate, endDate).reduce(
+    (sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId),
+    0,
+  );
   if (!rows.length) return Math.max(0, room.totalUnits - booked);
 
   const units = rows.map((weekKey) => {
@@ -1495,10 +1589,10 @@ function bookedUnitsForWeek(roomId, weekKey) {
   const startDate = weekKey;
   const endDate = addDays(weekKey, 7);
   return state.bookings.filter((booking) => {
-    if (booking.roomId !== roomId) return false;
+    if (!bookingRoomAllocationCountForRoom(booking, roomId)) return false;
     if (!blocksInventory(booking)) return false;
     return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
-  }).length;
+  }).reduce((sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId), 0);
 }
 
 function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
@@ -1507,7 +1601,7 @@ function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate =
 
   if (!weeks.length) {
     const available = Math.max(0, room.totalUnits || 0);
-    const booked = overlappingBookings(roomId, startDate, endDate).length;
+    const booked = overlappingBookings(roomId, startDate, endDate).reduce((sum, booking) => sum + bookingGuestCount(booking), 0);
     return {
       available,
       booked,
@@ -1546,16 +1640,17 @@ function firstRoomForParty(
 }
 
 function ensureRoomSelection() {
-  if (!draft.roomId) return;
-  if (roomCanFitParty(draft.roomId, draft.startDate, endDateForDraft(), selectedPackagePeopleCount())) return;
-  draft.roomId = "";
+  normalizeRoomAllocations();
 }
 
 function roomPrice() {
-  if (!draft.startDate || !draft.roomId) return 0;
+  if (!draft.startDate || !selectedRoomAllocationRows().length) return 0;
   const nights = bookingNights();
   if (!nights) return 0;
-  return roomNightlySurcharge(draft.roomId) * nights;
+  return selectedRoomAllocationRows().reduce(
+    (sum, room) => sum + roomNightlySurcharge(room.id) * nights * room.quantity,
+    0,
+  );
 }
 
 function packagePrice() {
@@ -1577,8 +1672,8 @@ function availabilityText(room) {
   if (showCountThreshold !== null && snapshot.forSale > showCountThreshold) {
     return { label: "", cls: "" };
   }
-  if (snapshot.forSale === 1) return { label: "1 for sale", cls: "low" };
-  return { label: `${snapshot.forSale} for sale`, cls: "" };
+  if (snapshot.forSale === 1) return { label: "1 remaining to sell", cls: "low" };
+  return { label: `${snapshot.forSale} remaining to sell`, cls: "" };
 }
 
 function isSoldOutStartDate(dateInput) {
@@ -1607,7 +1702,8 @@ function renderDayCell(cellDate, monthDate) {
   const isStart = selected;
   const selectable = inMonth && isSelectableDate(iso);
   const spotsLeft = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) ? campSpotsLeftForDate(iso) : 0;
-  const soldOut = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) && spotsLeft <= 0;
+  const requiredGuests = Math.max(1, selectedPackagePeopleCount());
+  const soldOut = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) && spotsLeft < requiredGuests;
   const availabilityClass = soldOut ? "soldout-day" : availabilityBandClass(spotsLeft);
   const { showCountThreshold } = availabilityThresholds();
   const shouldShowCount = soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold;
@@ -1897,6 +1993,7 @@ function renderBookPage() {
   const orderedRooms = orderedItems(state.rooms);
   const orderedAddons = orderedItems(state.addons);
   const addonGuestLimit = selectedPackagePeopleCount();
+  const allocatedRoomGuests = selectedRoomAllocationPeopleCount();
   const addonRows = selectedAddonRows();
   const customerFields = customerFieldDefinitions();
   const countryChoices = countryOptions();
@@ -1947,11 +2044,14 @@ function renderBookPage() {
 
   const roomCards = orderedRooms
     .map((room) => {
-      const selected = room.id === draft.roomId;
-      const fitsParty = roomCanFitParty(room.id);
+      const quantity = roomAllocationQuantity(room.id);
+      const otherAllocatedGuests = allocatedRoomGuests - quantity;
+      const remainingGuests = Math.max(0, addonGuestLimit - otherAllocatedGuests);
+      const maxForRoom = Math.min(roomAvailableSpots(room.id), remainingGuests);
+      const canIncrease = quantity < maxForRoom;
       const stayPrice = draft.startDate && bookingNights() ? roomNightlySurcharge(room.id) * bookingNights() : 0;
       return `
-        <article class="option-card ${selected ? "selected" : ""} ${fitsParty ? "" : "unavailable"}" data-select-room="${room.id}" ${fitsParty ? "" : 'aria-disabled="true"'}>
+        <article class="option-card addon-card ${quantity > 0 ? "selected" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
           <div class="option-body">
             <h3>${room.name}</h3>
@@ -1965,6 +2065,14 @@ function renderBookPage() {
               <span>${stayPrice ? formatSurcharge(stayPrice) : ""}</span>
             </div>
             <div class="tiny">${room.capacity} guests per room</div>
+          </div>
+          <div class="package-row-actions addon-row-actions">
+            <span class="tiny">People</span>
+            <div class="people-control" role="group" aria-label="${room.name} guest allocation">
+              <button type="button" class="people-button" data-room-row-change="${room.id}:-1" ${quantity <= 0 ? "disabled" : ""} aria-label="Decrease ${room.name} allocation">-</button>
+              <div class="people-count" aria-live="polite" aria-label="${room.name} allocated guests">${quantity}</div>
+              <button type="button" class="people-button" data-room-row-change="${room.id}:1" ${canIncrease ? "" : "disabled"} aria-label="Increase ${room.name} allocation">+</button>
+            </div>
           </div>
         </article>
       `;
@@ -2020,11 +2128,11 @@ function renderBookPage() {
       <section class="wizard-step">
         <div class="step-title">
           <div>
-            <h3>3. Pick a room</h3>
-            <p class="helper">Choose the room that fits your group.</p>
+            <h3>3. Pick room allocations</h3>
+            <p class="helper">Assign guests to one or more room types. Each room caps at its own remaining spots.</p>
           </div>
         </div>
-        <div class="card-grid">${roomCards}</div>
+        <div class="card-grid addon-grid room-allocation-grid">${roomCards}</div>
       </section>
     `,
     `
@@ -2186,7 +2294,8 @@ function renderBookPage() {
   ];
 
   wizard.innerHTML = views[draft.currentStep];
-  const summaryHasData = selectedPackageRows().length > 0 || !!draft.startDate || !!draft.roomId || draft.addonIds.length > 0;
+  const summaryHasData =
+    selectedPackageRows().length > 0 || !!draft.startDate || selectedRoomAllocationRows().length > 0 || draft.addonIds.length > 0;
   const isMobileSummary = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
   const showMobileTripSummary = isMobileSummary && draft.currentStep === 4;
   const summaryButtonLoading = draft.currentStep === 4 && bookingUiState.submitting;
@@ -2205,7 +2314,7 @@ function renderBookPage() {
       : draft.currentStep === 2
         ? {
             id: "nextFromRoom",
-            disabled: !draft.roomId,
+            disabled: selectedRoomAllocationPeopleCount() !== selectedPackagePeopleCount(),
             label: "Add-ons >",
           }
         : draft.currentStep === 3
@@ -2275,9 +2384,15 @@ function renderBookPage() {
         <div class="summary-item">
           <div>
             <strong>Room</strong>
-            <span>${getRoom(draft.roomId)?.name || ""}</span>
+            <span>
+              ${selectedRoomAllocationRows().length
+                ? selectedRoomAllocationRows()
+                    .map((room) => `${escapeHtml(room.name)} x ${escapeHtml(room.quantity)}`)
+                    .join("<br />")
+                : ""}
+            </span>
           </div>
-          <strong>${draft.roomId ? formatSurcharge(roomPrice()) : ""}</strong>
+          <strong>${selectedRoomAllocationRows().length ? formatSurcharge(roomPrice()) : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
@@ -2531,7 +2646,6 @@ function renderAdminPage() {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .map((booking) => {
         const pkg = getPackage(booking.packageId);
-        const room = getRoom(booking.roomId);
         const packageSummary = booking.packageQuantities
           ? Object.entries(booking.packageQuantities)
               .map(([packageId, quantity]) => `${escapeHtml(getPackage(packageId).name)} x ${escapeHtml(quantity)}`)
@@ -2543,7 +2657,7 @@ function renderAdminPage() {
               <strong>${booking.guestName}</strong>
               <span class="status ${booking.status}">${booking.status}</span>
             </div>
-            <small>${packageSummary} &middot; ${room.name}</small>
+            <small>${packageSummary} &middot; ${escapeHtml(bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "")}</small>
             <div class="tiny">${booking.guestEmail || "No email"} &middot; ${booking.guestPhone || "No phone"}</div>
             <div class="tiny">${escapeHtml(bookingGenderSummary(booking))} &middot; ${booking.guestCountry || "No country"}</div>
             ${booking.customerDetails ? `<div class="tiny">${escapeHtml(customerDetailsSummaryText(booking.customerDetails))}</div>` : ""}
@@ -2598,7 +2712,6 @@ function renderAdminPage() {
     bookingTableBody.innerHTML = bookingsForTable
       .map((booking) => {
         const bookingTime = formatDateTimeParts(booking.createdAt);
-        const room = getRoom(booking.roomId);
         return `
           <tr class="booking-row" tabindex="0" role="button" data-booking-open="${booking.id}">
             <td>
@@ -2611,7 +2724,7 @@ function renderAdminPage() {
             <td>${formatDateShort(booking.startDate)}</td>
             <td>${booking.guestEmail || "No email"}</td>
             <td>${booking.guestPhone || "No phone"}</td>
-            <td>${room?.name || booking.roomId || ""}</td>
+            <td>${escapeHtml(bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "")}</td>
           </tr>
         `;
       })
@@ -2685,7 +2798,7 @@ function renderAdminPage() {
         </div>
         <div class="booking-detail-meta">
           <span class="tiny">Room</span>
-          <strong>${escapeHtml(room?.name || bookingDetail.roomId || "")}</strong>
+          <strong>${escapeHtml(bookingRoomAllocationSummary(bookingDetail) || room?.name || bookingDetail.roomId || "")}</strong>
         </div>
         <div class="booking-detail-meta">
           <span class="tiny">Guests</span>
@@ -2798,7 +2911,7 @@ function renderAdminPage() {
             <div class="stack-item-top">
               <strong>${room.name}</strong>
             </div>
-            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits} rooms</div>
+            <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits} sellable spots</div>
             ${room.learnMoreUrl ? `<div class="tiny"><a class="learn-more-link" href="${escapeHtml(room.learnMoreUrl)}" target="_blank" rel="noopener noreferrer">Learn more</a></div>` : ""}
             <div class="stack-item-actions">
               <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="-1">Up</button>
@@ -3028,9 +3141,9 @@ function renderAvailabilityMatrix(roomId) {
   return `
     <div class="availability-row-header">
       <span>Week</span>
-      <span>Available</span>
+      <span>Spots available</span>
       <span>Booked</span>
-      <span>For sale</span>
+      <span>Remaining to sell</span>
       <span>Price per night</span>
     </div>
     ${rows
@@ -3048,7 +3161,7 @@ function renderAvailabilityMatrix(roomId) {
                 value="${row.units}"
                 data-availability-units="${row.weekKey}"
                 data-availability-room="${roomId}"
-                aria-label="Rooms available for ${escapeHtml(row.weekLabel)}"
+                aria-label="Spots available for ${escapeHtml(row.weekLabel)}"
               />
             </label>
             <div>
@@ -3352,6 +3465,7 @@ function syncDraftToState() {
   state.selectedPackageId = draft.packageId;
   state.packageQuantities = { ...draft.packageQuantities };
   state.selectedRoomId = draft.roomId;
+  state.roomAllocations = { ...(draft.roomAllocations || {}) };
   state.selectedAddonIds = [...draft.addonIds];
   state.customerFieldValues = { ...(draft.customerFieldValues || {}) };
   state.startDate = draft.startDate;
@@ -3375,6 +3489,7 @@ function applyStateToDraft() {
   draft.packageId = state.selectedPackageId;
   draft.packageQuantities = { ...(state.packageQuantities || {}) };
   draft.roomId = state.selectedRoomId;
+  draft.roomAllocations = { ...(state.roomAllocations || {}) };
   draft.addonIds = [...(state.selectedAddonIds || [])];
   draft.customerFieldValues = { ...(state.customerFieldValues || {}) };
   draft.startDate = state.startDate || "";
@@ -3412,8 +3527,9 @@ function upsertCheckoutLead(stage = "checkout") {
     guestGenders: normalizedGuestGenders(draft.guestGenders || (draft.guestGender ? [draft.guestGender] : [])),
     packageId: draft.packageId,
     packageQuantities: { ...draft.packageQuantities },
-    roomId: draft.roomId,
-    addonIds: [...draft.addonIds],
+  roomId: draft.roomId,
+  roomAllocations: { ...(draft.roomAllocations || {}) },
+  addonIds: [...draft.addonIds],
     customerFieldValues: { ...(draft.customerFieldValues || {}) },
     customerDetails: customerDetailsPayload(),
     startDate: draft.startDate,
@@ -3487,6 +3603,7 @@ function setPackageQuantity(packageId, quantity) {
   draft.guestGenders = normalizedGuestGenders(draft.guestGenders || (draft.guestGender ? [draft.guestGender] : []));
   draft.guestGender = draft.guestGenders[0] || draft.guestGender || "";
   normalizeAddonSelections();
+  normalizeRoomAllocations();
 }
 
 function updateBookPage() {
@@ -3615,8 +3732,24 @@ async function confirmBookingReservation() {
 
   const startDate = draft.startDate;
   const endDate = endDateForDraft();
-  if (availableUnits(draft.roomId, startDate, endDate) <= 0) {
-    alert("That room is no longer available for these dates.");
+  const selectedRooms = selectedRoomAllocationRows();
+  const totalRoomGuests = selectedRoomAllocationPeopleCount();
+  if (!selectedRooms.length) {
+    alert("Please assign guests to at least one room type.");
+    return;
+  }
+  if (totalRoomGuests !== selectedPackagePeopleCount()) {
+    alert("Please assign all guests to room types before confirming the booking.");
+    return;
+  }
+  for (const room of selectedRooms) {
+    if (room.quantity > roomAvailableSpots(room.id, startDate, endDate)) {
+      alert(`${room.name} no longer has enough sellable spots for these dates.`);
+      return;
+    }
+  }
+  if (campSpotsLeftForDate(startDate, bookingNights()) < selectedPackagePeopleCount()) {
+    alert("There are not enough sellable spots for that date.");
     return;
   }
 
@@ -3637,7 +3770,8 @@ async function confirmBookingReservation() {
     guestGenders,
     packageId: draft.packageId,
     packageQuantities: { ...draft.packageQuantities },
-    roomId: draft.roomId,
+    roomId: selectedRooms[0]?.id || "",
+    roomAllocations: Object.fromEntries(selectedRooms.map((room) => [room.id, room.quantity])),
     addonIds: [...draft.addonIds],
     customerFieldValues: { ...(draft.customerFieldValues || {}) },
     customerDetails: customerDetailsPayload(),
@@ -3702,7 +3836,7 @@ async function confirmBookingReservation() {
     trackAnalyticsEvent("checkout", {
       camp: bookingSlug(),
       package: getPackage(draft.packageId)?.name || draft.packageId,
-      room: getRoom(draft.roomId)?.name || draft.roomId,
+      room: bookingRoomAllocationSummary({ roomAllocations: bookingPayload.roomAllocations }),
       total: totalPrice(),
     });
     alert(
@@ -3761,13 +3895,10 @@ function initBookInteractions() {
       return;
     }
 
-    if (target.dataset.selectRoom) {
-      const roomId = target.dataset.selectRoom;
-      if (!roomCanFitParty(roomId, draft.startDate, endDateForDraft(), selectedPackagePeopleCount())) {
-        alert("That room can't fit your group for the selected dates.");
-        return;
-      }
-      draft.roomId = roomId;
+    if (target.dataset.roomRowChange) {
+      const [roomId, delta] = target.dataset.roomRowChange.split(":");
+      const current = roomAllocationQuantity(roomId);
+      setRoomAllocationQuantity(roomId, current + Number(delta));
       state.bookingConfirmation = null;
       updateBookPage();
       return;
@@ -3784,10 +3915,6 @@ function initBookInteractions() {
     if (target.id === "nextFromPackage") {
       if (!selectedPackageRows().length) {
         alert("Please choose at least one package row before continuing.");
-        return;
-      }
-      if (!firstRoomForParty()) {
-        alert("No room can fit that group for the selected stay.");
         return;
       }
       draft.currentStep = 1;
@@ -3808,14 +3935,14 @@ function initBookInteractions() {
     }
 
     if (target.id === "nextFromRoom") {
-      if (!roomCanFitParty(draft.roomId, draft.startDate, endDateForDraft(), selectedPackagePeopleCount())) {
-        alert("That room can't fit your group for the selected dates.");
+      if (selectedRoomAllocationPeopleCount() !== selectedPackagePeopleCount()) {
+        alert("Please assign all guests to room types before continuing.");
         return;
       }
       draft.currentStep = 3;
       trackAnalyticsEvent("add_to_cart", {
         camp: bookingSlug(),
-        room: getRoom(draft.roomId)?.name || draft.roomId,
+        room: bookingRoomAllocationSummary({ roomAllocations: draft.roomAllocations }),
         package: getPackage(draft.packageId)?.name || draft.packageId,
         check_in: draft.startDate,
       });

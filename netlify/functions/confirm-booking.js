@@ -62,7 +62,7 @@ function blocksInventory(booking) {
 
 function overlappingBookings(workspace, roomId, startDate, endDate) {
   return (workspace.bookings || []).filter((booking) => {
-    if (booking.roomId !== roomId) return false;
+    if (!bookingRoomAllocationCountForRoom(booking, roomId)) return false;
     if (!blocksInventory(booking)) return false;
     return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
   });
@@ -71,7 +71,10 @@ function overlappingBookings(workspace, roomId, startDate, endDate) {
 function availableUnits(workspace, roomId, startDate, endDate) {
   const room = (workspace.rooms || []).find((item) => item.id === roomId);
   if (!room) return 0;
-  const booked = overlappingBookings(workspace, roomId, startDate, endDate).length;
+  const booked = overlappingBookings(workspace, roomId, startDate, endDate).reduce(
+    (sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId),
+    0,
+  );
   const weeks = weekKeysBetween(startDate, endDate);
   if (!weeks.length) {
     return Math.max(0, Number(room.totalUnits || 0) - booked);
@@ -112,6 +115,20 @@ function addonSummary(workspace, booking) {
   return addonNames.length ? addonNames.join(", ") : "None";
 }
 
+function roomSummary(workspace, booking) {
+  const allocations = bookingRoomAllocations(booking);
+  if (allocations.length) {
+    return allocations
+      .map(([roomId, guestCount]) => {
+        const room = (workspace.rooms || []).find((item) => item.id === roomId);
+        return `${room?.name || roomId} x ${guestCount}`;
+      })
+      .join(", ");
+  }
+  const fallback = (workspace.rooms || []).find((item) => item.id === booking.roomId);
+  return fallback ? `${fallback.name} x ${bookingGuestCount(booking)}` : booking.roomId;
+}
+
 function customerDetailsSummary(workspace, booking) {
   const details = booking.customerDetails || {};
   const fieldMap = new Map((workspace.camp?.customerFields || []).map((field) => [field.key, field]));
@@ -147,7 +164,7 @@ function buildEmail({ workspace, booking }) {
     `Check-in: ${formatDate(booking.startDate)}`,
     `Check-out: ${formatDate(booking.endDate)}`,
     `Package: ${packageSummary(workspace, booking)}`,
-    `Room: ${(workspace.rooms || []).find((item) => item.id === booking.roomId)?.name || booking.roomId}`,
+    `Room: ${roomSummary(workspace, booking)}`,
     `Add-ons: ${addonSummary(workspace, booking)}`,
     ...customerDetailsSummary(workspace, booking),
     `Total: ${formatMoney(booking.total)}`,
@@ -169,7 +186,7 @@ function buildEmail({ workspace, booking }) {
         <li><strong>Check-in:</strong> ${formatDate(booking.startDate)}</li>
         <li><strong>Check-out:</strong> ${formatDate(booking.endDate)}</li>
         <li><strong>Package:</strong> ${packageSummary(workspace, booking)}</li>
-        <li><strong>Room:</strong> ${(workspace.rooms || []).find((item) => item.id === booking.roomId)?.name || booking.roomId}</li>
+        <li><strong>Room:</strong> ${roomSummary(workspace, booking)}</li>
         <li><strong>Add-ons:</strong> ${addonSummary(workspace, booking)}</li>
         ${customerDetailsSummary(workspace, booking)
           .map((line) => `<li>${line}</li>`)
@@ -216,6 +233,24 @@ function bookingGuestCount(booking = {}) {
     return Object.values(booking.packageQuantities).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
   }
   return Math.max(1, Number(booking.packagePeople || 1));
+}
+
+function bookingRoomAllocations(booking = {}) {
+  if (booking.roomAllocations && typeof booking.roomAllocations === "object") {
+    return Object.entries(booking.roomAllocations)
+      .map(([roomId, guestCount]) => [roomId, Math.max(0, Number(guestCount) || 0)])
+      .filter(([, guestCount]) => guestCount > 0);
+  }
+
+  if (booking.roomId) {
+    return [[booking.roomId, bookingGuestCount(booking)]];
+  }
+
+  return [];
+}
+
+function bookingRoomAllocationCountForRoom(booking = {}, roomId = "") {
+  return bookingRoomAllocations(booking).find(([entryRoomId]) => entryRoomId === roomId)?.[1] || 0;
 }
 
 function guestGenderList(booking = {}) {
@@ -310,8 +345,20 @@ exports.handler = async (event) => {
       return response(400, { error: `Missing booking fields: ${missing.join(", ")}` });
     }
 
-    if (availableUnits(normalized, booking.roomId, booking.startDate, booking.endDate) <= 0) {
-      return response(409, { error: "That room is no longer available for these dates." });
+    const roomAllocations = bookingRoomAllocations(booking);
+    if (!roomAllocations.length) {
+      return response(400, { error: "Missing room allocation." });
+    }
+
+    const roomAllocationTotal = roomAllocations.reduce((sum, [, guestCount]) => sum + guestCount, 0);
+    if (roomAllocationTotal !== bookingGuestCount(booking)) {
+      return response(400, { error: "Room allocations must match the guest count." });
+    }
+
+    for (const [roomId, guestCount] of roomAllocations) {
+      if (availableUnits(normalized, roomId, booking.startDate, booking.endDate) < guestCount) {
+        return response(409, { error: `Room type ${roomId} is no longer available for these dates.` });
+      }
     }
 
     const now = new Date();
@@ -356,6 +403,10 @@ exports.handler = async (event) => {
       checkOutDate: booking.endDate,
       guestCount: bookingGuestCount(booking),
       guestGenders: guestGenderList(booking),
+      roomAllocations: roomAllocations.reduce((acc, [roomId, guestCount]) => {
+        acc[roomId] = guestCount;
+        return acc;
+      }, {}),
       holdExpiresAt: null,
       notes: booking.notes || "Confirmed booking.",
       source: "demo-checkout",
