@@ -3855,7 +3855,6 @@ function renderMasterPage() {
   if (masterTableBody) {
     masterTableBody.innerHTML = visibleRows
       .map((workspace) => {
-        const bookingLink = workspace.bookingUrl || "";
         const archived = !!workspace.archivedAt;
         const daysLeft = workspace.billing?.daysLeft;
         const daysLabel =
@@ -3871,17 +3870,20 @@ function renderMasterPage() {
         const deleteAction = archived
           ? `<button class="button button-danger" type="button" data-delete-tenant-workspace="${escapeHtml(workspace.id)}">Delete</button>`
           : "";
+        const bookingLink = workspace.bookingUrl || "";
         return `
           <tr>
             <td><strong>${escapeHtml(workspace.campName)}</strong></td>
             <td>${escapeHtml(workspace.ownerEmail || "Unknown")}</td>
-            <td>${escapeHtml(workspace.slug || "")}</td>
+            <td>
+              <div>${escapeHtml(workspace.slug || "")}</div>
+              ${bookingLink ? `<a href="${escapeHtml(bookingLink)}" target="_blank" rel="noreferrer">${escapeHtml(bookingLink)}</a>` : ""}
+            </td>
             <td><span class="status ${escapeHtml(workspace.billing?.status || "trialing")}">${escapeHtml(workspace.billing?.status || "trialing")}</span>${archived ? ' <span class="pill">Archived</span>' : ""}</td>
             <td>${escapeHtml(daysLabel)}</td>
             <td>${escapeHtml(formatDateTime(workspace.updatedAt || workspace.createdAt || ""))}</td>
             <td>
               <div class="master-actions">
-                ${archived ? "" : `<a class="button button-secondary" href="${escapeHtml(bookingLink)}" target="_blank" rel="noreferrer">Open booking</a>`}
                 ${archived ? "" : `<a class="button button-primary" href="${adminHref}">Open admin</a>`}
                 ${archiveAction}
                 ${deleteAction}
