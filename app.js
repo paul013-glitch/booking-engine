@@ -1187,22 +1187,15 @@ function csvEscape(value) {
 
 function bookingsToCsv(rows = []) {
   const headers = [
-    "Guest",
-    "Check-in date (dd-mm-yyyy)",
-    "Check-out date (dd-mm-yyyy)",
+    "Time",
+    "Reservation ID",
+    "Booking status",
+    "Guest name",
+    "Nr of guests",
+    "Check-in date",
     "Email",
     "Phone",
     "Room",
-    "Nr of guests",
-    "Package",
-    "Add-ons",
-    "Total",
-    "Booking status",
-    "Booking date/time",
-    "Day",
-    "Month",
-    "Year",
-    "Reservation ID",
   ];
 
   const lines = [headers.map(csvEscape).join(",")];
@@ -1211,22 +1204,15 @@ function bookingsToCsv(rows = []) {
     const room = getRoom(booking.roomId);
     lines.push(
       [
+        bookingTime.label,
+        booking.reservationCode || booking.reservationId || "",
+        booking.status || "",
         booking.guestName || "",
+        bookingGuestCount(booking),
         formatDateShort(booking.startDate),
-        formatDateShort(booking.endDate),
         booking.guestEmail || "",
         booking.guestPhone || "",
         room?.name || booking.roomId || "",
-        bookingGuestCount(booking),
-        bookingPackageSummary(booking),
-        bookingAddonSummary(booking),
-        Number(booking.total || 0),
-        booking.status || "",
-        bookingTime.label,
-        bookingTime.day,
-        bookingTime.month,
-        bookingTime.year,
-        booking.reservationCode || booking.reservationId || "",
       ]
         .map(csvEscape)
         .join(","),
@@ -2515,19 +2501,12 @@ function renderAdminPage() {
   const bookingsForTable = sortAdminRows(visibleBookingRows, bookingSort, {
     guest: (item) => item.guestName || "",
     checkIn: (item) => item.startDate || "",
-    checkOut: (item) => item.endDate || "",
     email: (item) => item.guestEmail || "",
     phone: (item) => item.guestPhone || "",
     room: (item) => getRoom(item.roomId)?.name || "",
     guests: (item) => bookingGuestCount(item),
-    package: (item) => bookingPackageSummary(item),
-    addons: (item) => bookingAddonSummary(item),
-    total: (item) => Number(item.total || 0),
     status: (item) => item.status || "",
     bookedAt: (item) => item.createdAt || "",
-    day: (item) => formatDateTimeParts(item.createdAt).day,
-    month: (item) => formatDateTimeParts(item.createdAt).month,
-    year: (item) => formatDateTimeParts(item.createdAt).year,
     reservationId: (item) => item.reservationCode || item.reservationId || "",
   });
 
@@ -2552,28 +2531,19 @@ function renderAdminPage() {
       .map((booking) => {
         const bookingTime = formatDateTimeParts(booking.createdAt);
         const room = getRoom(booking.roomId);
-        const addonSummary = bookingAddonSummary(booking) || "None";
-        const packageSummary = bookingPackageSummary(booking);
         return `
           <tr class="booking-row" tabindex="0" role="button" data-booking-open="${booking.id}">
             <td>
-              <strong>${bookingTime.label}</strong>
+              ${bookingTime.label}
             </td>
+            <td>${booking.reservationCode || booking.reservationId || "pending"}</td>
+            <td><span class="status ${booking.status}">${booking.status}</span></td>
             <td><strong>${booking.guestName || "Guest"}</strong></td>
-            <td><strong>${booking.reservationCode || booking.reservationId || "pending"}</strong></td>
             <td>${bookingGuestCount(booking)}</td>
-            <td><strong>${formatDateShort(booking.startDate)}</strong></td>
-            <td><strong>${formatDateShort(booking.endDate)}</strong></td>
+            <td>${formatDateShort(booking.startDate)}</td>
             <td>${booking.guestEmail || "No email"}</td>
             <td>${booking.guestPhone || "No phone"}</td>
-            <td><strong>${room?.name || booking.roomId || ""}</strong></td>
-            <td>${packageSummary}</td>
-            <td>${addonSummary}</td>
-            <td><strong>${money(booking.total)}</strong></td>
-            <td><span class="status ${booking.status}">${booking.status}</span></td>
-            <td>${bookingTime.day}</td>
-            <td>${bookingTime.month}</td>
-            <td>${bookingTime.year}</td>
+            <td>${room?.name || booking.roomId || ""}</td>
           </tr>
         `;
       })
