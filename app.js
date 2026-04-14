@@ -1378,6 +1378,11 @@ function availabilityCalendarBounds() {
   };
 }
 
+function availabilityHasCoverageForDate(dateInput) {
+  const weekKey = weekKeyForDate(dateInput);
+  return state.rooms.some((room) => !!state.camp.availability?.[room.id]?.weeks?.[weekKey]);
+}
+
 function roomAvailabilityRow(roomId, dateInput) {
   return state.camp.availability?.[roomId]?.weeks?.[weekKeyForDate(dateInput)] || null;
 }
@@ -1727,18 +1732,21 @@ function escapeHtml(value) {
 function renderDayCell(cellDate, monthDate) {
   const iso = localDateKey(cellDate);
   const inMonth = cellDate.getMonth() === monthDate.getMonth();
+  const today = new Date();
+  const isPast = cellDate < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const hasCoverage = availabilityHasCoverageForDate(iso);
   const selected = iso === draft.startDate;
   const rangeStart = draft.startDate;
   const rangeEnd = endDateForDraft();
   const inRange = !selected && rangeStart && rangeEnd && iso > rangeStart && iso < rangeEnd;
   const isStart = selected;
-  const selectable = inMonth && isSelectableDate(iso);
-  const spotsLeft = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) ? campSpotsLeftForDate(iso) : 0;
+  const selectable = inMonth && !isPast && hasCoverage && isSelectableDate(iso);
+  const spotsLeft = inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) ? campSpotsLeftForDate(iso) : 0;
   const requiredGuests = Math.max(1, selectedPackagePeopleCount());
-  const soldOut = inMonth && isArrivalAllowed(iso, state.camp.bookingRules) && spotsLeft < requiredGuests;
-  const availabilityClass = soldOut ? "soldout-day" : availabilityBandClass(spotsLeft);
+  const soldOut = inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) && spotsLeft < requiredGuests;
+  const availabilityClass = isPast ? "past-day" : !hasCoverage ? "availability-none" : soldOut ? "soldout-day" : availabilityBandClass(spotsLeft);
   const { showCountThreshold } = availabilityThresholds();
-  const shouldShowCount = soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold;
+  const shouldShowCount = !isPast && hasCoverage && (soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold);
   const dayStatus = soldOut ? "FULL" : shouldShowCount && spotsLeft > 0 ? `${spotsLeft} left` : "";
 
   const classes = [
@@ -1790,13 +1798,7 @@ function renderMonthCard(monthDate) {
 }
 
 function renderDateSelector() {
-  const bounds = availabilityCalendarBounds();
-  const currentMonth = startOfMonth(new Date());
-  const minOffset = bounds.hasBounds ? bounds.minOffset : 0;
-  const maxOffset = bounds.hasBounds ? bounds.maxOffset : 0;
-  if (draft.calendarMonthOffset < minOffset) draft.calendarMonthOffset = minOffset;
-  if (draft.calendarMonthOffset > maxOffset) draft.calendarMonthOffset = maxOffset;
-  const baseMonth = addMonths(currentMonth, draft.calendarMonthOffset);
+  const baseMonth = addMonths(startOfMonth(new Date()), draft.calendarMonthOffset);
   const nextMonth = addMonths(baseMonth, 1);
   const singleMonth = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
 
@@ -1807,14 +1809,14 @@ function renderDateSelector() {
       </div>
       <div class="calendar-head">
         <div class="calendar-nav">
-          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month" ${draft.calendarMonthOffset <= minOffset ? "disabled" : ""}>&lt;</button>
-          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month" ${draft.calendarMonthOffset >= maxOffset ? "disabled" : ""}>&gt;</button>
+          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month">&lt;</button>
+          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month">&gt;</button>
         </div>
       </div>
 
       <div class="calendar-grid-wrap">
         ${renderMonthCard(baseMonth)}
-        ${singleMonth || draft.calendarMonthOffset >= maxOffset ? "" : renderMonthCard(nextMonth)}
+        ${singleMonth ? "" : renderMonthCard(nextMonth)}
       </div>
 
       <div class="calendar-note">
@@ -3568,11 +3570,7 @@ function applyStateToDraft() {
   draft.promoError = state.promoError || "";
   draft.currentStep = state.currentStep ?? 0;
   draft.bookingIntentId = state.bookingIntentId || "";
-  const bounds = availabilityCalendarBounds();
-  const desiredOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : bounds.minOffset;
-  draft.calendarMonthOffset = bounds.hasBounds
-    ? Math.max(bounds.minOffset, Math.min(bounds.maxOffset, desiredOffset))
-    : desiredOffset;
+  draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
   normalizeAddonSelections();
 }
 

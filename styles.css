@@ -1473,6 +1473,16 @@ select {
   cursor: not-allowed;
 }
 
+.day-cell.past-day,
+.day-cell.availability-none {
+  opacity: 0.35;
+  cursor: not-allowed;
+  color: #9a958d;
+  border-color: #ded8cf;
+  background: #f3f1ec;
+  filter: grayscale(1);
+}
+
 .day-cell.soldout-day {
   opacity: 0.72;
   color: #8f8a82;
