@@ -197,6 +197,22 @@ function generateReservationCode(existing = []) {
   return `R${Date.now().toString(36).slice(-4).toUpperCase()}`.slice(0, 5);
 }
 
+function formatDateParts(dateInput) {
+  const date = new Date(dateInput);
+  return {
+    day: String(date.getDate()).padStart(2, "0"),
+    month: String(date.getMonth() + 1).padStart(2, "0"),
+    year: String(date.getFullYear()),
+  };
+}
+
+function bookingGuestCount(booking = {}) {
+  if (booking.packageQuantities && typeof booking.packageQuantities === "object") {
+    return Object.values(booking.packageQuantities).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
+  }
+  return Math.max(1, Number(booking.packagePeople || 1));
+}
+
 async function sendConfirmationEmail({ workspace, booking }) {
   const { fromEmail, replyTo, subject, text, html, fromName } = buildEmail({ workspace, booking });
   const apiKey = process.env.RESEND_API_KEY;
@@ -296,8 +312,16 @@ exports.handler = async (event) => {
       ...booking,
       id: intentId,
       reservationCode,
+      reservationId: reservationCode,
       stage: "confirmed",
       createdAt: booking.createdAt || now.toISOString(),
+      bookingDateTime: booking.createdAt || now.toISOString(),
+      bookingDay: formatDateParts(booking.createdAt || now.toISOString()).day,
+      bookingMonth: formatDateParts(booking.createdAt || now.toISOString()).month,
+      bookingYear: formatDateParts(booking.createdAt || now.toISOString()).year,
+      checkInDate: booking.startDate,
+      checkOutDate: booking.endDate,
+      guestCount: bookingGuestCount(booking),
       updatedAt: now.toISOString(),
     };
 
@@ -305,8 +329,16 @@ exports.handler = async (event) => {
       ...booking,
       id: bookingId,
       reservationCode,
+      reservationId: reservationCode,
       status: "confirmed",
       createdAt: booking.createdAt || now.toISOString(),
+      bookingDateTime: booking.createdAt || now.toISOString(),
+      bookingDay: formatDateParts(booking.createdAt || now.toISOString()).day,
+      bookingMonth: formatDateParts(booking.createdAt || now.toISOString()).month,
+      bookingYear: formatDateParts(booking.createdAt || now.toISOString()).year,
+      checkInDate: booking.startDate,
+      checkOutDate: booking.endDate,
+      guestCount: bookingGuestCount(booking),
       holdExpiresAt: null,
       notes: booking.notes || "Confirmed booking.",
       source: "demo-checkout",

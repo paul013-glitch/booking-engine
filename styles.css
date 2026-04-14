@@ -1114,12 +1114,18 @@ select {
 
 .table-shell {
   overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .admin-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1640px;
   border-collapse: collapse;
+}
+
+.business-table {
+  min-width: 760px;
 }
 
 .admin-table th,
@@ -1132,6 +1138,117 @@ select {
 
 .admin-table tbody tr:hover {
   background: var(--panel-soft);
+}
+
+.booking-row {
+  cursor: pointer;
+}
+
+.booking-row:focus {
+  outline: 2px solid rgba(138, 109, 73, 0.22);
+  outline-offset: -2px;
+}
+
+.booking-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.booking-toolbar label {
+  display: grid;
+  gap: 8px;
+  min-width: 280px;
+}
+
+.booking-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.booking-detail-modal {
+  position: relative;
+  margin-top: 16px;
+}
+
+.booking-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(47, 38, 29, 0.42);
+  backdrop-filter: blur(2px);
+  z-index: 20;
+}
+
+.booking-detail-card {
+  position: fixed;
+  z-index: 21;
+  top: 50%;
+  left: 50%;
+  width: min(980px, calc(100vw - 32px));
+  max-height: min(84vh, 900px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 24px 60px rgba(34, 24, 14, 0.28);
+  padding: 22px;
+}
+
+.booking-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.booking-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.booking-detail-meta,
+.booking-detail-notes > div {
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.booking-detail-notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.booking-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  align-items: end;
+  margin-top: 18px;
+}
+
+.booking-detail-actions label {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.notice.success {
+  border-color: #8db27d;
+  background: #edf6e9;
+  color: #345326;
 }
 
 .table-sort-button {
@@ -1610,6 +1727,32 @@ select {
 
   .addon-grid .addon-card .option-meta {
     flex-wrap: wrap;
+  }
+
+  .booking-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .booking-toolbar label,
+  .booking-detail-actions label {
+    min-width: 0;
+  }
+
+  .booking-detail-card {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    padding: 16px;
+  }
+
+  .booking-detail-grid,
+  .booking-detail-notes {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-detail-head {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .package-row .option-body h3 {

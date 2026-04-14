@@ -38,7 +38,9 @@ exports.handler = async (event, context) => {
     }
 
     const now = new Date().toISOString();
-    const targetStatus = payload.targetStatus === "confirmed" ? "confirmed" : "cancelled";
+    const targetStatus = ["confirmed", "held", "cancelled"].includes(payload.targetStatus)
+      ? payload.targetStatus
+      : "cancelled";
     let found = false;
 
     workspace.bookings = (workspace.bookings || []).map((booking) => {
@@ -51,6 +53,16 @@ exports.handler = async (event, context) => {
           status: "confirmed",
           confirmedAt: booking.confirmedAt || now,
           holdExpiresAt: null,
+        };
+      }
+
+      if (targetStatus === "held") {
+        const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        const { cancelledAt, ...rest } = booking;
+        return {
+          ...rest,
+          status: "held",
+          holdExpiresAt,
         };
       }
 
@@ -73,7 +85,7 @@ exports.handler = async (event, context) => {
 
       return {
         ...intent,
-        stage: targetStatus === "confirmed" ? "confirmed" : "cancelled",
+        stage: targetStatus,
         updatedAt: now,
       };
     });

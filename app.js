@@ -18,6 +18,10 @@ const adminUiState = {
   configTab: "packages",
   bookingSort: { key: "createdAt", direction: "desc" },
   leadSort: { key: "createdAt", direction: "desc" },
+  bookingDateFilter: "",
+  bookingDetailId: "",
+  bookingDetailNotice: "",
+  bookingDetailNoticeType: "info",
 };
 
 const logoSvg =
@@ -1008,6 +1012,238 @@ function countryOptions() {
     "United Kingdom",
     "United States",
   ].map((name) => ({ value: name, label: name }));
+}
+
+function formatDateShort(value) {
+  const date = parseDateValue(value);
+  if (!date) return "";
+  return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
+}
+
+function formatDateTimeParts(value) {
+  const date = parseDateValue(value);
+  if (!date) {
+    return { label: "", day: "", month: "", year: "" };
+  }
+
+  return {
+    label: formatDateTime(date),
+    day: String(date.getDate()).padStart(2, "0"),
+    month: String(date.getMonth() + 1).padStart(2, "0"),
+    year: String(date.getFullYear()),
+  };
+}
+
+function bookingGuestCount(booking = {}) {
+  if (Number.isFinite(Number(booking.guestCount))) {
+    return Number(booking.guestCount);
+  }
+
+  if (booking.packageQuantities && typeof booking.packageQuantities === "object") {
+    return Object.values(booking.packageQuantities).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
+  }
+
+  return Math.max(1, Number(booking.packagePeople || 1));
+}
+
+function bookingPackageSummary(booking = {}) {
+  if (booking.packageQuantities && typeof booking.packageQuantities === "object") {
+    const rows = Object.entries(booking.packageQuantities)
+      .map(([packageId, quantity]) => {
+        const pkg = state.packages.find((item) => item.id === packageId);
+        if (!pkg || !quantity) return null;
+        return `${pkg.name} x ${quantity}`;
+      })
+      .filter(Boolean);
+    if (rows.length) return rows.join(", ");
+  }
+
+  const fallback = state.packages.find((item) => item.id === booking.packageId);
+  return `${fallback?.name || booking.packageId || ""} x ${Math.max(1, Number(booking.packagePeople || 1))}`;
+}
+
+function bookingAddonSummary(booking = {}) {
+  const addonIds = Array.isArray(booking.addonIds) ? booking.addonIds : [];
+  if (!addonIds.length) return "";
+
+  const counts = addonIds.reduce((map, addonId) => {
+    map.set(addonId, (map.get(addonId) || 0) + 1);
+    return map;
+  }, new Map());
+
+  return Array.from(counts.entries())
+    .map(([addonId, quantity]) => {
+      const addon = getAddon(addonId);
+      return `${addon?.name || addonId} x ${quantity}`;
+    })
+    .join(", ");
+}
+
+function bookingDateOptions() {
+  return Array.from(
+    new Map(
+      state.bookings
+        .map((booking) => booking.startDate)
+        .filter(Boolean)
+        .map((date) => [date, date]),
+    ).values(),
+  ).sort((a, b) => new Date(a) - new Date(b));
+}
+
+function filteredAdminBookings() {
+  const filterDate = adminUiState.bookingDateFilter || "";
+  return state.bookings.filter((booking) => {
+    if (!filterDate) return true;
+    return booking.startDate === filterDate;
+  });
+}
+
+function bookingStatusOptions() {
+  return [
+    { value: "confirmed", label: "Confirmed" },
+    { value: "held", label: "Held" },
+    { value: "cancelled", label: "Cancelled" },
+  ];
+}
+
+function businessCheckInDates() {
+  return Array.from(
+    new Set(
+      state.bookings
+        .filter((booking) => booking.startDate && blocksInventory(booking))
+        .map((booking) => booking.startDate),
+    ),
+  ).sort((a, b) => new Date(a) - new Date(b));
+}
+
+function businessBookingsForDate(checkInDate) {
+  return state.bookings.filter((booking) => booking.startDate === checkInDate && blocksInventory(booking));
+}
+
+function businessGuestCapacityForDate(checkInDate) {
+  return state.rooms.reduce((sum, room) => {
+    const row = state.camp.availability?.[room.id]?.weeks?.[weekKeyForDate(checkInDate)];
+    const units = Number(row?.units ?? room.totalUnits ?? 0);
+    return sum + Math.max(0, units) * Math.max(0, Number(room.capacity || 0));
+  }, 0);
+}
+
+function businessWeeklyRows() {
+  return businessCheckInDates().map((checkInDate) => {
+    const bookings = businessBookingsForDate(checkInDate);
+    const spotsBooked = bookings.reduce((sum, booking) => sum + bookingGuestCount(booking), 0);
+    const spotsAvailable = Math.max(0, businessGuestCapacityForDate(checkInDate) - spotsBooked);
+    const totalCapacity = spotsBooked + spotsAvailable;
+    const occupancy = totalCapacity > 0 ? Math.round((spotsBooked / totalCapacity) * 100) : 0;
+    const revenueSum = bookings.reduce(
+      (sum, booking) => sum + (booking.status === "confirmed" ? Number(booking.total || 0) : 0),
+      0,
+    );
+
+    return {
+      checkInDate,
+      spotsBooked,
+      spotsAvailable,
+      occupancy,
+      revenueSum,
+    };
+  });
+}
+
+function bookingDetailNoticeMarkup() {
+  if (!adminUiState.bookingDetailNotice) return "";
+  const cls = adminUiState.bookingDetailNoticeType === "success" ? "notice success" : "notice";
+  return `<div class="${cls}">${escapeHtml(adminUiState.bookingDetailNotice)}</div>`;
+}
+
+function downloadCsv(filename, csvText) {
+  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function bookingsToCsv(rows = []) {
+  const headers = [
+    "Guest",
+    "Check-in date (dd-mm-yyyy)",
+    "Check-out date (dd-mm-yyyy)",
+    "Email",
+    "Phone",
+    "Room",
+    "Nr of guests",
+    "Package",
+    "Add-ons",
+    "Total",
+    "Booking status",
+    "Booking date/time",
+    "Day",
+    "Month",
+    "Year",
+    "Reservation ID",
+  ];
+
+  const lines = [headers.map(csvEscape).join(",")];
+  rows.forEach((booking) => {
+    const bookingTime = formatDateTimeParts(booking.createdAt);
+    const room = getRoom(booking.roomId);
+    lines.push(
+      [
+        booking.guestName || "",
+        formatDateShort(booking.startDate),
+        formatDateShort(booking.endDate),
+        booking.guestEmail || "",
+        booking.guestPhone || "",
+        room?.name || booking.roomId || "",
+        bookingGuestCount(booking),
+        bookingPackageSummary(booking),
+        bookingAddonSummary(booking),
+        Number(booking.total || 0),
+        booking.status || "",
+        bookingTime.label,
+        bookingTime.day,
+        bookingTime.month,
+        bookingTime.year,
+        booking.reservationCode || booking.reservationId || "",
+      ]
+        .map(csvEscape)
+        .join(","),
+    );
+  });
+
+  return lines.join("\r\n");
+}
+
+function openBookingDetail(bookingId) {
+  adminUiState.bookingDetailId = bookingId || "";
+  adminUiState.bookingDetailNotice = "";
+  adminUiState.bookingDetailNoticeType = "info";
+  renderAdminPage();
+}
+
+function closeBookingDetail() {
+  adminUiState.bookingDetailId = "";
+  adminUiState.bookingDetailNotice = "";
+  adminUiState.bookingDetailNoticeType = "info";
+  renderAdminPage();
+}
+
+function currentBookingDetail() {
+  return state.bookings.find((booking) => booking.id === adminUiState.bookingDetailId) || null;
+}
+
+function setBookingDetailNotice(message, type = "info") {
+  adminUiState.bookingDetailNotice = message;
+  adminUiState.bookingDetailNoticeType = type;
 }
 
 function endDateForDraft() {
@@ -2004,6 +2240,7 @@ function renderAdminPage() {
   const roomCount = document.getElementById("roomCount");
   const packageCount = document.getElementById("packageCount");
   const addonCount = document.getElementById("addonCount");
+  const businessCount = document.getElementById("businessCount");
   const bookingCount = document.getElementById("bookingCount");
   const leadCount = document.getElementById("leadCount");
   const activeTab = adminUiState.activeTab || "bookings";
@@ -2013,7 +2250,16 @@ function renderAdminPage() {
   if (roomCount) roomCount.textContent = `${state.rooms.length} rooms`;
   if (packageCount) packageCount.textContent = `${state.packages.length} packages`;
   if (addonCount) addonCount.textContent = `${state.addons.length} add-ons`;
+  const businessRows = businessWeeklyRows();
+  if (businessCount) businessCount.textContent = `${businessRows.length} weeks`;
   if (bookingCount) bookingCount.textContent = `${state.bookings.length} bookings`;
+  const visibleBookingRows = filteredAdminBookings();
+  const bookingFilterCount = document.getElementById("bookingFilterCount");
+  if (bookingFilterCount) {
+    bookingFilterCount.textContent = adminUiState.bookingDateFilter
+      ? `${visibleBookingRows.length} filtered`
+      : `${visibleBookingRows.length} shown`;
+  }
   const leadRows = [
     ...state.bookingIntents
       .filter((intent) => intent.stage !== "confirmed")
@@ -2028,6 +2274,17 @@ function renderAdminPage() {
   const bookingIntentCard = document.getElementById("bookingIntentCard");
   const bookingIntentList = document.getElementById("bookingIntentList");
   const bookingTableBody = document.getElementById("bookingTableBody");
+  const businessTableBody = document.getElementById("businessTableBody");
+  const bookingDateFilter = document.getElementById("bookingDateFilter");
+  const bookingCsvExport = document.getElementById("bookingCsvExport");
+  const bookingDetailModal = document.getElementById("bookingDetailModal");
+  const bookingDetailTitle = document.getElementById("bookingDetailTitle");
+  const bookingDetailSubtitle = document.getElementById("bookingDetailSubtitle");
+  const bookingDetailNotice = document.getElementById("bookingDetailNotice");
+  const bookingDetailContent = document.getElementById("bookingDetailContent");
+  const bookingDetailStatus = document.getElementById("bookingDetailStatus");
+  const bookingDetailSaveStatus = document.getElementById("bookingDetailSaveStatus");
+  const bookingDetailCancel = document.getElementById("bookingDetailCancel");
   const leadTableBody = document.getElementById("leadTableBody");
   const campForm = document.getElementById("campForm");
   const analyticsForm = document.getElementById("analyticsForm");
@@ -2089,6 +2346,20 @@ function renderAdminPage() {
     topbarBookingUrl.setAttribute("href", bookingUrl());
   }
   applyTheme(state.camp.theme);
+
+  if (bookingDateFilter) {
+    const currentFilter = adminUiState.bookingDateFilter || "";
+    bookingDateFilter.innerHTML = `
+      <option value="">All check-in dates</option>
+      ${bookingDateOptions()
+        .map(
+          (date) =>
+            `<option value="${date}" ${date === currentFilter ? "selected" : ""}>${formatDateShort(date) || formatDate(date)}</option>`,
+        )
+        .join("")}
+    `;
+    bookingDateFilter.value = currentFilter;
+  }
 
   panes.forEach((pane) => {
     pane.hidden = pane.dataset.adminPane !== activeTab;
@@ -2173,17 +2444,23 @@ function renderAdminPage() {
 
   const bookingSort = adminUiState.bookingSort || { key: "createdAt", direction: "desc" };
   const leadSort = adminUiState.leadSort || { key: "createdAt", direction: "desc" };
-  const bookingsForTable = sortAdminRows(state.bookings, bookingSort, {
-    guestName: (item) => item.guestName || "",
-    startDate: (item) => item.startDate || "",
+  const bookingsForTable = sortAdminRows(visibleBookingRows, bookingSort, {
+    guest: (item) => item.guestName || "",
+    checkIn: (item) => item.startDate || "",
+    checkOut: (item) => item.endDate || "",
+    email: (item) => item.guestEmail || "",
+    phone: (item) => item.guestPhone || "",
     room: (item) => getRoom(item.roomId)?.name || "",
-    package: (item) => {
-      const pkg = getPackage(item.packageId);
-      return item.packageQuantities ? Object.keys(item.packageQuantities).length : pkg?.name || "";
-    },
+    guests: (item) => bookingGuestCount(item),
+    package: (item) => bookingPackageSummary(item),
+    addons: (item) => bookingAddonSummary(item),
     total: (item) => Number(item.total || 0),
     status: (item) => item.status || "",
-    createdAt: (item) => item.createdAt || "",
+    bookedAt: (item) => item.createdAt || "",
+    day: (item) => formatDateTimeParts(item.createdAt).day,
+    month: (item) => formatDateTimeParts(item.createdAt).month,
+    year: (item) => formatDateTimeParts(item.createdAt).year,
+    reservationId: (item) => item.reservationCode || item.reservationId || "",
   });
 
   const leadsForTable = sortAdminRows(
@@ -2205,46 +2482,156 @@ function renderAdminPage() {
   if (bookingTableBody) {
     bookingTableBody.innerHTML = bookingsForTable
       .map((booking) => {
-        const pkg = getPackage(booking.packageId);
+        const bookingTime = formatDateTimeParts(booking.createdAt);
         const room = getRoom(booking.roomId);
-        const packageSummary = booking.packageQuantities
-          ? Object.entries(booking.packageQuantities)
-              .map(([packageId, quantity]) => `${escapeHtml(getPackage(packageId).name)} x ${escapeHtml(quantity)}`)
-              .join(", ")
-          : `${escapeHtml(pkg.name)} x ${escapeHtml(booking.packagePeople || 1)}`;
+        const addonSummary = bookingAddonSummary(booking) || "None";
+        const packageSummary = bookingPackageSummary(booking);
         return `
-          <tr>
+          <tr class="booking-row" tabindex="0" role="button" data-booking-open="${booking.id}">
             <td>
               <strong>${booking.guestName || "Guest"}</strong>
-              <div class="tiny muted">${booking.guestEmail || "No email"}</div>
-              <div class="tiny muted">${booking.guestGender || "No gender"} &middot; ${booking.guestCountry || "No country"}</div>
-              ${booking.customerDetails ? `<div class="tiny muted">${escapeHtml(customerDetailsSummaryText(booking.customerDetails))}</div>` : ""}
-              ${booking.promoCodes?.length ? `<div class="tiny">Promo: ${escapeHtml(booking.promoCodes.join(", "))}</div>` : ""}
             </td>
-            <td>
-              <strong>${formatDate(booking.startDate)}</strong>
-              <div class="tiny muted">${formatDate(booking.endDate)}</div>
-            </td>
+            <td><strong>${formatDateShort(booking.startDate)}</strong></td>
+            <td><strong>${formatDateShort(booking.endDate)}</strong></td>
+            <td>${booking.guestEmail || "No email"}</td>
+            <td>${booking.guestPhone || "No phone"}</td>
             <td><strong>${room?.name || booking.roomId || ""}</strong></td>
-            <td><div>${packageSummary}</div></td>
+            <td>${bookingGuestCount(booking)}</td>
+            <td>${packageSummary}</td>
+            <td>${addonSummary}</td>
             <td><strong>${money(booking.total)}</strong></td>
             <td><span class="status ${booking.status}">${booking.status}</span></td>
-            <td><div class="tiny">${formatDateTime(booking.createdAt)}</div></td>
-            <td>
-              <div class="tiny">${booking.reservationCode || "pending"}</div>
-              <div class="tiny">${booking.confirmationEmail?.status || "not sent"}</div>
-            </td>
-            <td>
-              ${
-                booking.status !== "expired"
-                  ? `<button type="button" class="button button-secondary" data-cancel-booking="${booking.id}" data-reservation-code="${booking.reservationCode || ""}" data-current-status="${booking.status}">${booking.status === "cancelled" ? "Confirm" : "Cancel"}</button>`
-                  : ""
-              }
-            </td>
+            <td>${bookingTime.label}</td>
+            <td>${bookingTime.day}</td>
+            <td>${bookingTime.month}</td>
+            <td>${bookingTime.year}</td>
+            <td>${booking.reservationCode || "pending"}</td>
           </tr>
         `;
       })
       .join("");
+  }
+
+  if (businessTableBody) {
+    businessTableBody.innerHTML = businessRows.length
+      ? businessRows
+          .map((row) => {
+            const occupancyLabel = `${row.occupancy}%`;
+            return `
+              <tr>
+                <td><strong>${formatDateShort(row.checkInDate)}</strong></td>
+                <td>${row.spotsBooked}</td>
+                <td>${row.spotsAvailable}</td>
+                <td><strong>${occupancyLabel}</strong></td>
+                <td><strong>${money(row.revenueSum)}</strong></td>
+              </tr>
+            `;
+          })
+          .join("")
+      : `
+        <tr>
+          <td colspan="5">
+            <div class="availability-empty">No bookings yet for the business summary.</div>
+          </td>
+        </tr>
+      `;
+  }
+
+  const bookingDetail = currentBookingDetail();
+  if (bookingDetailModal) {
+    bookingDetailModal.hidden = !bookingDetail;
+  }
+
+  if (bookingDetail && bookingDetailTitle && bookingDetailSubtitle && bookingDetailContent && bookingDetailStatus) {
+    const room = getRoom(bookingDetail.roomId);
+    const bookingTime = formatDateTimeParts(bookingDetail.createdAt);
+    bookingDetailTitle.textContent = bookingDetail.guestName || "Reservation details";
+    bookingDetailSubtitle.textContent = `${bookingDetail.reservationCode || "pending"} · ${bookingDetail.status}`;
+    bookingDetailContent.innerHTML = `
+      <div class="booking-detail-grid">
+        <div class="booking-detail-meta">
+          <span class="tiny">Guest</span>
+          <strong>${escapeHtml(bookingDetail.guestName || "Guest")}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Check-in</span>
+          <strong>${escapeHtml(formatDateShort(bookingDetail.startDate))}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Check-out</span>
+          <strong>${escapeHtml(formatDateShort(bookingDetail.endDate))}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Email</span>
+          <strong>${escapeHtml(bookingDetail.guestEmail || "No email")}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Phone</span>
+          <strong>${escapeHtml(bookingDetail.guestPhone || "No phone")}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Room</span>
+          <strong>${escapeHtml(room?.name || bookingDetail.roomId || "")}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Guests</span>
+          <strong>${bookingGuestCount(bookingDetail)}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Package</span>
+          <strong>${escapeHtml(bookingPackageSummary(bookingDetail))}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Add-ons</span>
+          <strong>${escapeHtml(bookingAddonSummary(bookingDetail) || "None")}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Total</span>
+          <strong>${money(bookingDetail.total)}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Booked</span>
+          <strong>${escapeHtml(bookingTime.label)}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Reservation ID</span>
+          <strong>${escapeHtml(bookingDetail.reservationCode || bookingDetail.reservationId || "")}</strong>
+        </div>
+      </div>
+      <div class="booking-detail-notes">
+        <div><span class="tiny">Gender</span><strong>${escapeHtml(bookingDetail.guestGender || "No gender")}</strong></div>
+        <div><span class="tiny">Country</span><strong>${escapeHtml(bookingDetail.guestCountry || "No country")}</strong></div>
+        <div><span class="tiny">Date of birth</span><strong>${escapeHtml(
+          [bookingDetail.guestBirthDay, bookingDetail.guestBirthMonth, bookingDetail.guestBirthYear].filter(Boolean).join("-"),
+        ) || "Not set"}</strong></div>
+        <div><span class="tiny">Status</span><strong>${escapeHtml(bookingDetail.status || "")}</strong></div>
+        <div><span class="tiny">Confirmation email</span><strong>${escapeHtml(bookingDetail.confirmationEmail?.status || "not sent")}</strong></div>
+      </div>
+    `;
+
+    bookingDetailStatus.innerHTML = bookingStatusOptions()
+      .map(
+        (option) =>
+          `<option value="${option.value}" ${bookingDetail.status === option.value ? "selected" : ""}>${option.label}</option>`,
+      )
+      .join("");
+
+    if (bookingDetailSaveStatus) {
+      bookingDetailSaveStatus.dataset.bookingId = bookingDetail.id;
+    }
+    if (bookingDetailCancel) {
+      bookingDetailCancel.dataset.bookingId = bookingDetail.id;
+      bookingDetailCancel.disabled = bookingDetail.status === "expired";
+      bookingDetailCancel.textContent = bookingDetail.status === "cancelled" ? "Reinstate reservation" : "Cancel reservation";
+    }
+    if (bookingDetailStatus) {
+      bookingDetailStatus.value = bookingDetail.status || "confirmed";
+    }
+    if (bookingDetailNotice) {
+      bookingDetailNotice.innerHTML = bookingDetailNoticeMarkup();
+    }
+  } else if (bookingDetailContent) {
+    bookingDetailContent.innerHTML = "";
   }
 
   if (leadTableBody) {
@@ -2736,6 +3123,11 @@ async function cancelBookingReservation(bookingId, reservationCode = "", current
     if (result?.workspace) {
       hydrateStateFromWorkspace(result.workspace);
       authState.workspace = result.workspace;
+      if (targetStatus === "cancelled") {
+        setBookingDetailNotice("Cancellation processed. The blocked spot has been released.", "success");
+      } else {
+        setBookingDetailNotice("Reservation reinstated.", "success");
+      }
       renderAdminPage();
       updateAdminAuthUI(authState.user);
     }
@@ -3000,6 +3392,44 @@ function setBookingFieldErrors(fieldIds = []) {
   ];
   for (const id of allFieldIds) {
     document.getElementById(id)?.classList.toggle("is-invalid", fieldIds.includes(id));
+  }
+}
+
+async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", currentStatus = "") {
+  if (!bookingId || !targetStatus) return;
+  const normalizedStatus = ["confirmed", "held", "cancelled"].includes(targetStatus) ? targetStatus : "confirmed";
+  const confirmed =
+    normalizedStatus === "cancelled"
+      ? window.confirm("Cancel this reservation and release the room back into availability?")
+      : true;
+  if (!confirmed) return;
+
+  try {
+    const result = await apiJson("cancel-booking", {
+      method: "POST",
+      headers: authState.token ? { Authorization: `Bearer ${authState.token}` } : {},
+      body: JSON.stringify({
+        bookingId,
+        reservationCode,
+        targetStatus: normalizedStatus,
+      }),
+    });
+
+    if (result?.workspace) {
+      hydrateStateFromWorkspace(result.workspace);
+      authState.workspace = result.workspace;
+      if (normalizedStatus === "cancelled") {
+        setBookingDetailNotice("Cancellation processed. The blocked spot has been released.", "success");
+      } else if (normalizedStatus === "held") {
+        setBookingDetailNotice("Reservation status updated to held.", "success");
+      } else {
+        setBookingDetailNotice("Reservation status updated to confirmed.", "success");
+      }
+      renderAdminPage();
+      updateAdminAuthUI(authState.user);
+    }
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Could not update reservation.");
   }
 }
 
@@ -3425,12 +3855,23 @@ function initAdminInteractions() {
   const availabilityBasePrice = document.getElementById("availabilityBasePrice");
   const availabilityUpdateAllPrices = document.getElementById("availabilityUpdateAllPrices");
   const saveAvailabilityButton = document.getElementById("saveAvailability");
+  const bookingDateFilter = document.getElementById("bookingDateFilter");
+  const bookingCsvExport = document.getElementById("bookingCsvExport");
+  const bookingDetailStatus = document.getElementById("bookingDetailStatus");
+  const bookingDetailSaveStatus = document.getElementById("bookingDetailSaveStatus");
+  const bookingDetailCancel = document.getElementById("bookingDetailCancel");
 
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
   }
 
   document.addEventListener("click", (event) => {
+    const bookingRow = event.target?.closest?.("[data-booking-open]");
+    if (bookingRow && !event.target?.closest?.("button, a, select, input, textarea")) {
+      openBookingDetail(bookingRow.dataset.bookingOpen);
+      return;
+    }
+
     const bookingSortButton = event.target?.closest?.("[data-booking-sort]");
     if (bookingSortButton) {
       adminUiState.bookingSort = toggleSortState(adminUiState.bookingSort, bookingSortButton.dataset.bookingSort || "createdAt");
@@ -3449,6 +3890,14 @@ function initAdminInteractions() {
     if (!tabButton) return;
     adminUiState.activeTab = tabButton.dataset.adminTab || "bookings";
     renderAdminPage();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const bookingRow = event.target?.closest?.("[data-booking-open]");
+    if (!bookingRow) return;
+    event.preventDefault();
+    openBookingDetail(bookingRow.dataset.bookingOpen);
   });
 
   document.addEventListener("click", (event) => {
@@ -3473,6 +3922,55 @@ function initAdminInteractions() {
       .forEach((input) => {
         input.value = price;
       });
+  });
+
+  bookingDateFilter?.addEventListener("change", (event) => {
+    adminUiState.bookingDateFilter = event.target.value || "";
+    renderAdminPage();
+  });
+
+  bookingCsvExport?.addEventListener("click", () => {
+    const rows = sortAdminRows(filteredAdminBookings(), adminUiState.bookingSort || { key: "createdAt", direction: "desc" }, {
+      guest: (item) => item.guestName || "",
+      checkIn: (item) => item.startDate || "",
+      checkOut: (item) => item.endDate || "",
+      email: (item) => item.guestEmail || "",
+      phone: (item) => item.guestPhone || "",
+      room: (item) => getRoom(item.roomId)?.name || "",
+      guests: (item) => bookingGuestCount(item),
+      package: (item) => bookingPackageSummary(item),
+      addons: (item) => bookingAddonSummary(item),
+      total: (item) => Number(item.total || 0),
+      status: (item) => item.status || "",
+      bookedAt: (item) => item.createdAt || "",
+      day: (item) => formatDateTimeParts(item.createdAt).day,
+      month: (item) => formatDateTimeParts(item.createdAt).month,
+      year: (item) => formatDateTimeParts(item.createdAt).year,
+      reservationId: (item) => item.reservationCode || item.reservationId || "",
+    });
+    downloadCsv(`bookings-${bookingSlug()}-${new Date().toISOString().slice(0, 10)}.csv`, bookingsToCsv(rows));
+  });
+
+  bookingDetailStatus?.addEventListener("change", () => {
+    adminUiState.bookingDetailNotice = "";
+    adminUiState.bookingDetailNoticeType = "info";
+  });
+
+  bookingDetailSaveStatus?.addEventListener("click", async () => {
+    const bookingId = bookingDetailSaveStatus.dataset.bookingId;
+    if (!bookingId || !bookingDetailStatus) return;
+    const booking = state.bookings.find((item) => item.id === bookingId);
+    if (!booking) return;
+    await saveBookingStatus(bookingId, bookingDetailStatus.value, booking.reservationCode || "", booking.status || "");
+  });
+
+  bookingDetailCancel?.addEventListener("click", async () => {
+    const bookingId = bookingDetailCancel.dataset.bookingId;
+    if (!bookingId) return;
+    const booking = state.bookings.find((item) => item.id === bookingId);
+    if (!booking) return;
+    const targetStatus = booking.status === "cancelled" ? "confirmed" : "cancelled";
+    await saveBookingStatus(bookingId, targetStatus, booking.reservationCode || "", booking.status || "");
   });
 
   saveAvailabilityButton?.addEventListener("click", () => {
@@ -3704,6 +4202,13 @@ function initAdminInteractions() {
     addonForm.elements.id.value = "";
     saveState();
     renderAdminPage();
+  });
+
+  document.addEventListener("click", (event) => {
+    const closeDetailButton = event.target?.closest?.("[data-close-booking-detail]");
+    if (closeDetailButton) {
+      closeBookingDetail();
+    }
   });
 
   promoForm?.addEventListener("submit", (event) => {

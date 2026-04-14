@@ -35,11 +35,43 @@
 
         <section class="panel admin-tabs" aria-label="Admin sections">
           <button type="button" class="admin-tab-button" data-admin-tab="bookings">Bookings</button>
+          <button type="button" class="admin-tab-button" data-admin-tab="business">Business</button>
           <button type="button" class="admin-tab-button" data-admin-tab="leads">Leads</button>
           <button type="button" class="admin-tab-button" data-admin-tab="availability">Availability matrix</button>
           <button type="button" class="admin-tab-button" data-admin-tab="branding">Branding</button>
           <button type="button" class="admin-tab-button" data-admin-tab="analytics">Analytics</button>
           <button type="button" class="admin-tab-button" data-admin-tab="configure">Configure</button>
+        </section>
+
+        <section class="panel" data-admin-pane="business">
+          <div class="panel-head">
+            <div>
+              <p class="section-label">Business</p>
+              <h2>Weekly summary</h2>
+            </div>
+            <span class="pill" id="businessCount"></span>
+          </div>
+
+          <article class="list-card">
+            <div class="list-head">
+              <h3>Weekly performance</h3>
+              <span class="pill">Based on recorded check-in dates</span>
+            </div>
+            <div class="table-shell">
+              <table class="admin-table business-table" aria-label="Business summary table">
+                <thead>
+                  <tr>
+                    <th>Check-in date</th>
+                    <th>Spots booked</th>
+                    <th>Spots available</th>
+                    <th>Occupancy %</th>
+                    <th>Revenue sum</th>
+                  </tr>
+                </thead>
+                <tbody id="businessTableBody"></tbody>
+              </table>
+            </div>
+          </article>
         </section>
 
         <section class="panel" data-admin-pane="bookings">
@@ -55,23 +87,63 @@
               <h3>Bookings</h3>
               <span class="pill" id="bookingCount"></span>
             </div>
+            <div class="booking-toolbar">
+              <label>
+                Filter by check-in date
+                <select id="bookingDateFilter"></select>
+              </label>
+              <div class="booking-toolbar-actions">
+                <span class="pill" id="bookingFilterCount"></span>
+                <button class="button button-secondary" type="button" id="bookingCsvExport">Export CSV</button>
+              </div>
+            </div>
             <div class="table-shell">
               <table class="admin-table" aria-label="Bookings table">
                 <thead>
                   <tr>
-                    <th><button type="button" class="table-sort-button" data-booking-sort="guestName">Guest</button></th>
-                    <th><button type="button" class="table-sort-button" data-booking-sort="startDate">Stay</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="guest">Guest</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="checkIn">Check-in date</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="checkOut">Check-out date</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="email">Email</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="phone">Phone</button></th>
                     <th><button type="button" class="table-sort-button" data-booking-sort="room">Room</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="guests">Nr of guests</button></th>
                     <th><button type="button" class="table-sort-button" data-booking-sort="package">Package</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="addons">Add-ons</button></th>
                     <th><button type="button" class="table-sort-button" data-booking-sort="total">Total</button></th>
                     <th><button type="button" class="table-sort-button" data-booking-sort="status">Status</button></th>
-                    <th><button type="button" class="table-sort-button" data-booking-sort="createdAt">Booked</button></th>
-                    <th>Reservation</th>
-                    <th>Action</th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="bookedAt">Booking date / time</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="day">Day</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="month">Month</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="year">Year</button></th>
+                    <th><button type="button" class="table-sort-button" data-booking-sort="reservationId">Reservation ID</button></th>
                   </tr>
                 </thead>
                 <tbody id="bookingTableBody"></tbody>
               </table>
+            </div>
+            <div id="bookingDetailModal" class="booking-detail-modal" hidden>
+              <div class="booking-detail-backdrop" data-close-booking-detail></div>
+              <section class="booking-detail-card" role="dialog" aria-modal="true" aria-labelledby="bookingDetailTitle">
+                <div class="booking-detail-head">
+                  <div>
+                    <p class="section-label">Reservation details</p>
+                    <h3 id="bookingDetailTitle">Booking</h3>
+                    <p class="tiny" id="bookingDetailSubtitle"></p>
+                  </div>
+                  <button type="button" class="button button-secondary" data-close-booking-detail>Close</button>
+                </div>
+                <div id="bookingDetailNotice"></div>
+                <div id="bookingDetailContent"></div>
+                <div class="booking-detail-actions">
+                  <label>
+                    Booking status
+                    <select id="bookingDetailStatus"></select>
+                  </label>
+                  <button class="button button-primary" type="button" id="bookingDetailSaveStatus">Save status</button>
+                  <button class="button button-secondary" type="button" id="bookingDetailCancel">Cancel reservation</button>
+                </div>
+              </section>
             </div>
           </article>
         </section>
