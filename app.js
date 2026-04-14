@@ -1548,12 +1548,12 @@ function ensureAvailabilityCoverage(targetState = state) {
       targetState.camp.availability[room.id].weeks = {};
     }
 
-    for (let i = 0; i < 12; i += 1) {
-      const cursor = new Date(weekStart);
-      cursor.setDate(cursor.getDate() + i * 7);
-      const key = localDateKey(cursor);
-      if (!targetState.camp.availability[room.id].weeks[key]) {
-        targetState.camp.availability[room.id].weeks[key] = {
+      for (let i = 0; i < 52; i += 1) {
+        const cursor = new Date(weekStart);
+        cursor.setDate(cursor.getDate() + i * 7);
+        const key = localDateKey(cursor);
+        if (!targetState.camp.availability[room.id].weeks[key]) {
+          targetState.camp.availability[room.id].weeks[key] = {
           units: room.totalUnits,
           pricePerNight: room.pricePerNight,
         };
@@ -1611,9 +1611,15 @@ function selectedRoomAllocationPeopleCount() {
 
 function normalizeRoomAllocations() {
   const guestLimit = selectedPackagePeopleCount();
+  console.log("[book] normalizeRoomAllocations:start", {
+    guestLimit,
+    startDate: draft.startDate,
+    roomAllocations: { ...(draft.roomAllocations || {}) },
+  });
   if (!guestLimit) {
     draft.roomAllocations = {};
     draft.roomId = "";
+    console.log("[book] normalizeRoomAllocations:reset-no-guest-limit");
     return;
   }
 
@@ -1631,17 +1637,34 @@ function normalizeRoomAllocations() {
 
   draft.roomAllocations = nextAllocations;
   draft.roomId = selectedRoomAllocationRows()[0]?.id || "";
+  console.log("[book] normalizeRoomAllocations:done", {
+    nextAllocations,
+    roomId: draft.roomId,
+  });
 }
 
 function setRoomAllocationQuantity(roomId, quantity) {
   const guestLimit = selectedPackagePeopleCount();
   const current = roomAllocationQuantity(roomId);
   const otherAllocated = selectedRoomAllocationPeopleCount() - current;
+  const availableSpots = roomAvailableSpots(roomId, draft.startDate, endDateForDraft());
   const maxForRoom = Math.min(
-    roomAvailableSpots(roomId, draft.startDate, endDateForDraft()),
+    availableSpots,
     Math.max(0, guestLimit - otherAllocated),
   );
   const nextQuantity = Math.max(0, Math.min(maxForRoom, Number(quantity) || 0));
+  console.log("[book] setRoomAllocationQuantity", {
+    roomId,
+    requested: quantity,
+    current,
+    guestLimit,
+    otherAllocated,
+    availableSpots,
+    maxForRoom,
+    nextQuantity,
+    startDate: draft.startDate,
+    endDate: endDateForDraft(),
+  });
   draft.roomAllocations = {
     ...(draft.roomAllocations || {}),
     [roomId]: nextQuantity,
@@ -1650,6 +1673,23 @@ function setRoomAllocationQuantity(roomId, quantity) {
     delete draft.roomAllocations[roomId];
   }
   normalizeRoomAllocations();
+}
+
+function debugRoomAllocationChange(roomId, delta) {
+  const current = roomAllocationQuantity(roomId);
+  console.log("[book] room allocation button", {
+    roomId,
+    delta,
+    current,
+    packagePeople: selectedPackagePeopleCount(),
+    startDate: draft.startDate,
+    endDate: endDateForDraft(),
+    availableSpots: roomAvailableSpots(roomId, draft.startDate, endDateForDraft()),
+  });
+  setRoomAllocationQuantity(roomId, current + delta);
+  state.bookingConfirmation = null;
+  updateBookPage();
+  return false;
 }
 
 function normalizeAddonSelections() {
@@ -4464,11 +4504,11 @@ async function confirmBookingReservation() {
 }
 
 function initBookInteractions() {
-  document.addEventListener("click", (event) => {
-    const target = event.target.closest(
-      "[data-step], [data-select-package], [data-select-room], [data-addon-row-change], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], [data-apply-promo], #nextFromPackage, #nextFromDate, #nextFromRoom, #continueToBook",
-      );
-      if (!target) return;
+    document.addEventListener("click", (event) => {
+      const target = event.target.closest(
+        "[data-step], [data-select-package], [data-select-room], [data-room-row-change], [data-addon-row-change], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], [data-apply-promo], #nextFromPackage, #nextFromDate, #nextFromRoom, #continueToBook",
+        );
+        if (!target) return;
 
     if (target.dataset.step) {
       const nextStep = Number(target.dataset.step);
@@ -4505,14 +4545,20 @@ function initBookInteractions() {
       return;
     }
 
-    if (target.dataset.roomRowChange) {
-      const [roomId, delta] = target.dataset.roomRowChange.split(":");
-      const current = roomAllocationQuantity(roomId);
-      setRoomAllocationQuantity(roomId, current + Number(delta));
-      state.bookingConfirmation = null;
-      updateBookPage();
-      return;
-    }
+      if (target.dataset.roomRowChange) {
+        const [roomId, delta] = target.dataset.roomRowChange.split(":");
+        console.log("[book] roomRowChange click", {
+          roomId,
+          delta: Number(delta),
+          current: roomAllocationQuantity(roomId),
+          guestLimit: selectedPackagePeopleCount(),
+          startDate: draft.startDate,
+          endDate: endDateForDraft(),
+          availableSpots: roomAvailableSpots(roomId, draft.startDate, endDateForDraft()),
+        });
+        debugRoomAllocationChange(roomId, Number(delta));
+        return;
+      }
 
     if (target.dataset.packageRowChange) {
       const [packageId, delta] = target.dataset.packageRowChange.split(":");
@@ -5461,13 +5507,18 @@ function init() {
   applyTheme(state.camp.theme);
   renderLandingPage();
   initLandingAuth();
+  if (typeof window !== "undefined") {
+    window.bookRoomAllocationDebug = debugRoomAllocationChange;
+  }
 
   if (document.getElementById("stepper")) {
-    initBookInteractions();
-    draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
-    renderBookPage();
-    void loadPublicWorkspace();
-  }
+      initBookInteractions();
+      ensureAvailabilityCoverage(state);
+      saveState();
+      draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+      renderBookPage();
+      void loadPublicWorkspace();
+    }
 
   if (document.getElementById("adminWorkspace")) {
     initNetlifyIdentityAuth();
