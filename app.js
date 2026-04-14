@@ -1516,6 +1516,29 @@ function campSpotsLeftForDate(startDate, nights = previewStayNights()) {
   return Math.max(0, Math.min(...weekTotals));
 }
 
+function roomConfiguredUnits(roomId, startDate, endDate) {
+  if (!startDate || !endDate) return 0;
+  const weeks = weekKeysBetween(startDate, endDate);
+  if (!weeks.length) return 0;
+  const totals = weeks.map((weekKey) => {
+    const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
+    return Math.max(0, Number(row?.units ?? 0));
+  });
+  return Math.max(0, Math.min(...totals));
+}
+
+function campConfiguredSpotsForDate(startDate, nights = previewStayNights()) {
+  if (!startDate) return 0;
+  const endDate = addDays(startDate, nights);
+  const weeks = weekKeysBetween(startDate, endDate);
+  if (!weeks.length) return 0;
+
+  return orderedItems(state.rooms).reduce(
+    (sum, room) => sum + roomConfiguredUnits(room.id, startDate, endDate),
+    0,
+  );
+}
+
 function availabilityBandClass(spots) {
   const { lowThreshold, midThreshold } = availabilityThresholds();
   if (spots <= 0) return "soldout-day";
@@ -1880,9 +1903,25 @@ function renderDayCell(cellDate, monthDate) {
   const isStart = selected;
   const selectable = inMonth && !isPast && hasCoverage && isSelectableDate(iso);
   const spotsLeft = inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) ? campSpotsLeftForDate(iso) : 0;
+  const configuredSpots =
+    inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) ? campConfiguredSpotsForDate(iso) : 0;
   const requiredGuests = Math.max(1, selectedPackagePeopleCount());
-  const soldOut = inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) && spotsLeft < requiredGuests;
-  const availabilityClass = isPast ? "past-day" : !hasCoverage ? "availability-none" : soldOut ? "soldout-day" : availabilityBandClass(spotsLeft);
+  const isClosed =
+    inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) && configuredSpots <= 0;
+  const soldOut =
+    inMonth &&
+    !isPast &&
+    hasCoverage &&
+    !isClosed &&
+    isArrivalAllowed(iso, state.camp.bookingRules) &&
+    spotsLeft < requiredGuests;
+  const availabilityClass = isPast
+    ? "past-day"
+    : !hasCoverage || isClosed
+      ? "availability-none"
+      : soldOut
+        ? "soldout-day"
+        : availabilityBandClass(spotsLeft);
   const { showCountThreshold } = availabilityThresholds();
   const shouldShowCount = !isPast && hasCoverage && (soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold);
   const dayStatus = soldOut ? "FULL" : shouldShowCount && spotsLeft > 0 ? `${spotsLeft} left` : "";
