@@ -1924,7 +1924,7 @@ function renderDayCell(cellDate, monthDate) {
         : availabilityBandClass(spotsLeft);
   const { showCountThreshold } = availabilityThresholds();
   const shouldShowCount = !isPast && hasCoverage && (soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold);
-  const dayStatus = soldOut ? "FULL" : shouldShowCount && spotsLeft > 0 ? `${spotsLeft} left` : "";
+  const dayStatus = isClosed ? "CLOSED" : soldOut ? "FULL" : shouldShowCount && spotsLeft > 0 ? `${spotsLeft} left` : "";
 
   const classes = [
     "day-cell",
