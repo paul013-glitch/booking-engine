@@ -3508,7 +3508,7 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
   const user = window.netlifyIdentity.currentUser();
   if (!user) return;
   const email = String(user.email || "").trim();
-  console.debug("[admin] loadAdminWorkspace:start", { email, showLoading });
+  console.log("[admin] loadAdminWorkspace:start", { email, showLoading });
 
   authState.user = user;
   authState.workspaceLoaded = false;
@@ -3538,7 +3538,7 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
       renderAdminPage();
       setAdminLoadingState(false);
       updateAdminAuthUI(user);
-      console.debug("[admin] loadAdminWorkspace:success", { email, workspaceId: workspace.id });
+      console.log("[admin] loadAdminWorkspace:success", { email, workspaceId: workspace.id });
     }
   } catch (error) {
     if (authState.workspaceLoadSequence !== loadSequence) return;
@@ -3546,7 +3546,7 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
     if (authStatus) {
       authStatus.textContent = error instanceof Error ? error.message : "Could not load your workspace.";
     }
-    console.debug("[admin] loadAdminWorkspace:error", {
+    console.log("[admin] loadAdminWorkspace:error", {
       email,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -3617,7 +3617,7 @@ function updateAdminAuthUI(user) {
   const signedIn = !!user;
   const workspaceReady = signedIn && authState.workspaceLoaded;
   const email = String(user?.email || "").trim();
-  console.debug("[admin] updateAdminAuthUI", { signedIn, email, workspaceLoaded: authState.workspaceLoaded, workspaceReady });
+  console.log("[admin] updateAdminAuthUI", { signedIn, email, workspaceLoaded: authState.workspaceLoaded, workspaceReady });
   adminWorkspace.hidden = !workspaceReady;
   if (adminLoading) {
     adminLoading.hidden = workspaceReady;
@@ -3668,7 +3668,7 @@ function renderAdminLoadingState() {
     email.hidden = !adminUiState.loadingEmail;
     email.textContent = adminUiState.loadingEmail ? `Signed in as ${adminUiState.loadingEmail}` : "";
   }
-  console.debug("[admin] renderAdminLoadingState", {
+  console.log("[admin] renderAdminLoadingState", {
     visible: adminUiState.loadingVisible,
     title: adminUiState.loadingTitle,
     email: adminUiState.loadingEmail,
@@ -3693,7 +3693,7 @@ function setMasterLoadingState(visible, title = "Loading master portal", detail 
     emailNode.hidden = !adminUiState.masterLoadingEmail;
     emailNode.textContent = adminUiState.masterLoadingEmail ? `Signed in as ${adminUiState.masterLoadingEmail}` : "";
   }
-  console.debug("[master] setMasterLoadingState", {
+  console.log("[master] setMasterLoadingState", {
     visible: adminUiState.masterLoadingVisible,
     title: adminUiState.masterLoadingTitle,
     email: adminUiState.masterLoadingEmail,
@@ -3734,7 +3734,7 @@ function updateMasterAuthUI(user) {
   const signedIn = !!user;
   const workspaceReady = signedIn && adminUiState.masterWorkspaceReady && !adminUiState.masterWorkspaceLoading;
   const email = String(user?.email || "").trim();
-  console.debug("[master] updateMasterAuthUI", {
+  console.log("[master] updateMasterAuthUI", {
     signedIn,
     email,
     masterWorkspaceReady: adminUiState.masterWorkspaceReady,
@@ -3791,7 +3791,7 @@ function masterWorkspaceFilteredRows() {
 async function loadMasterWorkspaces({ showLoading = true } = {}) {
   if (!window.netlifyIdentity?.currentUser) return;
   const email = currentIdentityEmail();
-  console.debug("[master] loadMasterWorkspaces:start", { email, showLoading });
+  console.log("[master] loadMasterWorkspaces:start", { email, showLoading });
   adminUiState.masterWorkspaceLoading = true;
   adminUiState.masterWorkspaceReady = false;
   adminUiState.masterWorkspaceError = "";
@@ -3810,7 +3810,7 @@ async function loadMasterWorkspaces({ showLoading = true } = {}) {
     adminUiState.masterWorkspaceError = "";
     setMasterLoadingState(false);
     updateMasterAuthUI(window.netlifyIdentity.currentUser());
-    console.debug("[master] loadMasterWorkspaces:success", { email, count: adminUiState.masterWorkspaces.length });
+    console.log("[master] loadMasterWorkspaces:success", { email, count: adminUiState.masterWorkspaces.length });
   } catch (error) {
     adminUiState.masterWorkspaceLoading = false;
     adminUiState.masterWorkspaceReady = false;
@@ -3819,7 +3819,7 @@ async function loadMasterWorkspaces({ showLoading = true } = {}) {
       ? "This portal is reserved for the SaaS owner account."
       : adminUiState.masterWorkspaceError;
     setMasterLoadingState(true, "Owner access required", message, email);
-    console.debug("[master] loadMasterWorkspaces:error", { email, error: adminUiState.masterWorkspaceError });
+    console.log("[master] loadMasterWorkspaces:error", { email, error: adminUiState.masterWorkspaceError });
   }
 }
 
@@ -3877,12 +3877,12 @@ function renderMasterPage() {
 function initMasterAuth() {
   if (!window.netlifyIdentity || typeof window.netlifyIdentity.on !== "function") {
     updateMasterAuthUI(null);
-    console.debug("[master] initMasterAuth:identity unavailable");
+    console.log("[master] initMasterAuth:identity unavailable");
     return;
   }
 
   window.netlifyIdentity.on("init", (user) => {
-    console.debug("[master] identity:init", {
+    console.log("[master] identity:init", {
       email: user?.email || "",
       roles: user?.app_metadata?.roles || [],
     });
@@ -3893,7 +3893,7 @@ function initMasterAuth() {
   });
 
   window.netlifyIdentity.on("login", (user) => {
-    console.debug("[master] identity:login", {
+    console.log("[master] identity:login", {
       email: user?.email || "",
       roles: user?.app_metadata?.roles || [],
     });
@@ -3905,7 +3905,7 @@ function initMasterAuth() {
   });
 
   window.netlifyIdentity.on("logout", () => {
-    console.debug("[master] identity:logout");
+    console.log("[master] identity:logout");
     adminUiState.masterWorkspaces = [];
     adminUiState.masterWorkspaceFilter = "";
     adminUiState.masterWorkspaceReady = false;
@@ -3915,7 +3915,7 @@ function initMasterAuth() {
 
   window.netlifyIdentity.init();
   const currentUser = window.netlifyIdentity.currentUser();
-  console.debug("[master] initMasterAuth:currentUser", {
+  console.log("[master] initMasterAuth:currentUser", {
     email: currentUser?.email || "",
     roles: currentUser?.app_metadata?.roles || [],
   });
@@ -3965,12 +3965,12 @@ function initNetlifyIdentityAuth() {
       authStatus.textContent = "Netlify Identity is not available. Enable it in the Netlify dashboard.";
     }
     setAdminLoadingState(true, "Netlify Identity unavailable", "Enable Netlify Identity to load bookings, availability, and settings.");
-    console.debug("[admin] initNetlifyIdentityAuth:identity unavailable");
+    console.log("[admin] initNetlifyIdentityAuth:identity unavailable");
     return;
   }
 
   window.netlifyIdentity.on("init", (user) => {
-    console.debug("[admin] identity:init", {
+    console.log("[admin] identity:init", {
       email: user?.email || "",
       roles: user?.app_metadata?.roles || [],
     });
@@ -3981,7 +3981,7 @@ function initNetlifyIdentityAuth() {
   });
 
   window.netlifyIdentity.on("login", (user) => {
-    console.debug("[admin] identity:login", {
+    console.log("[admin] identity:login", {
       email: user?.email || "",
       roles: user?.app_metadata?.roles || [],
     });
@@ -3991,7 +3991,7 @@ function initNetlifyIdentityAuth() {
   });
 
   window.netlifyIdentity.on("logout", () => {
-    console.debug("[admin] identity:logout");
+    console.log("[admin] identity:logout");
     authState.user = null;
     authState.token = null;
     authState.workspace = null;
@@ -4013,7 +4013,7 @@ function initNetlifyIdentityAuth() {
   });
 
   window.netlifyIdentity.init();
-  console.debug("[admin] initNetlifyIdentityAuth:currentUser", {
+  console.log("[admin] initNetlifyIdentityAuth:currentUser", {
     email: window.netlifyIdentity.currentUser()?.email || "",
     roles: window.netlifyIdentity.currentUser()?.app_metadata?.roles || [],
   });
