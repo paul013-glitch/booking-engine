@@ -869,8 +869,8 @@ select {
 }
 
 .master-list-panel {
-  width: min(100%, 72vw);
-  max-width: 72vw;
+  width: min(100%, 90vw);
+  max-width: 90vw;
   margin-inline: auto;
 }
 
