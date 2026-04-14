@@ -3615,7 +3615,7 @@ function updateAdminAuthUI(user) {
   if (!adminWorkspace) return;
 
   const signedIn = !!user;
-  const workspaceReady = signedIn && authState.workspaceLoaded;
+  const workspaceReady = signedIn && !!authState.workspace && authState.workspaceLoaded !== false;
   const email = String(user?.email || "").trim();
   console.log("[admin] updateAdminAuthUI", { signedIn, email, workspaceLoaded: authState.workspaceLoaded, workspaceReady });
   adminWorkspace.hidden = !workspaceReady;
