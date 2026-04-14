@@ -2617,7 +2617,7 @@ function renderAdminPage() {
       : `<div class="notice success">Subscription is active. No action is needed right now.</div>`;
   }
   if (billingForm) {
-    billingForm.elements.status.value = billing.status || "trialing";
+    billingForm.elements.status.value = billingDisplayStatus(billing);
     billingForm.elements.plan.value = billing.plan || "trial";
     billingForm.elements.monthlyPrice.value = billing.monthlyPrice ?? 99;
     billingForm.elements.currency.value = billing.currency || "EUR";
@@ -5071,9 +5071,10 @@ function initAdminInteractions() {
   billingForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const toIso = (value) => (value ? new Date(`${value}T00:00:00`).toISOString() : "");
+    const existingBilling = state.camp.billing || createDefaultBilling();
     state.camp.billing = {
-      ...(state.camp.billing || createDefaultBilling()),
-      status: billingForm.elements.status.value || "trialing",
+      ...existingBilling,
+      status: existingBilling.status || "trialing",
       plan: billingForm.elements.plan.value.trim() || "trial",
       monthlyPrice: Math.max(0, Number(billingForm.elements.monthlyPrice.value || 99)),
       currency: billingForm.elements.currency.value.trim().toUpperCase() || "EUR",
