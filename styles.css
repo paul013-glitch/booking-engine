@@ -254,6 +254,11 @@ select {
   background: var(--panel-soft);
 }
 
+.button.is-loading {
+  cursor: wait;
+  opacity: 0.92;
+}
+
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

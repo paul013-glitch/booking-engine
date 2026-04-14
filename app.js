@@ -2380,6 +2380,7 @@ function renderAdminPage() {
   const bookingDateFilter = document.getElementById("bookingDateFilter");
   const bookingStatusFilter = document.getElementById("bookingStatusFilter");
   const bookingSearch = document.getElementById("bookingSearch");
+  const bookingRefresh = document.getElementById("bookingRefresh");
   const bookingCsvExport = document.getElementById("bookingCsvExport");
   const bookingDetailModal = document.getElementById("bookingDetailModal");
   const bookingDetailTitle = document.getElementById("bookingDetailTitle");
@@ -3522,6 +3523,16 @@ function setBookingFieldErrors(fieldIds = []) {
   }
 }
 
+function setBookingDetailSaveLoading(isLoading) {
+  const button = document.getElementById("bookingDetailSaveStatus");
+  if (!button) return;
+  button.disabled = isLoading;
+  button.classList.toggle("is-loading", isLoading);
+  button.innerHTML = isLoading
+    ? `<span class="button-spinner" aria-hidden="true"></span><span>Saving...</span>`
+    : "Save status";
+}
+
 async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", currentStatus = "") {
   if (!bookingId || !targetStatus) return;
   const normalizedStatus = ["confirmed", "held", "cancelled"].includes(targetStatus) ? targetStatus : "confirmed";
@@ -3531,6 +3542,7 @@ async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", 
       : true;
   if (!confirmed) return;
 
+  setBookingDetailSaveLoading(true);
   try {
     const result = await apiJson("cancel-booking", {
       method: "POST",
@@ -3557,6 +3569,8 @@ async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", 
     }
   } catch (error) {
     alert(error instanceof Error ? error.message : "Could not update reservation.");
+  } finally {
+    setBookingDetailSaveLoading(false);
   }
 }
 
@@ -3657,21 +3671,20 @@ async function confirmBookingReservation() {
       }),
     });
 
-    if (result?.workspace) {
-      hydrateStateFromWorkspace(result.workspace);
-    } else {
-      upsertCheckoutLead("confirmed");
-      state.bookings.unshift({
-        id: `booking-${now.getTime()}`,
-        ...bookingPayload,
-        status: "confirmed",
-        notes: notes || "Booking confirmed in demo mode.",
-      });
-      syncDraftToState();
-      saveState();
+    const confirmedBooking =
+      result?.workspace?.bookings?.find((item) => item.reservationCode === result?.reservationCode) ||
+      result?.workspace?.bookings?.find((item) => item.id === result?.booking?.id) ||
+      result?.booking ||
+      null;
+
+    if (!result?.workspace || !confirmedBooking) {
+      throw new Error("The booking could not be verified after saving.");
     }
+
+    hydrateStateFromWorkspace(result.workspace);
+    upsertCheckoutLead("confirmed");
     state.bookingConfirmation = {
-      bookingId: result?.booking?.id || `booking-${now.getTime()}`,
+      bookingId: confirmedBooking.id || result.booking.id,
       emailStatus: result?.email?.status || "skipped",
       confirmedAt: now.toISOString(),
       guestEmail,
@@ -3681,7 +3694,7 @@ async function confirmBookingReservation() {
       customerDetails: customerDetailsPayload(),
       promoCodes: [...(draft.promoCodes || [])],
       promoSummary: promoBookingSummary(),
-      reservationCode: result?.reservationCode || result?.booking?.reservationCode || "",
+      reservationCode: result?.reservationCode || confirmedBooking.reservationCode || "",
     };
     draft.bookingConfirmation = state.bookingConfirmation;
     syncDraftToState();
@@ -3699,38 +3712,10 @@ async function confirmBookingReservation() {
     );
     window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
   } catch (error) {
-    upsertCheckoutLead("confirmed");
-    state.bookings.unshift({
-      id: `booking-${now.getTime()}`,
-      ...bookingPayload,
-      status: "confirmed",
-      notes: notes || "Booking confirmed locally.",
-    });
-    syncDraftToState();
-    saveState();
-    state.bookingConfirmation = {
-      bookingId: `booking-${now.getTime()}`,
-      emailStatus: "skipped",
-      confirmedAt: now.toISOString(),
-      guestEmail,
-      guestName,
-      guestGender: guestGenders[0] || "",
-      guestGenders,
-      customerDetails: customerDetailsPayload(),
-      promoCodes: [...(draft.promoCodes || [])],
-      promoSummary: promoBookingSummary(),
-      reservationCode: `R${now.getTime().toString(36).slice(-4).toUpperCase()}`.slice(0, 5),
-    };
-    draft.bookingConfirmation = state.bookingConfirmation;
-    saveState();
-    trackAnalyticsEvent("checkout", {
-      camp: bookingSlug(),
-      package: getPackage(draft.packageId)?.name || draft.packageId,
-      room: getRoom(draft.roomId)?.name || draft.roomId,
-      total: totalPrice(),
-    });
-    alert(`Booking confirmed locally, but the server could not be reached: ${error instanceof Error ? error.message : "Unknown error"}`);
-    window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
+    setBookingDetailNotice?.("", "info");
+    alert(
+      `The booking was not saved. ${error instanceof Error ? error.message : "Unknown server error."} Please try again before leaving this page.`,
+    );
   } finally {
     bookingUiState.submitting = false;
   }
@@ -4095,6 +4080,10 @@ function initAdminInteractions() {
   bookingSearch?.addEventListener("input", (event) => {
     adminUiState.bookingSearchQuery = event.target.value || "";
     renderAdminPage();
+  });
+
+  bookingRefresh?.addEventListener("click", () => {
+    void refreshAdminWorkspace({ silent: false });
   });
 
   bookingCsvExport?.addEventListener("click", () => {
