@@ -1,0 +1,35 @@
+const {
+  getUserFromContext,
+  isPlatformOwnerUser,
+  deleteWorkspaceById,
+  response,
+} = require("./_shared");
+
+exports.handler = async (event, context) => {
+  try {
+    const user = getUserFromContext(context);
+    if (!user?.email || !isPlatformOwnerUser(user)) {
+      return response(403, { error: "Forbidden" });
+    }
+
+    if (event.httpMethod !== "POST") {
+      return response(405, { error: "Method not allowed" });
+    }
+
+    const body = event.body ? JSON.parse(event.body) : {};
+    const workspaceId = String(body.workspaceId || "").trim();
+    if (!workspaceId) {
+      return response(400, { error: "workspaceId is required" });
+    }
+
+    const deleted = await deleteWorkspaceById(workspaceId);
+    if (!deleted) {
+      return response(404, { error: "Workspace not found" });
+    }
+
+    return response(200, { success: true, workspaceId });
+  } catch (error) {
+    console.error("master-delete-workspace failed", error);
+    return response(500, { error: error instanceof Error ? error.message : "Failed to delete workspace" });
+  }
+};

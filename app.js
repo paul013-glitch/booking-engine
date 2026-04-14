@@ -3865,6 +3865,7 @@ function renderMasterPage() {
               <div class="master-actions">
                 <a class="button button-secondary" href="${escapeHtml(bookingLink)}" target="_blank" rel="noreferrer">Open booking</a>
                 <a class="button button-primary" href="${escapeHtml(workspace.adminUrl || `./admin.html?tenant=${encodeURIComponent(workspace.id)}`)}">Open admin</a>
+                <button class="button button-danger" type="button" data-delete-tenant-workspace="${escapeHtml(workspace.id)}">Delete</button>
               </div>
             </td>
           </tr>
@@ -5330,6 +5331,34 @@ function initMasterInteractions() {
 
     if (event.target?.id === "masterTopbarRefresh") {
       void loadMasterWorkspaces({ showLoading: false });
+      return;
+    }
+
+    const deleteWorkspaceButton = event.target?.closest?.("[data-delete-tenant-workspace]");
+    if (deleteWorkspaceButton) {
+      const workspaceId = deleteWorkspaceButton.dataset.deleteTenantWorkspace || "";
+      const workspace = (adminUiState.masterWorkspaces || []).find((entry) => entry.id === workspaceId);
+      const label = workspace?.campName || workspaceId;
+      const confirmed = window.confirm(`Delete ${label}? This will permanently remove the workspace and its booking access.`);
+      if (!confirmed) return;
+      void (async () => {
+        try {
+          const token = await window.netlifyIdentity.currentUser().jwt();
+          const result = await apiJson("master-delete-workspace", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ workspaceId }),
+          });
+          if (result?.success) {
+            adminUiState.masterWorkspaces = (adminUiState.masterWorkspaces || []).filter((entry) => entry.id !== workspaceId);
+            renderMasterPage();
+            console.log("[master] delete workspace success", { workspaceId });
+          }
+        } catch (error) {
+          alert(error instanceof Error ? error.message : "Could not delete workspace.");
+          console.log("[master] delete workspace error", { workspaceId, error: error instanceof Error ? error.message : String(error) });
+        }
+      })();
     }
   });
 

@@ -864,11 +864,21 @@ select {
   gap: 18px;
 }
 
+.master-list-panel {
+  width: min(100%, 72vw);
+  max-width: 72vw;
+  margin-inline: auto;
+}
+
 .admin-loading {
   display: grid;
   place-items: center;
   min-height: 42vh;
   padding: 24px;
+}
+
+.admin-loading[hidden] {
+  display: none !important;
 }
 
 .admin-loading-card {
@@ -1148,10 +1158,27 @@ select {
   align-items: end;
 }
 
+@media (max-width: 1080px) {
+  .master-list-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
 .master-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.button-danger {
+  border-color: #d2a39a;
+  background: #f8e3dc;
+  color: #8a3f2d;
+}
+
+.button-danger:hover {
+  background: #f2d4ca;
 }
 
 .day-grid {

@@ -431,6 +431,24 @@ async function saveWorkspace(workspace) {
   return normalized;
 }
 
+async function deleteWorkspaceById(id) {
+  if (!id) return false;
+  const { workspaces, slugs, owners } = stores();
+  const existing = await getWorkspaceById(id);
+  if (!existing) return false;
+  if (existing.camp?.slug) {
+    await slugs.delete(getSlugKey(existing.camp.slug));
+  }
+  if (existing.ownerId) {
+    const ownerEntry = await owners.get(getOwnerKey(existing.ownerId), { type: "json" });
+    if (ownerEntry?.workspaceId === id) {
+      await owners.delete(getOwnerKey(existing.ownerId));
+    }
+  }
+  await workspaces.delete(getWorkspaceKey(id));
+  return true;
+}
+
 function workspaceResponse(workspace) {
   if (!workspace) return response(404, { error: "Workspace not found" });
   return response(200, workspace);
@@ -458,6 +476,7 @@ module.exports = {
   getWorkspaceForOwner,
   listWorkspaces,
   normalizeWorkspace,
+  deleteWorkspaceById,
   response,
   saveWorkspace,
   slugify,
