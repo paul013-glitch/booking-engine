@@ -5306,6 +5306,7 @@ function initMasterInteractions() {
   document.addEventListener("click", (event) => {
     const authButton = event.target?.closest?.("[data-master-auth-action]");
     if (authButton) {
+      console.log("[master] auth button click", authButton.dataset.masterAuthAction);
       if (authButton.dataset.masterAuthAction === "login") {
         window.netlifyIdentity?.open?.();
       } else if (authButton.dataset.masterAuthAction === "logout") {
