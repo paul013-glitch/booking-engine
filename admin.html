@@ -92,6 +92,14 @@
                 Filter by check-in date
                 <select id="bookingDateFilter"></select>
               </label>
+              <label>
+                Filter by booking status
+                <select id="bookingStatusFilter"></select>
+              </label>
+              <label>
+                Search bookings
+                <input id="bookingSearch" type="search" placeholder="Guest name or reservation ID" />
+              </label>
               <div class="booking-toolbar-actions">
                 <span class="pill" id="bookingFilterCount"></span>
                 <button class="button button-secondary" type="button" id="bookingCsvExport">Export CSV</button>
@@ -128,14 +136,6 @@
                 </div>
                 <div id="bookingDetailNotice"></div>
                 <div id="bookingDetailContent"></div>
-                <div class="booking-detail-actions">
-                  <label>
-                    Booking status
-                    <select id="bookingDetailStatus"></select>
-                  </label>
-                  <button class="button button-primary" type="button" id="bookingDetailSaveStatus">Save status</button>
-                  <button class="button button-secondary" type="button" id="bookingDetailCancel">Cancel reservation</button>
-                </div>
               </section>
             </div>
           </article>

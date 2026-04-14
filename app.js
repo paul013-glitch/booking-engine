@@ -19,6 +19,8 @@ const adminUiState = {
   bookingSort: { key: "bookedAt", direction: "desc" },
   leadSort: { key: "createdAt", direction: "desc" },
   bookingDateFilter: "",
+  bookingStatusFilter: "",
+  bookingSearchQuery: "",
   bookingDetailId: "",
   bookingDetailNotice: "",
   bookingDetailNoticeType: "info",
@@ -1099,15 +1101,55 @@ function bookingDateOptions() {
         .map((booking) => booking.startDate)
         .filter(Boolean)
         .map((date) => [date, date]),
-    ).values(),
+  ).values(),
   ).sort((a, b) => new Date(a) - new Date(b));
+}
+
+function bookingStatusFilterOptions() {
+  const preferredOrder = ["confirmed", "held", "cancelled", "expired"];
+  const statuses = new Set(state.bookings.map((booking) => booking.status).filter(Boolean));
+  return [
+    ...preferredOrder.filter((status) => statuses.has(status)),
+    ...Array.from(statuses).filter((status) => !preferredOrder.includes(status)).sort(),
+  ];
+}
+
+function bookingSearchFilterText(booking) {
+  return [
+    booking.guestName,
+    booking.reservationCode,
+    booking.reservationId,
+    booking.guestEmail,
+    booking.guestPhone,
+    booking.guestCountry,
+    booking.guestBirthDay,
+    booking.guestBirthMonth,
+    booking.guestBirthYear,
+    getRoom(booking.roomId)?.name,
+    booking.roomId,
+    bookingPackageSummary(booking),
+    bookingAddonSummary(booking),
+    booking.status,
+    booking.notes,
+    booking.customerDetails ? customerDetailsSummaryText(booking.customerDetails) : "",
+    formatDateShort(booking.startDate),
+    formatDateShort(booking.endDate),
+    booking.total,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 function filteredAdminBookings() {
   const filterDate = adminUiState.bookingDateFilter || "";
+  const filterStatus = adminUiState.bookingStatusFilter || "";
+  const filterSearch = adminUiState.bookingSearchQuery.trim().toLowerCase();
   return state.bookings.filter((booking) => {
-    if (!filterDate) return true;
-    return booking.startDate === filterDate;
+    if (filterDate && booking.startDate !== filterDate) return false;
+    if (filterStatus && booking.status !== filterStatus) return false;
+    if (filterSearch && !bookingSearchFilterText(booking).includes(filterSearch)) return false;
+    return true;
   });
 }
 
@@ -1123,14 +1165,14 @@ function businessCheckInDates() {
   return Array.from(
     new Set(
       state.bookings
-        .filter((booking) => booking.startDate && blocksInventory(booking))
+        .filter((booking) => booking.startDate && bookingCountsTowardBusiness(booking))
         .map((booking) => booking.startDate),
     ),
   ).sort((a, b) => new Date(a) - new Date(b));
 }
 
 function businessBookingsForDate(checkInDate) {
-  return state.bookings.filter((booking) => booking.startDate === checkInDate && blocksInventory(booking));
+  return state.bookings.filter((booking) => booking.startDate === checkInDate && bookingCountsTowardBusiness(booking));
 }
 
 function businessGuestCapacityForDate(checkInDate) {
@@ -1161,6 +1203,11 @@ function businessWeeklyRows() {
       revenueSum,
     };
   });
+}
+
+function bookingCountsTowardBusiness(booking) {
+  if (!booking) return false;
+  return booking.status === "confirmed" || booking.status === "held";
 }
 
 function bookingDetailNoticeMarkup() {
@@ -2310,7 +2357,8 @@ function renderAdminPage() {
   const visibleBookingRows = filteredAdminBookings();
   const bookingFilterCount = document.getElementById("bookingFilterCount");
   if (bookingFilterCount) {
-    bookingFilterCount.textContent = adminUiState.bookingDateFilter
+    bookingFilterCount.textContent =
+      adminUiState.bookingDateFilter || adminUiState.bookingStatusFilter || adminUiState.bookingSearchQuery
       ? `${visibleBookingRows.length} filtered`
       : `${visibleBookingRows.length} shown`;
   }
@@ -2330,15 +2378,16 @@ function renderAdminPage() {
   const bookingTableBody = document.getElementById("bookingTableBody");
   const businessTableBody = document.getElementById("businessTableBody");
   const bookingDateFilter = document.getElementById("bookingDateFilter");
+  const bookingStatusFilter = document.getElementById("bookingStatusFilter");
+  const bookingSearch = document.getElementById("bookingSearch");
   const bookingCsvExport = document.getElementById("bookingCsvExport");
   const bookingDetailModal = document.getElementById("bookingDetailModal");
   const bookingDetailTitle = document.getElementById("bookingDetailTitle");
   const bookingDetailSubtitle = document.getElementById("bookingDetailSubtitle");
   const bookingDetailNotice = document.getElementById("bookingDetailNotice");
   const bookingDetailContent = document.getElementById("bookingDetailContent");
-  const bookingDetailStatus = document.getElementById("bookingDetailStatus");
-  const bookingDetailSaveStatus = document.getElementById("bookingDetailSaveStatus");
-  const bookingDetailCancel = document.getElementById("bookingDetailCancel");
+  let bookingDetailStatus = document.getElementById("bookingDetailStatus");
+  let bookingDetailSaveStatus = document.getElementById("bookingDetailSaveStatus");
   const leadTableBody = document.getElementById("leadTableBody");
   const campForm = document.getElementById("campForm");
   const analyticsForm = document.getElementById("analyticsForm");
@@ -2413,6 +2462,24 @@ function renderAdminPage() {
         .join("")}
     `;
     bookingDateFilter.value = currentFilter;
+  }
+
+  if (bookingStatusFilter) {
+    const currentFilter = adminUiState.bookingStatusFilter || "";
+    bookingStatusFilter.innerHTML = `
+      <option value="">All booking statuses</option>
+      ${bookingStatusFilterOptions()
+        .map((status) => {
+          const label = status.charAt(0).toUpperCase() + status.slice(1);
+          return `<option value="${status}" ${status === currentFilter ? "selected" : ""}>${label}</option>`;
+        })
+        .join("")}
+    `;
+    bookingStatusFilter.value = currentFilter;
+  }
+
+  if (bookingSearch) {
+    bookingSearch.value = adminUiState.bookingSearchQuery || "";
   }
 
   panes.forEach((pane) => {
@@ -2580,13 +2647,20 @@ function renderAdminPage() {
     bookingDetailModal.hidden = !bookingDetail;
   }
 
-  if (bookingDetail && bookingDetailTitle && bookingDetailSubtitle && bookingDetailContent && bookingDetailStatus) {
+  if (bookingDetail && bookingDetailTitle && bookingDetailSubtitle && bookingDetailContent) {
     const room = getRoom(bookingDetail.roomId);
     const bookingTime = formatDateTimeParts(bookingDetail.createdAt);
     const genderEntries = bookingGenderEntries(bookingDetail);
     bookingDetailTitle.textContent = bookingDetail.guestName || "Reservation details";
     bookingDetailSubtitle.textContent = `${bookingDetail.reservationCode || "pending"} · ${bookingDetail.status}`;
     bookingDetailContent.innerHTML = `
+      <div class="booking-detail-status-bar">
+        <label>
+          Booking status
+          <select id="bookingDetailStatus"></select>
+        </label>
+        <button class="button button-primary" type="button" id="bookingDetailSaveStatus">Save status</button>
+      </div>
       <div class="booking-detail-grid">
         <div class="booking-detail-meta">
           <span class="tiny">Guest</span>
@@ -2655,11 +2729,12 @@ function renderAdminPage() {
               `<div><span class="tiny">${escapeHtml(field.label)}</span><strong>${escapeHtml(field.value || "Not set")}</strong></div>`,
           )
           .join("")}
-        <div><span class="tiny">Status</span><strong>${escapeHtml(bookingDetail.status || "")}</strong></div>
         <div><span class="tiny">Confirmation email</span><strong>${escapeHtml(bookingDetail.confirmationEmail?.status || "not sent")}</strong></div>
       </div>
     `;
 
+    bookingDetailStatus = bookingDetailContent.querySelector("#bookingDetailStatus");
+    bookingDetailSaveStatus = bookingDetailContent.querySelector("#bookingDetailSaveStatus");
     bookingDetailStatus.innerHTML = bookingStatusOptions()
       .map(
         (option) =>
@@ -2669,11 +2744,6 @@ function renderAdminPage() {
 
     if (bookingDetailSaveStatus) {
       bookingDetailSaveStatus.dataset.bookingId = bookingDetail.id;
-    }
-    if (bookingDetailCancel) {
-      bookingDetailCancel.dataset.bookingId = bookingDetail.id;
-      bookingDetailCancel.disabled = bookingDetail.status === "expired";
-      bookingDetailCancel.textContent = bookingDetail.status === "cancelled" ? "Reinstate reservation" : "Cancel reservation";
     }
     if (bookingDetailStatus) {
       bookingDetailStatus.value = bookingDetail.status || "confirmed";
@@ -3927,10 +3997,9 @@ function initAdminInteractions() {
   const availabilityUpdateAllPrices = document.getElementById("availabilityUpdateAllPrices");
   const saveAvailabilityButton = document.getElementById("saveAvailability");
   const bookingDateFilter = document.getElementById("bookingDateFilter");
+  const bookingStatusFilter = document.getElementById("bookingStatusFilter");
+  const bookingSearch = document.getElementById("bookingSearch");
   const bookingCsvExport = document.getElementById("bookingCsvExport");
-  const bookingDetailStatus = document.getElementById("bookingDetailStatus");
-  const bookingDetailSaveStatus = document.getElementById("bookingDetailSaveStatus");
-  const bookingDetailCancel = document.getElementById("bookingDetailCancel");
 
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
@@ -3940,6 +4009,17 @@ function initAdminInteractions() {
     const bookingRow = event.target?.closest?.("[data-booking-open]");
     if (bookingRow && !event.target?.closest?.("button, a, select, input, textarea")) {
       openBookingDetail(bookingRow.dataset.bookingOpen);
+      return;
+    }
+
+    const bookingDetailSaveStatus = event.target?.closest?.("#bookingDetailSaveStatus");
+    if (bookingDetailSaveStatus) {
+      const bookingId = bookingDetailSaveStatus.dataset.bookingId;
+      const bookingDetailStatus = document.getElementById("bookingDetailStatus");
+      if (!bookingId || !bookingDetailStatus) return;
+      const booking = state.bookings.find((item) => item.id === bookingId);
+      if (!booking) return;
+      void saveBookingStatus(bookingId, bookingDetailStatus.value, booking.reservationCode || "", booking.status || "");
       return;
     }
 
@@ -3961,6 +4041,13 @@ function initAdminInteractions() {
     if (!tabButton) return;
     adminUiState.activeTab = tabButton.dataset.adminTab || "bookings";
     renderAdminPage();
+  });
+
+  document.addEventListener("change", (event) => {
+    const bookingDetailStatus = event.target?.closest?.("#bookingDetailStatus");
+    if (!bookingDetailStatus) return;
+    adminUiState.bookingDetailNotice = "";
+    adminUiState.bookingDetailNoticeType = "info";
   });
 
   document.addEventListener("keydown", (event) => {
@@ -4000,6 +4087,16 @@ function initAdminInteractions() {
     renderAdminPage();
   });
 
+  bookingStatusFilter?.addEventListener("change", (event) => {
+    adminUiState.bookingStatusFilter = event.target.value || "";
+    renderAdminPage();
+  });
+
+  bookingSearch?.addEventListener("input", (event) => {
+    adminUiState.bookingSearchQuery = event.target.value || "";
+    renderAdminPage();
+  });
+
   bookingCsvExport?.addEventListener("click", () => {
     const rows = sortAdminRows(filteredAdminBookings(), adminUiState.bookingSort || { key: "bookedAt", direction: "desc" }, {
       guest: (item) => item.guestName || "",
@@ -4020,28 +4117,6 @@ function initAdminInteractions() {
       reservationId: (item) => item.reservationCode || item.reservationId || "",
     });
     downloadCsv(`bookings-${bookingSlug()}-${new Date().toISOString().slice(0, 10)}.csv`, bookingsToCsv(rows));
-  });
-
-  bookingDetailStatus?.addEventListener("change", () => {
-    adminUiState.bookingDetailNotice = "";
-    adminUiState.bookingDetailNoticeType = "info";
-  });
-
-  bookingDetailSaveStatus?.addEventListener("click", async () => {
-    const bookingId = bookingDetailSaveStatus.dataset.bookingId;
-    if (!bookingId || !bookingDetailStatus) return;
-    const booking = state.bookings.find((item) => item.id === bookingId);
-    if (!booking) return;
-    await saveBookingStatus(bookingId, bookingDetailStatus.value, booking.reservationCode || "", booking.status || "");
-  });
-
-  bookingDetailCancel?.addEventListener("click", async () => {
-    const bookingId = bookingDetailCancel.dataset.bookingId;
-    if (!bookingId) return;
-    const booking = state.bookings.find((item) => item.id === bookingId);
-    if (!booking) return;
-    const targetStatus = booking.status === "cancelled" ? "confirmed" : "cancelled";
-    await saveBookingStatus(bookingId, targetStatus, booking.reservationCode || "", booking.status || "");
   });
 
   saveAvailabilityButton?.addEventListener("click", () => {
