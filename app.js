@@ -1700,20 +1700,14 @@ function availableUnits(roomId, startDate, endDate) {
   if (!startDate || !endDate) {
     return Math.max(0, Number(room?.totalUnits ?? 0));
   }
-  const rows = weekKeysBetween(startDate, endDate);
-  const booked = overlappingBookings(roomId, startDate, endDate).reduce(
+  const weekKey = weekKeyForDate(startDate);
+  const booked = overlappingBookings(roomId, startDate, addDays(startDate, 1)).reduce(
     (sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId),
     0,
   );
-  if (!rows.length) return 0;
-
-  const units = rows.map((weekKey) => {
-    const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
-    const total = Number(row?.units ?? 0);
-    return Math.max(0, total - booked);
-  });
-
-  return Math.max(0, Math.min(...units));
+  const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
+  const total = Number(row?.units ?? room?.totalUnits ?? 0);
+  return Math.max(0, total - booked);
 }
 
 function bookedUnitsForWeek(roomId, weekKey) {
