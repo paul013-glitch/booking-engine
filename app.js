@@ -2588,7 +2588,12 @@ function renderAdminPage() {
   const billingForm = document.getElementById("billingForm");
   const bookingCount = document.getElementById("bookingCount");
   const leadCount = document.getElementById("leadCount");
-  const activeTab = adminUiState.activeTab || "bookings";
+  const canEditBilling = currentIdentityIsPlatformOwner();
+  let activeTab = adminUiState.activeTab || "bookings";
+  if (activeTab === "billing" && !canEditBilling) {
+    activeTab = "bookings";
+    adminUiState.activeTab = activeTab;
+  }
   document.querySelectorAll("[data-booking-link]").forEach((bookingLink) => {
     bookingLink.setAttribute("href", bookingUrl());
   });
@@ -2615,9 +2620,12 @@ function renderAdminPage() {
     billingNotice.innerHTML = bannerText
       ? `<div class="notice ${billingStatusTone(billing) === "danger" ? "error" : "warning"}">${escapeHtml(bannerText)}</div>`
       : `<div class="notice success">Subscription is active. No action is needed right now.</div>`;
+    if (!canEditBilling) {
+      billingNotice.innerHTML += `<div class="notice">Billing is managed by the master portal and is read-only here.</div>`;
+    }
   }
   if (billingForm) {
-    billingForm.elements.status.value = billingDisplayStatus(billing);
+    billingForm.elements.status.value = billing.status || "trialing";
     billingForm.elements.plan.value = billing.plan || "trial";
     billingForm.elements.monthlyPrice.value = billing.monthlyPrice ?? 99;
     billingForm.elements.currency.value = billing.currency || "EUR";
@@ -2627,6 +2635,9 @@ function renderAdminPage() {
     billingForm.elements.paidThroughAt.value = billing.paidThroughAt ? String(billing.paidThroughAt).slice(0, 10) : "";
     billingForm.elements.nextBillingAt.value = billing.nextBillingAt ? String(billing.nextBillingAt).slice(0, 10) : "";
     billingForm.elements.notes.value = billing.notes || "";
+    billingForm.querySelectorAll("input, select, textarea, button").forEach((control) => {
+      control.disabled = !canEditBilling;
+    });
   }
   if (bookingCount) bookingCount.textContent = `${state.bookings.length} bookings`;
   const visibleBookingRows = filteredAdminBookings();
@@ -2765,6 +2776,8 @@ function renderAdminPage() {
     button.classList.toggle("active", button.dataset.adminTab === activeTab);
     if (button.dataset.adminTab === "billing") {
       button.classList.toggle("billing-alert", !!billingBannerText(billing));
+      button.disabled = !canEditBilling;
+      button.classList.toggle("is-disabled", !canEditBilling);
     }
   });
   configPanes.forEach((pane) => {
@@ -5070,6 +5083,9 @@ function initAdminInteractions() {
 
   billingForm?.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!currentIdentityIsPlatformOwner()) {
+      return;
+    }
     const toIso = (value) => (value ? new Date(`${value}T00:00:00`).toISOString() : "");
     const existingBilling = state.camp.billing || createDefaultBilling();
     state.camp.billing = {

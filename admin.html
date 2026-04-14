@@ -46,12 +46,12 @@
         <section class="panel admin-tabs" aria-label="Admin sections">
           <button type="button" class="admin-tab-button" data-admin-tab="bookings">Bookings</button>
           <button type="button" class="admin-tab-button" data-admin-tab="business">Business</button>
-          <button type="button" class="admin-tab-button" data-admin-tab="billing">Billing</button>
           <button type="button" class="admin-tab-button" data-admin-tab="leads">Leads</button>
           <button type="button" class="admin-tab-button" data-admin-tab="availability">Availability matrix</button>
           <button type="button" class="admin-tab-button" data-admin-tab="branding">Branding</button>
           <button type="button" class="admin-tab-button" data-admin-tab="analytics">Analytics</button>
           <button type="button" class="admin-tab-button" data-admin-tab="configure">Configure</button>
+          <button type="button" class="admin-tab-button" data-admin-tab="billing">Billing</button>
         </section>
 
         <section class="panel" data-admin-pane="business">
@@ -104,7 +104,12 @@
               <div class="two-col">
                 <label>
                   Status
-                  <input name="status" type="text" readonly />
+                  <select name="status">
+                    <option value="trialing">Trialing</option>
+                    <option value="active">Active</option>
+                    <option value="past_due">Past due</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
                 </label>
                 <label>
                   Plan

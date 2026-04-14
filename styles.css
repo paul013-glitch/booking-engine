@@ -978,6 +978,13 @@ select {
   color: #8d3c22;
 }
 
+.admin-tab-button:disabled,
+.admin-tab-button.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.2);
+}
+
 .billing-pill-urgent {
   background: #f7e2d7;
   border-color: #e1a98f;
