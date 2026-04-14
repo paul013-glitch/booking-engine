@@ -19,6 +19,10 @@
   --radius-md: 14px;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -1156,6 +1160,33 @@ select {
 
 .master-toolbar {
   align-items: end;
+}
+
+.segmented-control {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: #fffefb;
+}
+
+.segmented-button {
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  padding: 0.7rem 1rem;
+  font-weight: 700;
+}
+
+.segmented-button:last-child {
+  border-right: 0;
+}
+
+.segmented-button.is-active {
+  background: var(--accent-soft);
+  color: var(--text);
 }
 
 @media (max-width: 1080px) {

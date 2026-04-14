@@ -1,8 +1,7 @@
 const {
+  archiveWorkspaceById,
   getUserFromContext,
   isPlatformOwnerUser,
-  getWorkspaceById,
-  deleteWorkspaceById,
   response,
 } = require("./_shared");
 
@@ -23,22 +22,15 @@ exports.handler = async (event, context) => {
       return response(400, { error: "workspaceId is required" });
     }
 
-    const workspace = await getWorkspaceById(workspaceId);
+    const archivedAt = new Date().toISOString();
+    const workspace = await archiveWorkspaceById(workspaceId, archivedAt);
     if (!workspace) {
       return response(404, { error: "Workspace not found" });
     }
-    if (!workspace.camp?.archivedAt) {
-      return response(400, { error: "Archive the workspace before deleting it." });
-    }
 
-    const deleted = await deleteWorkspaceById(workspaceId);
-    if (!deleted) {
-      return response(404, { error: "Workspace not found" });
-    }
-
-    return response(200, { success: true, workspaceId });
+    return response(200, { success: true, workspace });
   } catch (error) {
-    console.error("master-delete-workspace failed", error);
-    return response(500, { error: error instanceof Error ? error.message : "Failed to delete workspace" });
+    console.error("master-archive-workspace failed", error);
+    return response(500, { error: error instanceof Error ? error.message : "Failed to archive workspace" });
   }
 };

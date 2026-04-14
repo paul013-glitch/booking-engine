@@ -49,6 +49,7 @@ const adminUiState = {
   loadingEmail: "",
   masterWorkspaces: [],
   masterWorkspaceFilter: "",
+  masterWorkspaceView: "active",
   masterWorkspaceLoading: false,
   masterWorkspaceReady: false,
   masterWorkspaceError: "",
@@ -3800,7 +3801,8 @@ async function loadMasterWorkspaces({ showLoading = true } = {}) {
   }
   try {
     const token = await window.netlifyIdentity.currentUser().jwt();
-    const data = await apiJson("master-workspaces", {
+    const archived = adminUiState.masterWorkspaceView === "archived";
+    const data = await apiJson(`master-workspaces?archived=${archived ? 1 : 0}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     adminUiState.masterWorkspaces = Array.isArray(data?.workspaces) ? data.workspaces : [];
@@ -3826,26 +3828,35 @@ async function loadMasterWorkspaces({ showLoading = true } = {}) {
 function renderMasterPage() {
   const masterCount = document.getElementById("masterCount");
   const masterFilter = document.getElementById("masterFilter");
+  const masterViewToggle = document.getElementById("masterViewToggle");
   const masterTableBody = document.getElementById("masterTableBody");
   const masterNotice = document.getElementById("masterNotice");
   const visibleRows = masterWorkspaceFilteredRows();
   const user = window.netlifyIdentity?.currentUser?.();
   const workspaceReady = !!user && adminUiState.masterWorkspaceReady && !adminUiState.masterWorkspaceLoading;
   if (masterCount) {
-    masterCount.textContent = `${visibleRows.length} tenants`;
+    masterCount.textContent = `${visibleRows.length} ${adminUiState.masterWorkspaceView === "archived" ? "archived" : "active"} tenants`;
   }
   if (masterFilter) {
     masterFilter.value = adminUiState.masterWorkspaceFilter || "";
   }
+  if (masterViewToggle) {
+    masterViewToggle.querySelectorAll("[data-master-view]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.masterView === adminUiState.masterWorkspaceView);
+    });
+  }
   if (masterNotice) {
     masterNotice.innerHTML = workspaceReady
-      ? `<div class="notice success">You can open any tenant and fine-tune its settings.</div>`
+      ? adminUiState.masterWorkspaceView === "archived"
+        ? `<div class="notice warning">Archived workspaces are hidden from the main portal. Delete here only when you are sure you do not need the data anymore.</div>`
+        : `<div class="notice success">You can open any tenant and fine-tune its settings. Archive mistaken workspaces instead of deleting them.</div>`
       : `<div class="notice">Log in with the owner account to view tenants.</div>`;
   }
   if (masterTableBody) {
     masterTableBody.innerHTML = visibleRows
       .map((workspace) => {
         const bookingLink = workspace.bookingUrl || "";
+        const archived = !!workspace.archivedAt;
         const daysLeft = workspace.billing?.daysLeft;
         const daysLabel =
           daysLeft === null
@@ -3853,19 +3864,27 @@ function renderMasterPage() {
             : daysLeft <= 0
               ? "Expired"
               : `${daysLeft} days left`;
+        const adminHref = escapeHtml(workspace.adminUrl || `./admin.html?tenant=${encodeURIComponent(workspace.id)}`);
+        const archiveAction = archived
+          ? ""
+          : `<button class="button button-secondary" type="button" data-archive-tenant-workspace="${escapeHtml(workspace.id)}">Archive</button>`;
+        const deleteAction = archived
+          ? `<button class="button button-danger" type="button" data-delete-tenant-workspace="${escapeHtml(workspace.id)}">Delete</button>`
+          : "";
         return `
           <tr>
             <td><strong>${escapeHtml(workspace.campName)}</strong></td>
             <td>${escapeHtml(workspace.ownerEmail || "Unknown")}</td>
             <td>${escapeHtml(workspace.slug || "")}</td>
-            <td><span class="status ${escapeHtml(workspace.billing?.status || "trialing")}">${escapeHtml(workspace.billing?.status || "trialing")}</span></td>
+            <td><span class="status ${escapeHtml(workspace.billing?.status || "trialing")}">${escapeHtml(workspace.billing?.status || "trialing")}</span>${archived ? ' <span class="pill">Archived</span>' : ""}</td>
             <td>${escapeHtml(daysLabel)}</td>
             <td>${escapeHtml(formatDateTime(workspace.updatedAt || workspace.createdAt || ""))}</td>
             <td>
               <div class="master-actions">
-                <a class="button button-secondary" href="${escapeHtml(bookingLink)}" target="_blank" rel="noreferrer">Open booking</a>
-                <a class="button button-primary" href="${escapeHtml(workspace.adminUrl || `./admin.html?tenant=${encodeURIComponent(workspace.id)}`)}">Open admin</a>
-                <button class="button button-danger" type="button" data-delete-tenant-workspace="${escapeHtml(workspace.id)}">Delete</button>
+                ${archived ? "" : `<a class="button button-secondary" href="${escapeHtml(bookingLink)}" target="_blank" rel="noreferrer">Open booking</a>`}
+                ${archived ? "" : `<a class="button button-primary" href="${adminHref}">Open admin</a>`}
+                ${archiveAction}
+                ${deleteAction}
               </div>
             </td>
           </tr>
@@ -3909,6 +3928,7 @@ function initMasterAuth() {
     console.log("[master] identity:logout");
     adminUiState.masterWorkspaces = [];
     adminUiState.masterWorkspaceFilter = "";
+    adminUiState.masterWorkspaceView = "active";
     adminUiState.masterWorkspaceReady = false;
     adminUiState.masterWorkspaceError = "";
     updateMasterAuthUI(null);
@@ -5334,12 +5354,47 @@ function initMasterInteractions() {
       return;
     }
 
+    const viewButton = event.target?.closest?.("[data-master-view]");
+    if (viewButton) {
+      adminUiState.masterWorkspaceView = viewButton.dataset.masterView || "active";
+      void loadMasterWorkspaces();
+      return;
+    }
+
+    const archiveWorkspaceButton = event.target?.closest?.("[data-archive-tenant-workspace]");
+    if (archiveWorkspaceButton) {
+      const workspaceId = archiveWorkspaceButton.dataset.archiveTenantWorkspace || "";
+      const workspace = (adminUiState.masterWorkspaces || []).find((entry) => entry.id === workspaceId);
+      const label = workspace?.campName || workspaceId;
+      const confirmed = window.confirm(`Archive ${label}? It will disappear from the active list but remain recoverable in the archive.`);
+      if (!confirmed) return;
+      void (async () => {
+        try {
+          const token = await window.netlifyIdentity.currentUser().jwt();
+          const result = await apiJson("master-archive-workspace", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ workspaceId }),
+          });
+          if (result?.success) {
+            adminUiState.masterWorkspaces = (adminUiState.masterWorkspaces || []).filter((entry) => entry.id !== workspaceId);
+            renderMasterPage();
+            console.log("[master] archive workspace success", { workspaceId });
+          }
+        } catch (error) {
+          alert(error instanceof Error ? error.message : "Could not archive workspace.");
+          console.log("[master] archive workspace error", { workspaceId, error: error instanceof Error ? error.message : String(error) });
+        }
+      })();
+      return;
+    }
+
     const deleteWorkspaceButton = event.target?.closest?.("[data-delete-tenant-workspace]");
     if (deleteWorkspaceButton) {
       const workspaceId = deleteWorkspaceButton.dataset.deleteTenantWorkspace || "";
       const workspace = (adminUiState.masterWorkspaces || []).find((entry) => entry.id === workspaceId);
       const label = workspace?.campName || workspaceId;
-      const confirmed = window.confirm(`Delete ${label}? This will permanently remove the workspace and its booking access.`);
+      const confirmed = window.confirm(`Delete ${label}? This permanently removes the archived workspace data.`);
       if (!confirmed) return;
       void (async () => {
         try {

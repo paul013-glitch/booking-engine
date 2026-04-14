@@ -56,6 +56,10 @@
               <input id="masterFilter" type="search" placeholder="Camp name, owner email, slug..." />
             </label>
             <div class="booking-toolbar-actions">
+              <div class="segmented-control" id="masterViewToggle" role="tablist" aria-label="Master portal view">
+                <button class="segmented-button is-active" type="button" data-master-view="active">Active</button>
+                <button class="segmented-button" type="button" data-master-view="archived">Archived</button>
+              </div>
               <span class="pill" id="masterAuthStatus"></span>
               <button class="button button-secondary" type="button" id="masterRefresh">Refresh</button>
             </div>

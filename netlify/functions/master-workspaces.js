@@ -31,7 +31,8 @@ exports.handler = async (_event, context) => {
       return response(403, { error: "Forbidden" });
     }
 
-    const workspaces = await listWorkspaces();
+    const archived = String(_event?.queryStringParameters?.archived || "") === "1";
+    const workspaces = await listWorkspaces({ includeArchived: archived });
     const summaries = workspaces
       .map((workspace) => {
         const billing = billingSummary(workspace);
@@ -45,6 +46,7 @@ exports.handler = async (_event, context) => {
           adminUrl: `/admin.html?tenant=${encodeURIComponent(workspace.id)}`,
           updatedAt: workspace.updatedAt || "",
           createdAt: workspace.createdAt || "",
+          archivedAt: workspace.camp?.archivedAt || "",
           billing,
         };
       })

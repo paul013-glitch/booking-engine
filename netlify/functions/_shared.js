@@ -211,6 +211,7 @@ function createDefaultWorkspace(input = {}) {
     notes: "",
     leads: [],
     bookingIntents: [],
+    archivedAt: "",
     promos: structuredClone(seedPromos),
     packages: structuredClone(seedPackages),
     rooms: structuredClone(seedRooms),
@@ -277,6 +278,7 @@ function normalizeWorkspace(data = {}) {
         ...((data.camp && data.camp.availability) || {}),
       },
       customerFields: Array.isArray(data?.camp?.customerFields) ? data.camp.customerFields : base.camp.customerFields,
+      archivedAt: data?.camp?.archivedAt || base.camp.archivedAt || "",
       slug: (data.camp && data.camp.slug) || data.slug || base.camp.slug,
     },
     packages: Array.isArray(data.packages) ? data.packages : base.packages,
@@ -385,7 +387,7 @@ async function getWorkspaceForOwner(ownerId) {
   return await getWorkspaceById(ownerEntry.workspaceId);
 }
 
-async function listWorkspaces() {
+async function listWorkspaces({ includeArchived = false } = {}) {
   const { workspaces } = stores();
   const { blobs } = await workspaces.list();
   const entries = await Promise.all(
@@ -393,7 +395,10 @@ async function listWorkspaces() {
       .filter((blob) => String(blob.key || "").startsWith("workspace:"))
       .map(async (blob) => {
         const workspace = await workspaces.get(blob.key, { type: "json" });
-        return workspace ? normalizeWorkspace(workspace) : null;
+        if (!workspace) return null;
+        const normalized = normalizeWorkspace(workspace);
+        if (!includeArchived && normalized.camp?.archivedAt) return null;
+        return normalized;
       }),
   );
   return entries.filter(Boolean);
@@ -449,6 +454,23 @@ async function deleteWorkspaceById(id) {
   return true;
 }
 
+async function archiveWorkspaceById(id, archivedAt = new Date().toISOString()) {
+  if (!id) return null;
+  const existing = await getWorkspaceById(id);
+  if (!existing) return null;
+  const archived = normalizeWorkspace({
+    ...existing,
+    camp: {
+      ...(existing.camp || {}),
+      archivedAt,
+    },
+    updatedAt: archivedAt,
+  });
+  const { workspaces } = stores();
+  await workspaces.setJSON(getWorkspaceKey(id), archived);
+  return archived;
+}
+
 function workspaceResponse(workspace) {
   if (!workspace) return response(404, { error: "Workspace not found" });
   return response(200, workspace);
@@ -469,6 +491,7 @@ function isPlatformOwnerUser(user = {}) {
 
 module.exports = {
   createDefaultWorkspace,
+  archiveWorkspaceById,
   isPlatformOwnerUser,
   getUserFromContext,
   getWorkspaceById,
