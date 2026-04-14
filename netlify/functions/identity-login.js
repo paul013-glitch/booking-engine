@@ -1,4 +1,4 @@
-const { isPlatformOwnerUser } = require("./_shared");
+const { createDefaultWorkspace, isPlatformOwnerUser, saveWorkspace } = require("./_shared");
 
 exports.handler = async (event) => {
   let userPayload = {};
@@ -10,6 +10,19 @@ exports.handler = async (event) => {
   }
 
   const email = userPayload.email || "";
+  const ownerId = userPayload.sub || email || `identity-${Date.now()}`;
+
+  try {
+    await saveWorkspace(
+      createDefaultWorkspace({
+        ownerId,
+        email,
+        name: userPayload.user_metadata?.full_name || email.split("@")[0] || "New Surf Camp",
+      }),
+    );
+  } catch {
+    // Never block login because workspace creation failed.
+  }
 
   const roles = Array.from(new Set([...(userPayload.app_metadata?.roles || []), "camp-owner"]));
   if (isPlatformOwnerUser(userPayload)) {
