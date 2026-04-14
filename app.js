@@ -387,7 +387,13 @@ function normalizeWorkspaceData(data = {}) {
       data.customerFieldValues && typeof data.customerFieldValues === "object" ? data.customerFieldValues : {},
     selectedPackageId: data.selectedPackageId || seedState.selectedPackageId,
     packageQuantities: {},
-    selectedRoomId: "",
+    roomAllocations:
+      data.roomAllocations && typeof data.roomAllocations === "object" ? { ...data.roomAllocations } : {},
+    selectedRoomId:
+      data.selectedRoomId ||
+      (data.roomAllocations && typeof data.roomAllocations === "object"
+        ? Object.entries(data.roomAllocations).find(([, quantity]) => Number(quantity) > 0)?.[0] || ""
+        : ""),
     startDate: "",
     guestName: data.guestName || "",
     guestPhone: data.guestPhone || "",
