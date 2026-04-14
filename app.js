@@ -14,6 +14,7 @@ const bookingUiState = {
 
 const adminUiState = {
   availabilityRoomId: "shared-double",
+  availabilityExtraWeeksByRoom: {},
   activeTab: "bookings",
   configTab: "packages",
   bookingSort: { key: "bookedAt", direction: "desc" },
@@ -1346,6 +1347,37 @@ function weekKeysBetween(startDate, endDate) {
   return keys;
 }
 
+function availabilityWeekKeysForRoom(roomId) {
+  return Object.keys(state.camp.availability?.[roomId]?.weeks || {}).sort((a, b) => new Date(a) - new Date(b));
+}
+
+function availabilityCalendarBounds() {
+  const keys = Array.from(new Set(state.rooms.flatMap((room) => availabilityWeekKeysForRoom(room.id)))).sort(
+    (a, b) => new Date(a) - new Date(b),
+  );
+
+  const currentMonth = startOfMonth(new Date());
+  if (!keys.length) {
+    return {
+      hasBounds: false,
+      firstMonth: currentMonth,
+      lastMonth: currentMonth,
+      minOffset: 0,
+      maxOffset: 0,
+    };
+  }
+
+  const firstMonth = startOfMonth(parseDateValue(keys[0]) || new Date());
+  const lastMonth = startOfMonth(parseDateValue(keys[keys.length - 1]) || new Date());
+  return {
+    hasBounds: true,
+    firstMonth,
+    lastMonth,
+    minOffset: monthOffsetBetween(currentMonth, firstMonth),
+    maxOffset: monthOffsetBetween(currentMonth, lastMonth),
+  };
+}
+
 function roomAvailabilityRow(roomId, dateInput) {
   return state.camp.availability?.[roomId]?.weeks?.[weekKeyForDate(dateInput)] || null;
 }
@@ -1574,11 +1606,11 @@ function availableUnits(roomId, startDate, endDate) {
     (sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId),
     0,
   );
-  if (!rows.length) return Math.max(0, room.totalUnits - booked);
+  if (!rows.length) return 0;
 
   const units = rows.map((weekKey) => {
     const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
-    const total = Number(row?.units ?? room.totalUnits ?? 0);
+    const total = Number(row?.units ?? 0);
     return Math.max(0, total - booked);
   });
 
@@ -1600,7 +1632,7 @@ function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate =
   const weeks = weekKeysBetween(startDate, endDate);
 
   if (!weeks.length) {
-    const available = Math.max(0, room.totalUnits || 0);
+    const available = 0;
     const booked = overlappingBookings(roomId, startDate, endDate).reduce((sum, booking) => sum + bookingGuestCount(booking), 0);
     return {
       available,
@@ -1611,7 +1643,7 @@ function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate =
 
   const weekStats = weeks.map((weekKey) => {
     const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
-    const available = Number(row?.units ?? room.totalUnits ?? 0);
+    const available = Number(row?.units ?? 0);
     const booked = bookedUnitsForWeek(roomId, weekKey);
     return {
       available,
@@ -1758,7 +1790,13 @@ function renderMonthCard(monthDate) {
 }
 
 function renderDateSelector() {
-  const baseMonth = addMonths(startOfMonth(new Date()), draft.calendarMonthOffset);
+  const bounds = availabilityCalendarBounds();
+  const currentMonth = startOfMonth(new Date());
+  const minOffset = bounds.hasBounds ? bounds.minOffset : 0;
+  const maxOffset = bounds.hasBounds ? bounds.maxOffset : 0;
+  if (draft.calendarMonthOffset < minOffset) draft.calendarMonthOffset = minOffset;
+  if (draft.calendarMonthOffset > maxOffset) draft.calendarMonthOffset = maxOffset;
+  const baseMonth = addMonths(currentMonth, draft.calendarMonthOffset);
   const nextMonth = addMonths(baseMonth, 1);
   const singleMonth = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
 
@@ -1769,14 +1807,14 @@ function renderDateSelector() {
       </div>
       <div class="calendar-head">
         <div class="calendar-nav">
-          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month">&lt;</button>
-          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month">&gt;</button>
+          <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month" ${draft.calendarMonthOffset <= minOffset ? "disabled" : ""}>&lt;</button>
+          <button type="button" class="nav-button" data-month-nav="1" aria-label="Next month" ${draft.calendarMonthOffset >= maxOffset ? "disabled" : ""}>&gt;</button>
         </div>
       </div>
 
       <div class="calendar-grid-wrap">
         ${renderMonthCard(baseMonth)}
-        ${singleMonth ? "" : renderMonthCard(nextMonth)}
+        ${singleMonth || draft.calendarMonthOffset >= maxOffset ? "" : renderMonthCard(nextMonth)}
       </div>
 
       <div class="calendar-note">
@@ -3109,34 +3147,51 @@ function renderAdminPage() {
 
 function availabilityRowsForRoom(roomId, count = 12) {
   const room = getRoom(roomId);
-  const rows = [];
+  const rowsByKey = new Map();
+  const roomAvailability = state.camp.availability?.[roomId]?.weeks || {};
   const start = startOfWeek(new Date());
 
   for (let i = 0; i < count; i += 1) {
     const cursor = new Date(start);
     cursor.setDate(cursor.getDate() + i * 7);
     const key = localDateKey(cursor);
-    const row = state.camp.availability?.[roomId]?.weeks?.[key] || {
+    const row = roomAvailability[key] || {
       units: room.totalUnits,
       pricePerNight: room.pricePerNight,
     };
-    const units = Number(row.units ?? room.totalUnits ?? 0);
-    const booked = bookedUnitsForWeek(roomId, key);
-    rows.push({
-      weekKey: key,
-      weekLabel: `${formatDate(key)} to ${formatDate(addDays(key, 6))}`,
-      units,
-      booked,
-      forSale: Math.max(0, units - booked),
-      pricePerNight: Number(row.pricePerNight ?? room.pricePerNight ?? 0),
-    });
+    rowsByKey.set(key, row);
   }
 
-  return rows;
+  Object.entries(roomAvailability).forEach(([key, row]) => {
+    rowsByKey.set(key, row);
+  });
+
+  (adminUiState.availabilityExtraWeeksByRoom?.[roomId] || []).forEach((key) => {
+    if (!rowsByKey.has(key)) {
+      rowsByKey.set(key, {
+        units: room.totalUnits,
+        pricePerNight: room.pricePerNight,
+      });
+    }
+  });
+
+  return Array.from(rowsByKey.entries())
+    .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+    .map(([key, row]) => {
+      const units = Number(row.units ?? room.totalUnits ?? 0);
+      const booked = bookedUnitsForWeek(roomId, key);
+      return {
+        weekKey: key,
+        weekLabel: `${formatDate(key)} to ${formatDate(addDays(key, 6))}`,
+        units,
+        booked,
+        forSale: Math.max(0, units - booked),
+        pricePerNight: Number(row.pricePerNight ?? room.pricePerNight ?? 0),
+      };
+    });
 }
 
 function renderAvailabilityMatrix(roomId) {
-  const room = getRoom(roomId);
   const rows = availabilityRowsForRoom(roomId);
   return `
     <div class="availability-row-header">
@@ -3185,6 +3240,11 @@ function renderAvailabilityMatrix(roomId) {
         `,
       )
       .join("")}
+    <div class="availability-row availability-row-add">
+      <button class="button button-secondary availability-add-week" type="button" data-availability-add-week="${roomId}">
+        + Add week
+      </button>
+    </div>
   `;
 }
 
@@ -3508,7 +3568,11 @@ function applyStateToDraft() {
   draft.promoError = state.promoError || "";
   draft.currentStep = state.currentStep ?? 0;
   draft.bookingIntentId = state.bookingIntentId || "";
-  draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
+  const bounds = availabilityCalendarBounds();
+  const desiredOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : bounds.minOffset;
+  draft.calendarMonthOffset = bounds.hasBounds
+    ? Math.max(bounds.minOffset, Math.min(bounds.maxOffset, desiredOffset))
+    : desiredOffset;
   normalizeAddonSelections();
 }
 
@@ -3872,7 +3936,9 @@ function initBookInteractions() {
     }
 
     if (target.dataset.monthNav) {
-      draft.calendarMonthOffset += Number(target.dataset.monthNav);
+      const bounds = availabilityCalendarBounds();
+      const nextOffset = draft.calendarMonthOffset + Number(target.dataset.monthNav);
+      draft.calendarMonthOffset = Math.max(bounds.minOffset, Math.min(bounds.maxOffset, nextOffset));
       renderBookPage();
       return;
     }
@@ -4138,6 +4204,24 @@ function initAdminInteractions() {
     const bookingSortButton = event.target?.closest?.("[data-booking-sort]");
     if (bookingSortButton) {
       adminUiState.bookingSort = toggleSortState(adminUiState.bookingSort, bookingSortButton.dataset.bookingSort || "createdAt");
+      renderAdminPage();
+      return;
+    }
+
+    const addAvailabilityWeekButton = event.target?.closest?.("[data-availability-add-week]");
+    if (addAvailabilityWeekButton) {
+      const roomId = addAvailabilityWeekButton.dataset.availabilityAddWeek || adminUiState.availabilityRoomId;
+      const rows = availabilityRowsForRoom(roomId);
+      const lastWeekKey = rows[rows.length - 1]?.weekKey;
+      if (!roomId || !lastWeekKey) return;
+      const nextWeekKey = localDateKey(addDays(lastWeekKey, 7));
+      const existing = adminUiState.availabilityExtraWeeksByRoom?.[roomId] || [];
+      if (!existing.includes(nextWeekKey)) {
+        adminUiState.availabilityExtraWeeksByRoom = {
+          ...(adminUiState.availabilityExtraWeeksByRoom || {}),
+          [roomId]: [...existing, nextWeekKey],
+        };
+      }
       renderAdminPage();
       return;
     }
