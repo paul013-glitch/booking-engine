@@ -12,6 +12,24 @@ const bookingUiState = {
   submitting: false,
 };
 
+function createDefaultBilling(now = new Date()) {
+  const trialStartedAt = now.toISOString();
+  const trialEndsAt = addDays(now, 30).toISOString();
+  const gracePeriodEndsAt = addDays(trialEndsAt, 7).toISOString();
+  return {
+    status: "trialing",
+    plan: "trial",
+    currency: "EUR",
+    monthlyPrice: 99,
+    trialStartedAt,
+    trialEndsAt,
+    gracePeriodEndsAt,
+    paidThroughAt: "",
+    nextBillingAt: trialEndsAt,
+    notes: "",
+  };
+}
+
 const adminUiState = {
   availabilityRoomId: "shared-double",
   availabilityExtraWeeksByRoom: {},
@@ -25,6 +43,13 @@ const adminUiState = {
   bookingDetailId: "",
   bookingDetailNotice: "",
   bookingDetailNoticeType: "info",
+  loadingVisible: true,
+  loadingTitle: "Loading admin panel",
+  loadingDetail: "Checking access and preparing the workspace.",
+  masterWorkspaces: [],
+  masterWorkspaceFilter: "",
+  masterWorkspaceLoading: false,
+  tenantWorkspaceId: "",
 };
 
 const logoSvg =
@@ -61,6 +86,7 @@ const seedState = {
       ga4Id: "",
       pixelId: "",
     },
+    billing: createDefaultBilling(),
     customerFields: [],
     bookingRules: {
       restrictedArrivalDays: true,
@@ -293,6 +319,10 @@ function normalizeWorkspaceData(data = {}) {
       theme: {
         ...seedState.camp.theme,
         ...((data.camp && data.camp.theme) || {}),
+      },
+      billing: {
+        ...seedState.camp.billing,
+        ...((data.camp && data.camp.billing) || {}),
       },
       analytics: {
         ...seedState.camp.analytics,
@@ -1247,6 +1277,53 @@ function businessWeeklyRows() {
 function bookingCountsTowardBusiness(booking) {
   if (!booking) return false;
   return booking.status === "confirmed" || booking.status === "held";
+}
+
+function billingState() {
+  return state.camp?.billing || seedState.camp.billing;
+}
+
+function billingDueDate(billing = billingState()) {
+  if (!billing) return "";
+  if (billing.status === "active" && billing.paidThroughAt) return billing.paidThroughAt;
+  if (billing.status === "past_due" && billing.gracePeriodEndsAt) return billing.gracePeriodEndsAt;
+  if (billing.status === "suspended" && billing.gracePeriodEndsAt) return billing.gracePeriodEndsAt;
+  return billing.trialEndsAt || billing.nextBillingAt || billing.paidThroughAt || "";
+}
+
+function billingDaysRemaining(billing = billingState()) {
+  const dueDate = billingDueDate(billing);
+  if (!dueDate) return null;
+  const diff = new Date(dueDate).getTime() - Date.now();
+  return Math.ceil(diff / 86400000);
+}
+
+function billingDisplayStatus(billing = billingState()) {
+  const status = String(billing?.status || "trialing");
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function billingStatusTone(billing = billingState()) {
+  const days = billingDaysRemaining(billing);
+  if (days === null) return "neutral";
+  if (days <= 0 || billing.status === "suspended") return "danger";
+  if (days <= 7 || billing.status === "past_due") return "warning";
+  return "neutral";
+}
+
+function billingBannerText(billing = billingState()) {
+  const days = billingDaysRemaining(billing);
+  if (days === null) return "";
+  if (days <= 0 || billing.status === "suspended") {
+    return "Billing overdue. The booking engine may stop working.";
+  }
+  if (days === 1) {
+    return "1 day left before the booking engine stops working.";
+  }
+  if (days <= 7) {
+    return `${days} days left before the booking engine stops working.`;
+  }
+  return "";
 }
 
 function bookingDetailNoticeMarkup() {
@@ -2497,6 +2574,10 @@ function renderAdminPage() {
   const packageCount = document.getElementById("packageCount");
   const addonCount = document.getElementById("addonCount");
   const businessCount = document.getElementById("businessCount");
+  const billingBadge = document.getElementById("billingBadge");
+  const billingCountdown = document.getElementById("billingCountdown");
+  const billingNotice = document.getElementById("billingNotice");
+  const billingForm = document.getElementById("billingForm");
   const bookingCount = document.getElementById("bookingCount");
   const leadCount = document.getElementById("leadCount");
   const activeTab = adminUiState.activeTab || "bookings";
@@ -2508,6 +2589,37 @@ function renderAdminPage() {
   if (addonCount) addonCount.textContent = `${state.addons.length} add-ons`;
   const businessRows = businessWeeklyRows();
   if (businessCount) businessCount.textContent = `${businessRows.length} weeks`;
+  const billing = billingState();
+  const billingDays = billingDaysRemaining(billing);
+  if (billingBadge) {
+    billingBadge.textContent = billingDisplayStatus(billing);
+  }
+  if (billingCountdown) {
+    billingCountdown.textContent =
+      billingDays === null
+        ? "No billing deadline"
+        : billingDays <= 0
+          ? "Access stopping now"
+          : `${billingDays} days left`;
+  }
+  if (billingNotice) {
+    const bannerText = billingBannerText(billing);
+    billingNotice.innerHTML = bannerText
+      ? `<div class="notice ${billingStatusTone(billing) === "danger" ? "error" : "warning"}">${escapeHtml(bannerText)}</div>`
+      : `<div class="notice success">Subscription is active. No action is needed right now.</div>`;
+  }
+  if (billingForm) {
+    billingForm.elements.status.value = billing.status || "trialing";
+    billingForm.elements.plan.value = billing.plan || "trial";
+    billingForm.elements.monthlyPrice.value = billing.monthlyPrice ?? 99;
+    billingForm.elements.currency.value = billing.currency || "EUR";
+    billingForm.elements.trialStartedAt.value = billing.trialStartedAt ? String(billing.trialStartedAt).slice(0, 10) : "";
+    billingForm.elements.trialEndsAt.value = billing.trialEndsAt ? String(billing.trialEndsAt).slice(0, 10) : "";
+    billingForm.elements.gracePeriodEndsAt.value = billing.gracePeriodEndsAt ? String(billing.gracePeriodEndsAt).slice(0, 10) : "";
+    billingForm.elements.paidThroughAt.value = billing.paidThroughAt ? String(billing.paidThroughAt).slice(0, 10) : "";
+    billingForm.elements.nextBillingAt.value = billing.nextBillingAt ? String(billing.nextBillingAt).slice(0, 10) : "";
+    billingForm.elements.notes.value = billing.notes || "";
+  }
   if (bookingCount) bookingCount.textContent = `${state.bookings.length} bookings`;
   const visibleBookingRows = filteredAdminBookings();
   const bookingFilterCount = document.getElementById("bookingFilterCount");
@@ -2643,6 +2755,9 @@ function renderAdminPage() {
   });
   tabButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.adminTab === activeTab);
+    if (button.dataset.adminTab === "billing") {
+      button.classList.toggle("billing-alert", !!billingBannerText(billing));
+    }
   });
   configPanes.forEach((pane) => {
     pane.hidden = activeTab !== "configure" || pane.dataset.configPane !== adminUiState.configTab;
@@ -3340,6 +3455,24 @@ function hydrateStateFromWorkspace(workspace) {
   saveState();
 }
 
+function currentIdentityRoles() {
+  const user = window.netlifyIdentity?.currentUser?.();
+  return Array.isArray(user?.app_metadata?.roles) ? user.app_metadata.roles.map((role) => String(role).trim()) : [];
+}
+
+function currentIdentityIsPlatformOwner() {
+  return currentIdentityRoles().includes("platform-owner");
+}
+
+function requestedTenantWorkspaceId() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("tenant") || params.get("workspaceId") || "";
+  } catch {
+    return "";
+  }
+}
+
 async function loadPublicWorkspace() {
   if (window.location.protocol === "file:") {
     return;
@@ -3357,7 +3490,7 @@ async function loadPublicWorkspace() {
   }
 }
 
-async function loadAdminWorkspace() {
+async function loadAdminWorkspace({ showLoading = true } = {}) {
   if (!window.netlifyIdentity?.currentUser) return;
 
   const user = window.netlifyIdentity.currentUser();
@@ -3365,26 +3498,40 @@ async function loadAdminWorkspace() {
 
   authState.user = user;
   authState.workspaceLoaded = false;
+  const loadSequence = (authState.workspaceLoadSequence || 0) + 1;
+  authState.workspaceLoadSequence = loadSequence;
+  if (showLoading) {
+    setAdminLoadingState(true, "Loading workspace", "Loading bookings, availability, business data, and settings.");
+  }
   try {
     authState.token = await user.jwt();
-    const workspace = await apiJson("me-workspace", {
+    const tenantWorkspaceId = requestedTenantWorkspaceId();
+    const workspaceUrl =
+      tenantWorkspaceId && currentIdentityIsPlatformOwner()
+        ? `master-workspace?workspaceId=${encodeURIComponent(tenantWorkspaceId)}`
+        : "me-workspace";
+    const workspace = await apiJson(workspaceUrl, {
       headers: {
         Authorization: `Bearer ${authState.token}`,
       },
     });
 
+    if (authState.workspaceLoadSequence !== loadSequence) return;
     if (workspace) {
       authState.workspace = workspace;
       authState.workspaceLoaded = true;
       hydrateStateFromWorkspace(workspace);
       renderAdminPage();
+      setAdminLoadingState(false);
       updateAdminAuthUI(user);
     }
   } catch (error) {
+    if (authState.workspaceLoadSequence !== loadSequence) return;
     const authStatus = document.getElementById("authStatus");
     if (authStatus) {
       authStatus.textContent = error instanceof Error ? error.message : "Could not load your workspace.";
     }
+    setAdminLoadingState(true, "Could not load workspace", error instanceof Error ? error.message : "Could not load your workspace.");
   }
 }
 
@@ -3392,7 +3539,10 @@ async function refreshAdminWorkspace({ silent = false } = {}) {
   if (!window.netlifyIdentity?.currentUser || !window.netlifyIdentity.currentUser()) return;
 
   try {
-    await loadAdminWorkspace();
+    if (!silent) {
+      setAdminLoadingState(true, "Refreshing workspace", "Updating bookings, availability, and business data.");
+    }
+    await loadAdminWorkspace({ showLoading: !silent });
   } catch (error) {
     if (!silent) {
       alert(error instanceof Error ? error.message : "Could not refresh workspace.");
@@ -3436,16 +3586,241 @@ async function cancelBookingReservation(bookingId, reservationCode = "", current
 function updateAdminAuthUI(user) {
   const authStatus = document.getElementById("authStatus");
   const adminWorkspace = document.getElementById("adminWorkspace");
+  const adminLoading = document.getElementById("adminLoading");
 
   if (!adminWorkspace) return;
 
   const signedIn = !!user;
   const workspaceReady = signedIn && authState.workspaceLoaded;
   adminWorkspace.hidden = !workspaceReady;
+  if (adminLoading) {
+    adminLoading.hidden = workspaceReady;
+    adminLoading.setAttribute("aria-busy", workspaceReady ? "false" : "true");
+  }
   renderTopbarActions(user, workspaceReady);
 
+  if (!signedIn) {
+    setAdminLoadingState(true, "Login required", "Sign in to load bookings, availability, and settings.");
+  } else if (!workspaceReady) {
+    setAdminLoadingState(true, "Loading workspace", "Loading bookings, availability, business data, and settings.");
+  } else {
+    setAdminLoadingState(false);
+  }
+
   if (authStatus) {
-    authStatus.textContent = signedIn ? "" : "Loading access state...";
+    authStatus.textContent = signedIn
+      ? workspaceReady
+        ? ""
+        : "Loading workspace..."
+      : "Loading access state...";
+  }
+}
+
+function setAdminLoadingState(visible, title = "Loading admin panel", detail = "") {
+  adminUiState.loadingVisible = !!visible;
+  adminUiState.loadingTitle = title || "Loading admin panel";
+  adminUiState.loadingDetail = detail || "";
+  renderAdminLoadingState();
+}
+
+function renderAdminLoadingState() {
+  const loading = document.getElementById("adminLoading");
+  const title = document.getElementById("adminLoadingTitle");
+  const detail = document.getElementById("adminLoadingDetail");
+  if (!loading) return;
+  loading.hidden = !adminUiState.loadingVisible;
+  loading.setAttribute("aria-busy", adminUiState.loadingVisible ? "true" : "false");
+  if (title) title.textContent = adminUiState.loadingTitle || "Loading admin panel";
+  if (detail) detail.textContent = adminUiState.loadingDetail || "";
+}
+
+function setMasterLoadingState(visible, title = "Loading master portal", detail = "") {
+  const loading = document.getElementById("masterLoading");
+  const titleNode = document.getElementById("masterLoadingTitle");
+  const detailNode = document.getElementById("masterLoadingDetail");
+  if (!loading) return;
+  loading.hidden = !visible;
+  loading.setAttribute("aria-busy", visible ? "true" : "false");
+  if (titleNode) titleNode.textContent = title || "Loading master portal";
+  if (detailNode) detailNode.textContent = detail || "";
+}
+
+function renderMasterTopbarActions(user, workspaceReady) {
+  const topbarActions = document.getElementById("masterTopbarActions");
+  if (!topbarActions) return;
+
+  if (!user) {
+    topbarActions.innerHTML = `
+      <button class="button button-primary" type="button" id="masterAuthButton" data-master-auth-action="login">
+        Login
+      </button>
+    `;
+    return;
+  }
+
+  topbarActions.innerHTML = `
+    <button class="button button-secondary" type="button" id="masterTopbarRefresh">Refresh</button>
+    <button class="button button-secondary" type="button" id="masterLogout" data-master-auth-action="logout">
+      Log out
+    </button>
+  `;
+  if (!workspaceReady) {
+    topbarActions.querySelector("#masterTopbarRefresh")?.setAttribute("disabled", "true");
+  }
+}
+
+function updateMasterAuthUI(user) {
+  const masterWorkspace = document.getElementById("masterWorkspace");
+  const masterLoading = document.getElementById("masterLoading");
+  const authStatus = document.getElementById("masterAuthStatus");
+  if (!masterWorkspace) return;
+
+  const signedIn = !!user;
+  const isOwner = signedIn && currentIdentityIsPlatformOwner();
+  const workspaceReady = signedIn && isOwner && !adminUiState.masterWorkspaceLoading;
+  masterWorkspace.hidden = !workspaceReady;
+  if (masterLoading) {
+    masterLoading.hidden = workspaceReady;
+  }
+  if (!signedIn) {
+    setMasterLoadingState(true, "Login required", "Log in with the SaaS owner account to see all tenants.");
+  } else if (!isOwner) {
+    setMasterLoadingState(true, "Owner access required", "This portal is for the SaaS owner account.");
+  }
+  renderMasterTopbarActions(user, workspaceReady);
+  if (authStatus) {
+    authStatus.textContent = !signedIn
+      ? "Loading access state..."
+      : !isOwner
+        ? "Owner access required."
+        : "";
+  }
+}
+
+function masterWorkspaceFilteredRows() {
+  const query = adminUiState.masterWorkspaceFilter.trim().toLowerCase();
+  return (adminUiState.masterWorkspaces || []).filter((workspace) => {
+    if (!query) return true;
+    return [
+      workspace.campName,
+      workspace.ownerEmail,
+      workspace.slug,
+      workspace.billing?.status,
+      workspace.id,
+      workspace.bookingUrl,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+}
+
+async function loadMasterWorkspaces({ showLoading = true } = {}) {
+  if (!window.netlifyIdentity?.currentUser || !currentIdentityIsPlatformOwner()) return;
+  if (showLoading) {
+    setMasterLoadingState(true, "Loading master portal", "Loading all tenant accounts and booking links.");
+  }
+  try {
+    adminUiState.masterWorkspaceLoading = true;
+    const token = await window.netlifyIdentity.currentUser().jwt();
+    const data = await apiJson("master-workspaces", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    adminUiState.masterWorkspaces = Array.isArray(data?.workspaces) ? data.workspaces : [];
+    renderMasterPage();
+    adminUiState.masterWorkspaceLoading = false;
+    setMasterLoadingState(false);
+    updateMasterAuthUI(window.netlifyIdentity.currentUser());
+  } catch (error) {
+    adminUiState.masterWorkspaceLoading = false;
+    setMasterLoadingState(true, "Could not load master portal", error instanceof Error ? error.message : "Could not load master portal.");
+  }
+}
+
+function renderMasterPage() {
+  const masterCount = document.getElementById("masterCount");
+  const masterFilter = document.getElementById("masterFilter");
+  const masterTableBody = document.getElementById("masterTableBody");
+  const masterNotice = document.getElementById("masterNotice");
+  const visibleRows = masterWorkspaceFilteredRows();
+  const user = window.netlifyIdentity?.currentUser?.();
+  const workspaceReady = !!user && currentIdentityIsPlatformOwner();
+  if (masterCount) {
+    masterCount.textContent = `${visibleRows.length} tenants`;
+  }
+  if (masterFilter) {
+    masterFilter.value = adminUiState.masterWorkspaceFilter || "";
+  }
+  if (masterNotice) {
+    masterNotice.innerHTML = workspaceReady
+      ? `<div class="notice success">You can open any tenant and fine-tune its settings.</div>`
+      : `<div class="notice">Log in with the owner account to view tenants.</div>`;
+  }
+  if (masterTableBody) {
+    masterTableBody.innerHTML = visibleRows
+      .map((workspace) => {
+        const bookingLink = workspace.bookingUrl || "";
+        const daysLeft = workspace.billing?.daysLeft;
+        const daysLabel =
+          daysLeft === null
+            ? "No deadline"
+            : daysLeft <= 0
+              ? "Expired"
+              : `${daysLeft} days left`;
+        return `
+          <tr>
+            <td><strong>${escapeHtml(workspace.campName)}</strong></td>
+            <td>${escapeHtml(workspace.ownerEmail || "Unknown")}</td>
+            <td>${escapeHtml(workspace.slug || "")}</td>
+            <td><span class="status ${escapeHtml(workspace.billing?.status || "trialing")}">${escapeHtml(workspace.billing?.status || "trialing")}</span></td>
+            <td>${escapeHtml(daysLabel)}</td>
+            <td>${escapeHtml(formatDateTime(workspace.updatedAt || workspace.createdAt || ""))}</td>
+            <td>
+              <div class="master-actions">
+                <a class="button button-secondary" href="${escapeHtml(bookingLink)}" target="_blank" rel="noreferrer">Open booking</a>
+                <a class="button button-primary" href="${escapeHtml(workspace.adminUrl || `./admin.html?tenant=${encodeURIComponent(workspace.id)}`)}">Open admin</a>
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+}
+
+function initMasterAuth() {
+  if (!window.netlifyIdentity || typeof window.netlifyIdentity.on !== "function") {
+    updateMasterAuthUI(null);
+    return;
+  }
+
+  window.netlifyIdentity.on("init", (user) => {
+    updateMasterAuthUI(user);
+    if (user && currentIdentityIsPlatformOwner()) {
+      void loadMasterWorkspaces();
+    }
+  });
+
+  window.netlifyIdentity.on("login", (user) => {
+    window.netlifyIdentity.close();
+    updateMasterAuthUI(user);
+    if (currentIdentityIsPlatformOwner()) {
+      void loadMasterWorkspaces();
+    }
+  });
+
+  window.netlifyIdentity.on("logout", () => {
+    adminUiState.masterWorkspaces = [];
+    adminUiState.masterWorkspaceFilter = "";
+    updateMasterAuthUI(null);
+  });
+
+  window.netlifyIdentity.init();
+  const currentUser = window.netlifyIdentity.currentUser();
+  updateMasterAuthUI(currentUser);
+  if (currentUser && currentIdentityIsPlatformOwner()) {
+    void loadMasterWorkspaces();
   }
 }
 
@@ -3465,9 +3840,16 @@ function renderTopbarActions(user, workspaceReady) {
   const openLink = workspaceReady
     ? `<a href="${bookingUrl()}" data-booking-link id="topbarBookingUrl" target="_blank" rel="noreferrer">Open</a>`
     : "";
+  const masterLink = currentIdentityIsPlatformOwner()
+    ? `<a href="./master.html" class="button button-secondary">Master portal</a>`
+    : "";
+  const billingText = workspaceReady ? billingBannerText() : "";
+  const billingPill = billingText ? `<span class="pill billing-pill billing-pill-urgent">${escapeHtml(billingText)}</span>` : "";
 
   topbarActions.innerHTML = `
+    ${billingPill}
     <span class="topbar-url">${openLink}</span>
+    ${masterLink}
     <button class="button button-secondary" type="button" id="topbarLogout" data-admin-auth-action="logout">
       Log out
     </button>
@@ -3481,6 +3863,7 @@ function initNetlifyIdentityAuth() {
     if (authStatus) {
       authStatus.textContent = "Netlify Identity is not available. Enable it in the Netlify dashboard.";
     }
+    setAdminLoadingState(true, "Netlify Identity unavailable", "Enable Netlify Identity to load bookings, availability, and settings.");
     return;
   }
 
@@ -4548,6 +4931,29 @@ function initAdminInteractions() {
     renderAdminPage();
   });
 
+  billingForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const toIso = (value) => (value ? new Date(`${value}T00:00:00`).toISOString() : "");
+    state.camp.billing = {
+      ...(state.camp.billing || createDefaultBilling()),
+      status: billingForm.elements.status.value || "trialing",
+      plan: billingForm.elements.plan.value.trim() || "trial",
+      monthlyPrice: Math.max(0, Number(billingForm.elements.monthlyPrice.value || 99)),
+      currency: billingForm.elements.currency.value.trim().toUpperCase() || "EUR",
+      trialStartedAt: toIso(billingForm.elements.trialStartedAt.value) || (state.camp.billing?.trialStartedAt || createDefaultBilling().trialStartedAt),
+      trialEndsAt: toIso(billingForm.elements.trialEndsAt.value) || (state.camp.billing?.trialEndsAt || createDefaultBilling().trialEndsAt),
+      gracePeriodEndsAt: toIso(billingForm.elements.gracePeriodEndsAt.value) || (state.camp.billing?.gracePeriodEndsAt || createDefaultBilling().gracePeriodEndsAt),
+      paidThroughAt: toIso(billingForm.elements.paidThroughAt.value),
+      nextBillingAt: toIso(billingForm.elements.nextBillingAt.value) || "",
+      notes: billingForm.elements.notes.value.trim(),
+    };
+    if (!state.camp.billing.nextBillingAt) {
+      state.camp.billing.nextBillingAt = state.camp.billing.trialEndsAt;
+    }
+    saveState();
+    renderAdminPage();
+  });
+
   document.addEventListener("click", (event) => {
     const closeDetailButton = event.target?.closest?.("[data-close-booking-detail]");
     if (closeDetailButton) {
@@ -4781,6 +5187,44 @@ function initAdminInteractions() {
   });
 }
 
+function initMasterInteractions() {
+  document.addEventListener("click", (event) => {
+    const authButton = event.target?.closest?.("[data-master-auth-action]");
+    if (authButton) {
+      if (authButton.dataset.masterAuthAction === "login") {
+        window.netlifyIdentity?.open?.();
+      } else if (authButton.dataset.masterAuthAction === "logout") {
+        window.netlifyIdentity?.logout?.();
+      }
+      return;
+    }
+
+    const openAdminButton = event.target?.closest?.("[data-open-tenant-admin]");
+    if (openAdminButton) {
+      const workspaceId = openAdminButton.dataset.openTenantAdmin || "";
+      if (!workspaceId) return;
+      window.location.assign(`./admin.html?tenant=${encodeURIComponent(workspaceId)}`);
+      return;
+    }
+
+    if (event.target?.id === "masterRefresh") {
+      void loadMasterWorkspaces({ showLoading: false });
+      return;
+    }
+
+    if (event.target?.id === "masterTopbarRefresh") {
+      void loadMasterWorkspaces({ showLoading: false });
+    }
+  });
+
+  document.addEventListener("input", (event) => {
+    const filter = event.target?.closest?.("#masterFilter");
+    if (!filter) return;
+    adminUiState.masterWorkspaceFilter = filter.value || "";
+    renderMasterPage();
+  });
+}
+
 function init() {
   cleanExpiredHolds();
   applyTheme(state.camp.theme);
@@ -4799,6 +5243,13 @@ function init() {
     initAdminInteractions();
     renderAdminPage();
     updateAdminAuthUI(window.netlifyIdentity?.currentUser?.());
+  }
+
+  if (document.getElementById("masterWorkspace")) {
+    initMasterAuth();
+    initMasterInteractions();
+    renderMasterPage();
+    updateMasterAuthUI(window.netlifyIdentity?.currentUser?.());
   }
 }
 

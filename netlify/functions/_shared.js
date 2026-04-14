@@ -109,6 +109,30 @@ const seedAddons = [
 
 const seedPromos = [];
 
+function addDays(dateInput, days) {
+  const date = new Date(dateInput);
+  date.setDate(date.getDate() + Number(days || 0));
+  return date;
+}
+
+function seedBilling(now = new Date()) {
+  const trialStartedAt = now.toISOString();
+  const trialEndsAt = addDays(now, 30).toISOString();
+  const gracePeriodEndsAt = addDays(trialEndsAt, 7).toISOString();
+  return {
+    status: "trialing",
+    plan: "trial",
+    currency: "EUR",
+    monthlyPrice: 99,
+    trialStartedAt,
+    trialEndsAt,
+    gracePeriodEndsAt,
+    paidThroughAt: "",
+    nextBillingAt: trialEndsAt,
+    notes: "",
+  };
+}
+
 function startOfWeek(dateInput) {
   const date = new Date(dateInput);
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
@@ -170,6 +194,7 @@ function createDefaultWorkspace(input = {}) {
       name,
       slug: input.slug || randomSlug("camp"),
       logoUrl: seedCamp.logoUrl,
+      billing: seedBilling(new Date()),
       customerFields: [],
       bookingRules: { ...seedCamp.bookingRules },
       availability: createDefaultAvailability(seedRooms),
@@ -205,6 +230,10 @@ function normalizeWorkspace(data = {}) {
     startDate: data?.startDate,
   });
   const rooms = Array.isArray(data.rooms) ? data.rooms : base.rooms;
+  const billing = {
+    ...base.camp.billing,
+    ...((data.camp && data.camp.billing) || {}),
+  };
 
   return {
     ...base,
@@ -220,6 +249,7 @@ function normalizeWorkspace(data = {}) {
         ...base.camp.theme,
         ...((data.camp && data.camp.theme) || {}),
       },
+      billing,
       bookingRules: {
         ...base.camp.bookingRules,
         ...((data.camp && data.camp.bookingRules) || {}),
@@ -355,6 +385,20 @@ async function getWorkspaceForOwner(ownerId) {
   return await getWorkspaceById(ownerEntry.workspaceId);
 }
 
+async function listWorkspaces() {
+  const { workspaces } = stores();
+  const { blobs } = await workspaces.list();
+  const entries = await Promise.all(
+    blobs
+      .filter((blob) => String(blob.key || "").startsWith("workspace:"))
+      .map(async (blob) => {
+        const workspace = await workspaces.get(blob.key, { type: "json" });
+        return workspace ? normalizeWorkspace(workspace) : null;
+      }),
+  );
+  return entries.filter(Boolean);
+}
+
 async function saveWorkspace(workspace) {
   const normalized = normalizeWorkspace(workspace);
   const { workspaces, slugs, owners } = stores();
@@ -392,12 +436,27 @@ function workspaceResponse(workspace) {
   return response(200, workspace);
 }
 
+function masterPortalEmails() {
+  return String(process.env.MASTER_PORTAL_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isPlatformOwnerUser(user = {}) {
+  const email = String(user.email || "").trim().toLowerCase();
+  const roles = Array.isArray(user.app_metadata?.roles) ? user.app_metadata.roles.map((role) => String(role).trim()) : [];
+  return roles.includes("platform-owner") || (email && masterPortalEmails().includes(email));
+}
+
 module.exports = {
   createDefaultWorkspace,
+  isPlatformOwnerUser,
   getUserFromContext,
   getWorkspaceById,
   getWorkspaceBySlug,
   getWorkspaceForOwner,
+  listWorkspaces,
   normalizeWorkspace,
   response,
   saveWorkspace,

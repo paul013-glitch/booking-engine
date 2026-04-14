@@ -22,6 +22,15 @@
     </header>
 
     <main class="admin-shell">
+      <section id="adminLoading" class="admin-loading" role="status" aria-live="polite" aria-busy="true">
+        <div class="admin-loading-card">
+          <span class="admin-loading-spinner" aria-hidden="true"></span>
+          <div>
+            <strong id="adminLoadingTitle">Loading admin panel</strong>
+            <p id="adminLoadingDetail">Checking access and preparing the workspace.</p>
+          </div>
+        </div>
+      </section>
       <div id="adminWorkspace" hidden>
         <section class="panel admin-hero">
           <div>
@@ -36,6 +45,7 @@
         <section class="panel admin-tabs" aria-label="Admin sections">
           <button type="button" class="admin-tab-button" data-admin-tab="bookings">Bookings</button>
           <button type="button" class="admin-tab-button" data-admin-tab="business">Business</button>
+          <button type="button" class="admin-tab-button" data-admin-tab="billing">Billing</button>
           <button type="button" class="admin-tab-button" data-admin-tab="leads">Leads</button>
           <button type="button" class="admin-tab-button" data-admin-tab="availability">Availability matrix</button>
           <button type="button" class="admin-tab-button" data-admin-tab="branding">Branding</button>
@@ -71,6 +81,80 @@
                 <tbody id="businessTableBody"></tbody>
               </table>
             </div>
+          </article>
+        </section>
+
+        <section class="panel" data-admin-pane="billing">
+          <div class="panel-head">
+            <div>
+              <p class="section-label">Billing</p>
+              <h2>Subscription and trial</h2>
+            </div>
+            <span class="pill" id="billingBadge"></span>
+          </div>
+
+          <article class="list-card">
+            <div class="list-head">
+              <h3>Plan status</h3>
+              <span class="pill" id="billingCountdown"></span>
+            </div>
+            <div id="billingNotice" class="billing-notice"></div>
+            <form id="billingForm" class="admin-form admin-profile">
+              <div class="two-col">
+                <label>
+                  Status
+                  <select name="status">
+                    <option value="trialing">Trialing</option>
+                    <option value="active">Active</option>
+                    <option value="past_due">Past due</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
+                </label>
+                <label>
+                  Plan
+                  <input name="plan" type="text" placeholder="trial" />
+                </label>
+              </div>
+              <div class="two-col">
+                <label>
+                  Monthly price
+                  <input name="monthlyPrice" type="number" min="0" step="1" placeholder="99" />
+                </label>
+                <label>
+                  Currency
+                  <input name="currency" type="text" maxlength="3" placeholder="EUR" />
+                </label>
+              </div>
+              <div class="two-col">
+                <label>
+                  Trial started
+                  <input name="trialStartedAt" type="date" />
+                </label>
+                <label>
+                  Trial ends
+                  <input name="trialEndsAt" type="date" />
+                </label>
+              </div>
+              <div class="two-col">
+                <label>
+                  Grace period ends
+                  <input name="gracePeriodEndsAt" type="date" />
+                </label>
+                <label>
+                  Paid through
+                  <input name="paidThroughAt" type="date" />
+                </label>
+              </div>
+              <label>
+                Next billing date
+                <input name="nextBillingAt" type="date" />
+              </label>
+              <label>
+                Billing notes
+                <textarea name="notes" rows="3" placeholder="Payment status, invoice reference, support notes"></textarea>
+              </label>
+              <button class="button button-primary" type="submit">Save billing</button>
+            </form>
           </article>
         </section>
 

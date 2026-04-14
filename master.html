@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Master Portal | SurfCamp OS</title>
+    <meta name="description" content="Owner portal for managing all tenant booking engines and subscriptions." />
+    <script>
+      (function () {
+        const base = window.location.protocol === "file:" ? "./" : "/";
+        document.write('<link rel="stylesheet" href="' + base + 'styles.css" />');
+      })();
+    </script>
+  </head>
+  <body class="page page-admin page-master">
+    <header class="topbar">
+      <div class="brand-mark">SurfCamp OS</div>
+      <div class="topbar-actions" id="masterTopbarActions" aria-label="Account actions"></div>
+    </header>
+
+    <main class="admin-shell master-shell">
+      <section id="masterLoading" class="admin-loading" role="status" aria-live="polite" aria-busy="true">
+        <div class="admin-loading-card">
+          <span class="admin-loading-spinner" aria-hidden="true"></span>
+          <div>
+            <strong id="masterLoadingTitle">Loading master portal</strong>
+            <p id="masterLoadingDetail">Checking owner access and preparing the tenant list.</p>
+          </div>
+        </div>
+      </section>
+
+      <div id="masterWorkspace" hidden>
+        <section class="panel admin-hero">
+          <div>
+            <p class="eyebrow">Master portal</p>
+            <h1>All tenant accounts in one place.</h1>
+            <p class="lede">
+              Review every booking engine, monitor billing, and jump into any tenant admin to fine-tune settings.
+            </p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-label">Tenants</p>
+              <h2>Accounts and booking links</h2>
+            </div>
+            <span class="pill" id="masterCount"></span>
+          </div>
+
+          <div class="booking-toolbar master-toolbar">
+            <label>
+              Search tenants
+              <input id="masterFilter" type="search" placeholder="Camp name, owner email, slug..." />
+            </label>
+            <div class="booking-toolbar-actions">
+              <span class="pill" id="masterAuthStatus"></span>
+              <button class="button button-secondary" type="button" id="masterRefresh">Refresh</button>
+            </div>
+          </div>
+
+          <div id="masterNotice"></div>
+          <div class="table-shell">
+            <table class="admin-table" aria-label="Master portal tenant table">
+              <thead>
+                <tr>
+                  <th>Camp</th>
+                  <th>Owner</th>
+                  <th>Slug</th>
+                  <th>Billing</th>
+                  <th>Days left</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="masterTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

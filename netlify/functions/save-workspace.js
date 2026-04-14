@@ -1,6 +1,7 @@
 const {
   getUserFromContext,
   getWorkspaceById,
+  isPlatformOwnerUser,
   normalizeWorkspace,
   response,
   saveWorkspace,
@@ -26,15 +27,16 @@ exports.handler = async (event, context) => {
 
     const existing = await getWorkspaceById(payload.workspaceId);
     const ownerId = user.sub || user.email;
-    if (existing && existing.ownerId !== ownerId) {
+    const platformOwner = isPlatformOwnerUser(user);
+    if (existing && existing.ownerId !== ownerId && !platformOwner) {
       return response(403, { error: "Forbidden" });
     }
 
     const workspace = normalizeWorkspace({
       ...(existing || {}),
       ...(payload.workspace || {}),
-      ownerId,
-      ownerEmail: user.email,
+      ownerId: existing?.ownerId || ownerId,
+      ownerEmail: existing?.ownerEmail || user.email,
       id: payload.workspaceId || existing?.id || `workspace-${Date.now()}`,
     });
 
