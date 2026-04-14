@@ -16,7 +16,7 @@ const adminUiState = {
   availabilityRoomId: "shared-double",
   activeTab: "bookings",
   configTab: "packages",
-  bookingSort: { key: "createdAt", direction: "desc" },
+  bookingSort: { key: "bookedAt", direction: "desc" },
   leadSort: { key: "createdAt", direction: "desc" },
   bookingDateFilter: "",
   bookingDetailId: "",
@@ -82,6 +82,7 @@ const seedState = {
   guestBirthMonth: "",
   guestBirthYear: "",
   guestGender: "",
+  guestGenders: [],
   notes: "",
   bookingConfirmation: null,
   leads: [],
@@ -250,6 +251,7 @@ const draft = {
   guestBirthMonth: state.guestBirthMonth || "",
   guestBirthYear: state.guestBirthYear || "",
   guestGender: state.guestGender,
+  guestGenders: Array.isArray(state.guestGenders) ? [...state.guestGenders] : [],
   notes: state.notes,
   promoCodeInput: state.promoCodeInput || "",
   promoCodes: [...(state.promoCodes || [])],
@@ -352,6 +354,7 @@ function normalizeWorkspaceData(data = {}) {
     guestBirthMonth: data.guestBirthMonth || "",
     guestBirthYear: data.guestBirthYear || "",
     guestGender: data.guestGender || "",
+    guestGenders: Array.isArray(data.guestGenders) ? data.guestGenders : data.guestGender ? [data.guestGender] : [],
     notes: data.notes || "",
     bookingConfirmation: data.bookingConfirmation || null,
     promoCodeInput: data.promoCodeInput || "",
@@ -963,6 +966,16 @@ function customerFieldDomId(field) {
 
 function customerFieldValue(fieldKey) {
   return String(draft.customerFieldValues?.[fieldKey] ?? "");
+}
+
+function normalizedGuestGenders(values = [], guestCount = selectedPackagePeopleCount()) {
+  const count = Math.max(1, Number(guestCount) || 1);
+  const source = Array.isArray(values) ? values : values ? [values] : [];
+  return Array.from({ length: count }, (_, index) => String(source[index] || "").trim());
+}
+
+function guestGenderEntries(values = draft.guestGenders) {
+  return normalizedGuestGenders(values, selectedPackagePeopleCount());
 }
 
 function countryOptions() {
@@ -1687,6 +1700,8 @@ function customerDetailsPayload() {
     customFields[field.key] = customerFieldValue(field.key);
   }
 
+  const genders = guestGenderEntries();
+
   return {
     country: draft.guestCountry || "",
     dateOfBirth: {
@@ -1694,7 +1709,8 @@ function customerDetailsPayload() {
       month: draft.guestBirthMonth || "",
       year: draft.guestBirthYear || "",
     },
-    gender: draft.guestGender || "",
+    gender: genders[0] || draft.guestGender || "",
+    genders,
     notes: draft.notes || "",
     customFields,
   };
@@ -1708,6 +1724,15 @@ function customerDetailsSummaryText(customerDetails = {}) {
     parts.push(`DOB ${dobParts.join("/")}`);
   }
 
+  const genders = Array.isArray(customerDetails.genders)
+    ? customerDetails.genders.filter(Boolean)
+    : customerDetails.gender
+      ? [customerDetails.gender]
+      : [];
+  if (genders.length) {
+    parts.push(`Gender ${genders.join(", ")}`);
+  }
+
   const customFields = customerDetails.customFields || {};
   for (const [key, value] of Object.entries(customFields)) {
     if (value) {
@@ -1717,6 +1742,28 @@ function customerDetailsSummaryText(customerDetails = {}) {
   }
 
   return parts.join(" · ");
+}
+
+function bookingGenderEntries(booking = {}) {
+  const genders = Array.isArray(booking.guestGenders) && booking.guestGenders.length
+    ? booking.guestGenders
+    : booking.guestGender
+      ? [booking.guestGender]
+      : [];
+  return normalizedGuestGenders(genders, bookingGuestCount(booking));
+}
+
+function bookingGenderSummary(booking = {}) {
+  const genders = bookingGenderEntries(booking).filter(Boolean);
+  return genders.length ? genders.join(", ") : "No gender";
+}
+
+function bookingCustomerFieldEntries(booking = {}) {
+  const details = booking.customerDetails || {};
+  return customerFieldDefinitions().map((field) => ({
+    label: field.label,
+    value: String(details.customFields?.[field.key] ?? "").trim(),
+  }));
 }
 
 function renderCustomerFieldControl(field) {
@@ -1767,6 +1814,32 @@ function renderCustomerFieldControl(field) {
         ${required}
       />
     </label>
+  `;
+}
+
+function renderGuestGenderControls() {
+  const guestCount = Math.max(1, selectedPackagePeopleCount());
+  const genders = guestGenderEntries();
+  const blocks = Array.from({ length: guestCount }, (_, index) => {
+    const value = genders[index] || "";
+    const fieldId = `fieldGuestGender${index}`;
+    const label = guestCount === 1 ? "Gender" : `Guest ${index + 1} gender`;
+    return `
+      <label class="field" id="${fieldId}">
+        ${escapeHtml(label)}
+        <select data-guest-gender-index="${index}">
+          <option value="" ${value ? "" : "selected"}>Select gender</option>
+          <option value="Female" ${value === "Female" ? "selected" : ""}>Female</option>
+          <option value="Male" ${value === "Male" ? "selected" : ""}>Male</option>
+        </select>
+      </label>
+    `;
+  });
+
+  return `
+    <div class="customer-fields customer-fields-genders">
+      ${blocks.join("")}
+    </div>
   `;
 }
 
@@ -2054,14 +2127,9 @@ function renderBookPage() {
                   </div>
                 </div>
               </div>
-              <label class="field" id="fieldGuestGender" style="margin-top: 14px;">
-                Gender
-                <select id="guestGender">
-                  <option value="" ${draft.guestGender ? "" : "selected"}>Select gender</option>
-                  <option value="Female" ${draft.guestGender === "Female" ? "selected" : ""}>Female</option>
-                  <option value="Male" ${draft.guestGender === "Male" ? "selected" : ""}>Male</option>
-                </select>
-              </label>
+              <div id="fieldGuestGenderGroup" style="margin-top: 14px;">
+                ${renderGuestGenderControls()}
+              </div>
               ${
                 customerFields.length
                   ? `
@@ -2423,7 +2491,7 @@ function renderAdminPage() {
             </div>
             <small>${packageSummary} &middot; ${room.name}</small>
             <div class="tiny">${booking.guestEmail || "No email"} &middot; ${booking.guestPhone || "No phone"}</div>
-            <div class="tiny">${booking.guestGender || "No gender"} &middot; ${booking.guestCountry || "No country"}</div>
+            <div class="tiny">${escapeHtml(bookingGenderSummary(booking))} &middot; ${booking.guestCountry || "No country"}</div>
             ${booking.customerDetails ? `<div class="tiny">${escapeHtml(customerDetailsSummaryText(booking.customerDetails))}</div>` : ""}
             <div class="tiny">${formatDate(booking.startDate)} to ${formatDate(booking.endDate)} &middot; ${money(booking.total)}</div>
             <div class="tiny">Booked: ${formatDateTime(booking.createdAt)}</div>
@@ -2442,7 +2510,7 @@ function renderAdminPage() {
       .join("");
   }
 
-  const bookingSort = adminUiState.bookingSort || { key: "createdAt", direction: "desc" };
+  const bookingSort = adminUiState.bookingSort || { key: "bookedAt", direction: "desc" };
   const leadSort = adminUiState.leadSort || { key: "createdAt", direction: "desc" };
   const bookingsForTable = sortAdminRows(visibleBookingRows, bookingSort, {
     guest: (item) => item.guestName || "",
@@ -2489,23 +2557,23 @@ function renderAdminPage() {
         return `
           <tr class="booking-row" tabindex="0" role="button" data-booking-open="${booking.id}">
             <td>
-              <strong>${booking.guestName || "Guest"}</strong>
+              <strong>${bookingTime.label}</strong>
             </td>
+            <td><strong>${booking.guestName || "Guest"}</strong></td>
+            <td><strong>${booking.reservationCode || booking.reservationId || "pending"}</strong></td>
+            <td>${bookingGuestCount(booking)}</td>
             <td><strong>${formatDateShort(booking.startDate)}</strong></td>
             <td><strong>${formatDateShort(booking.endDate)}</strong></td>
             <td>${booking.guestEmail || "No email"}</td>
             <td>${booking.guestPhone || "No phone"}</td>
             <td><strong>${room?.name || booking.roomId || ""}</strong></td>
-            <td>${bookingGuestCount(booking)}</td>
             <td>${packageSummary}</td>
             <td>${addonSummary}</td>
             <td><strong>${money(booking.total)}</strong></td>
             <td><span class="status ${booking.status}">${booking.status}</span></td>
-            <td>${bookingTime.label}</td>
             <td>${bookingTime.day}</td>
             <td>${bookingTime.month}</td>
             <td>${bookingTime.year}</td>
-            <td>${booking.reservationCode || "pending"}</td>
           </tr>
         `;
       })
@@ -2545,6 +2613,7 @@ function renderAdminPage() {
   if (bookingDetail && bookingDetailTitle && bookingDetailSubtitle && bookingDetailContent && bookingDetailStatus) {
     const room = getRoom(bookingDetail.roomId);
     const bookingTime = formatDateTimeParts(bookingDetail.createdAt);
+    const genderEntries = bookingGenderEntries(bookingDetail);
     bookingDetailTitle.textContent = bookingDetail.guestName || "Reservation details";
     bookingDetailSubtitle.textContent = `${bookingDetail.reservationCode || "pending"} · ${bookingDetail.status}`;
     bookingDetailContent.innerHTML = `
@@ -2599,11 +2668,23 @@ function renderAdminPage() {
         </div>
       </div>
       <div class="booking-detail-notes">
-        <div><span class="tiny">Gender</span><strong>${escapeHtml(bookingDetail.guestGender || "No gender")}</strong></div>
         <div><span class="tiny">Country</span><strong>${escapeHtml(bookingDetail.guestCountry || "No country")}</strong></div>
         <div><span class="tiny">Date of birth</span><strong>${escapeHtml(
           [bookingDetail.guestBirthDay, bookingDetail.guestBirthMonth, bookingDetail.guestBirthYear].filter(Boolean).join("-"),
         ) || "Not set"}</strong></div>
+        ${genderEntries
+          .map((gender, index) => {
+            const label = genderEntries.length === 1 ? "Gender" : `Guest ${index + 1} gender`;
+            return `<div><span class="tiny">${escapeHtml(label)}</span><strong>${escapeHtml(gender || "Not set")}</strong></div>`;
+          })
+          .join("")}
+        <div><span class="tiny">Notes</span><strong>${escapeHtml(bookingDetail.notes || bookingDetail.customerDetails?.notes || "No notes")}</strong></div>
+        ${bookingCustomerFieldEntries(bookingDetail)
+          .map(
+            (field) =>
+              `<div><span class="tiny">${escapeHtml(field.label)}</span><strong>${escapeHtml(field.value || "Not set")}</strong></div>`,
+          )
+          .join("")}
         <div><span class="tiny">Status</span><strong>${escapeHtml(bookingDetail.status || "")}</strong></div>
         <div><span class="tiny">Confirmation email</span><strong>${escapeHtml(bookingDetail.confirmationEmail?.status || "not sent")}</strong></div>
       </div>
@@ -2644,7 +2725,7 @@ function renderAdminPage() {
             <td>
               <strong>${lead.guestName || "Guest lead"}</strong>
               <div class="tiny muted">${lead.guestEmail || "No email"}</div>
-              <div class="tiny muted">${lead.guestGender || "No gender"} &middot; ${lead.guestCountry || "No country"}</div>
+              <div class="tiny muted">${escapeHtml(bookingGenderSummary(lead))} &middot; ${lead.guestCountry || "No country"}</div>
               ${lead.customerDetails ? `<div class="tiny muted">${escapeHtml(customerDetailsSummaryText(lead.customerDetails))}</div>` : ""}
               ${lead.promoCodes?.length ? `<div class="tiny">Promo: ${escapeHtml(lead.promoCodes.join(", "))}</div>` : ""}
             </td>
@@ -3240,7 +3321,8 @@ function syncDraftToState() {
   state.guestBirthDay = draft.guestBirthDay;
   state.guestBirthMonth = draft.guestBirthMonth;
   state.guestBirthYear = draft.guestBirthYear;
-  state.guestGender = draft.guestGender;
+  state.guestGenders = normalizedGuestGenders(draft.guestGenders, selectedPackagePeopleCount());
+  state.guestGender = state.guestGenders[0] || draft.guestGender || "";
   state.notes = draft.notes;
   state.promoCodeInput = draft.promoCodeInput || "";
   state.promoCodes = [...(draft.promoCodes || [])];
@@ -3262,7 +3344,8 @@ function applyStateToDraft() {
   draft.guestBirthDay = state.guestBirthDay || "";
   draft.guestBirthMonth = state.guestBirthMonth || "";
   draft.guestBirthYear = state.guestBirthYear || "";
-  draft.guestGender = state.guestGender || "";
+  draft.guestGenders = normalizedGuestGenders(state.guestGenders || (state.guestGender ? [state.guestGender] : []));
+  draft.guestGender = draft.guestGenders[0] || state.guestGender || "";
   draft.notes = state.notes || "";
   draft.promoCodeInput = state.promoCodeInput || "";
   draft.promoCodes = [...(state.promoCodes || [])];
@@ -3284,7 +3367,8 @@ function upsertCheckoutLead(stage = "checkout") {
     guestPhone: draft.guestPhone || existing?.guestPhone || "",
     guestEmail: draft.guestEmail || existing?.guestEmail || "",
     guestCountry: draft.guestCountry || existing?.guestCountry || "",
-    guestGender: draft.guestGender || existing?.guestGender || "",
+    guestGender: draft.guestGenders?.[0] || draft.guestGender || existing?.guestGender || "",
+    guestGenders: normalizedGuestGenders(draft.guestGenders || (draft.guestGender ? [draft.guestGender] : [])),
     packageId: draft.packageId,
     packageQuantities: { ...draft.packageQuantities },
     roomId: draft.roomId,
@@ -3359,6 +3443,8 @@ function setPackageQuantity(packageId, quantity) {
 
   const activePackageId = selectedPackageRows()[0]?.id || seedState.selectedPackageId;
   draft.packageId = activePackageId;
+  draft.guestGenders = normalizedGuestGenders(draft.guestGenders || (draft.guestGender ? [draft.guestGender] : []));
+  draft.guestGender = draft.guestGenders[0] || draft.guestGender || "";
   normalizeAddonSelections();
 }
 
@@ -3386,9 +3472,10 @@ function setBookingFieldErrors(fieldIds = []) {
     "fieldGuestBirthDay",
     "fieldGuestBirthMonth",
     "fieldGuestBirthYear",
-    "fieldGuestGender",
+    "fieldGuestGenderGroup",
     "fieldGuestNotes",
     ...customerFieldDefinitions().map((field) => customerFieldDomId(field)),
+    ...Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) => `fieldGuestGender${index}`),
   ];
   for (const id of allFieldIds) {
     document.getElementById(id)?.classList.toggle("is-invalid", fieldIds.includes(id));
@@ -3443,8 +3530,12 @@ async function confirmBookingReservation() {
   const guestBirthDay = document.getElementById("guestBirthDay")?.value.trim();
   const guestBirthMonth = document.getElementById("guestBirthMonth")?.value.trim();
   const guestBirthYear = document.getElementById("guestBirthYear")?.value.trim();
-  const guestGender = document.getElementById("guestGender")?.value.trim();
   const notes = document.getElementById("guestNotes")?.value.trim();
+  const guestGenders = normalizedGuestGenders(
+    Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) =>
+      document.querySelector(`[data-guest-gender-index="${index}"]`)?.value.trim() || "",
+    ),
+  );
 
   const missingFields = [];
   if (!guestName) missingFields.push("fieldGuestName");
@@ -3454,7 +3545,9 @@ async function confirmBookingReservation() {
   if (!guestBirthDay) missingFields.push("fieldGuestBirthDay");
   if (!guestBirthMonth) missingFields.push("fieldGuestBirthMonth");
   if (!guestBirthYear) missingFields.push("fieldGuestBirthYear");
-  if (!guestGender) missingFields.push("fieldGuestGender");
+  guestGenders.forEach((gender, index) => {
+    if (!gender) missingFields.push(`fieldGuestGender${index}`);
+  });
   for (const field of customerFieldDefinitions()) {
     if (field.required && !String(draft.customerFieldValues?.[field.key] || "").trim()) {
       missingFields.push(customerFieldDomId(field));
@@ -3486,7 +3579,8 @@ async function confirmBookingReservation() {
     guestBirthDay,
     guestBirthMonth,
     guestBirthYear,
-    guestGender,
+    guestGender: guestGenders[0] || "",
+    guestGenders,
     packageId: draft.packageId,
     packageQuantities: { ...draft.packageQuantities },
     roomId: draft.roomId,
@@ -3510,7 +3604,8 @@ async function confirmBookingReservation() {
   draft.guestBirthDay = guestBirthDay;
   draft.guestBirthMonth = guestBirthMonth;
   draft.guestBirthYear = guestBirthYear;
-  draft.guestGender = guestGender;
+  draft.guestGenders = guestGenders;
+  draft.guestGender = guestGenders[0] || "";
   draft.notes = notes;
 
   try {
@@ -3541,7 +3636,8 @@ async function confirmBookingReservation() {
       confirmedAt: now.toISOString(),
       guestEmail,
       guestName,
-      guestGender,
+      guestGender: guestGenders[0] || "",
+      guestGenders,
       customerDetails: customerDetailsPayload(),
       promoCodes: [...(draft.promoCodes || [])],
       promoSummary: promoBookingSummary(),
@@ -3578,7 +3674,8 @@ async function confirmBookingReservation() {
       confirmedAt: now.toISOString(),
       guestEmail,
       guestName,
-      guestGender,
+      guestGender: guestGenders[0] || "",
+      guestGenders,
       customerDetails: customerDetailsPayload(),
       promoCodes: [...(draft.promoCodes || [])],
       promoSummary: promoBookingSummary(),
@@ -3793,8 +3890,12 @@ function initBookInteractions() {
       upsertCheckoutLead("checkout");
       setBookingFieldErrors([]);
     }
-    if (target.id === "guestGender") {
-      draft.guestGender = target.value;
+    if (target.matches?.("[data-guest-gender-index]")) {
+      const index = Number(target.dataset.guestGenderIndex || 0);
+      const nextGenders = guestGenderEntries();
+      nextGenders[index] = target.value;
+      draft.guestGenders = normalizedGuestGenders(nextGenders);
+      draft.guestGender = draft.guestGenders[0] || "";
       upsertCheckoutLead("checkout");
       setBookingFieldErrors([]);
     }
@@ -3930,7 +4031,7 @@ function initAdminInteractions() {
   });
 
   bookingCsvExport?.addEventListener("click", () => {
-    const rows = sortAdminRows(filteredAdminBookings(), adminUiState.bookingSort || { key: "createdAt", direction: "desc" }, {
+    const rows = sortAdminRows(filteredAdminBookings(), adminUiState.bookingSort || { key: "bookedAt", direction: "desc" }, {
       guest: (item) => item.guestName || "",
       checkIn: (item) => item.startDate || "",
       checkOut: (item) => item.endDate || "",

@@ -121,6 +121,11 @@ function customerDetailsSummary(workspace, booking) {
 
   if (dob) lines.push(`Date of birth: ${dob}`);
 
+  const genders = Array.isArray(details.genders) && details.genders.length ? details.genders : guestGenderList(booking);
+  if (genders.filter(Boolean).length) {
+    lines.push(`Gender: ${genders.filter(Boolean).join(", ")}`);
+  }
+
   Object.entries(details.customFields || {}).forEach(([key, value]) => {
     if (!String(value || "").trim()) return;
     const field = fieldMap.get(key);
@@ -211,6 +216,16 @@ function bookingGuestCount(booking = {}) {
     return Object.values(booking.packageQuantities).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
   }
   return Math.max(1, Number(booking.packagePeople || 1));
+}
+
+function guestGenderList(booking = {}) {
+  const count = bookingGuestCount(booking);
+  const values = Array.isArray(booking.guestGenders) && booking.guestGenders.length
+    ? booking.guestGenders
+    : booking.guestGender
+      ? [booking.guestGender]
+      : [];
+  return Array.from({ length: count }, (_, index) => String(values[index] || "").trim());
 }
 
 async function sendConfirmationEmail({ workspace, booking }) {
@@ -322,6 +337,7 @@ exports.handler = async (event) => {
       checkInDate: booking.startDate,
       checkOutDate: booking.endDate,
       guestCount: bookingGuestCount(booking),
+      guestGenders: guestGenderList(booking),
       updatedAt: now.toISOString(),
     };
 
@@ -339,6 +355,7 @@ exports.handler = async (event) => {
       checkInDate: booking.startDate,
       checkOutDate: booking.endDate,
       guestCount: bookingGuestCount(booking),
+      guestGenders: guestGenderList(booking),
       holdExpiresAt: null,
       notes: booking.notes || "Confirmed booking.",
       source: "demo-checkout",
