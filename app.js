@@ -1370,9 +1370,10 @@ function bookingsToCsv(rows = []) {
     "Guest name",
     "Nr of guests",
     "Check-in date",
+    "Gender",
+    "Room",
     "Email",
     "Phone",
-    "Room",
   ];
 
   const lines = [headers.map(csvEscape).join(",")];
@@ -1383,15 +1384,16 @@ function bookingsToCsv(rows = []) {
         bookingTime.label,
         booking.reservationCode || booking.reservationId || "",
         booking.status || "",
-        booking.guestName || "",
-        bookingGuestCount(booking),
-        formatDateShort(booking.startDate),
-        booking.guestEmail || "",
-        booking.guestPhone || "",
-        bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "",
-      ]
-        .map(csvEscape)
-        .join(","),
+          booking.guestName || "",
+          bookingGuestCount(booking),
+          formatDateShort(booking.startDate),
+          bookingGenderSummary(booking),
+          bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "",
+          booking.guestEmail || "",
+          booking.guestPhone || "",
+        ]
+          .map(csvEscape)
+          .join(","),
     );
   });
 
@@ -2060,7 +2062,16 @@ function bookingGenderEntries(booking = {}) {
 
 function bookingGenderSummary(booking = {}) {
   const genders = bookingGenderEntries(booking).filter(Boolean);
-  return genders.length ? genders.join(", ") : "No gender";
+  if (!genders.length) return "No gender";
+  const counts = new Map();
+  genders.forEach((gender) => {
+    const key = String(gender || "").trim().toLowerCase();
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .map(([gender, count]) => (count > 1 ? `${gender} ${count}x` : gender))
+    .join(", ");
 }
 
 function bookingCustomerFieldEntries(booking = {}) {
@@ -2911,10 +2922,11 @@ function renderAdminPage() {
   const leadSort = adminUiState.leadSort || { key: "createdAt", direction: "desc" };
   const bookingsForTable = sortAdminRows(visibleBookingRows, bookingSort, {
     guest: (item) => item.guestName || "",
-    checkIn: (item) => item.startDate || "",
-    email: (item) => item.guestEmail || "",
-    phone: (item) => item.guestPhone || "",
-    room: (item) => getRoom(item.roomId)?.name || "",
+      checkIn: (item) => item.startDate || "",
+      gender: (item) => bookingGenderSummary(item),
+      email: (item) => item.guestEmail || "",
+      phone: (item) => item.guestPhone || "",
+      room: (item) => getRoom(item.roomId)?.name || "",
     guests: (item) => bookingGuestCount(item),
     status: (item) => item.status || "",
     bookedAt: (item) => item.createdAt || "",
@@ -2948,15 +2960,16 @@ function renderAdminPage() {
             </td>
             <td>${booking.reservationCode || booking.reservationId || "pending"}</td>
             <td><span class="status ${booking.status}">${booking.status}</span></td>
-            <td><strong>${booking.guestName || "Guest"}</strong></td>
-            <td>${bookingGuestCount(booking)}</td>
-            <td>${formatDateShort(booking.startDate)}</td>
-            <td>${booking.guestEmail || "No email"}</td>
-            <td>${booking.guestPhone || "No phone"}</td>
-            <td>${escapeHtml(bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "")}</td>
-          </tr>
-        `;
-      })
+              <td><strong>${booking.guestName || "Guest"}</strong></td>
+              <td>${bookingGuestCount(booking)}</td>
+              <td>${formatDateShort(booking.startDate)}</td>
+              <td>${escapeHtml(bookingGenderSummary(booking))}</td>
+              <td>${escapeHtml(bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "")}</td>
+              <td>${booking.guestEmail || "No email"}</td>
+              <td>${booking.guestPhone || "No phone"}</td>
+            </tr>
+          `;
+        })
       .join("");
   }
 
