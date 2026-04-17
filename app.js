@@ -311,6 +311,7 @@ const draft = {
   endDate: state.endDate || "",
   calendarMonthOffset: 0,
   dateSelectionMode: "start",
+  hoverEndDate: "",
   guestName: state.guestName,
   guestEmail: state.guestEmail,
   guestCountry: state.guestCountry,
@@ -1693,6 +1694,13 @@ function isSelectableCheckoutDate(dateInput, startDate = draft.startDate) {
   return canStayThrough(startDate, dateInput);
 }
 
+function previewCheckoutDate() {
+  if (draft.dateSelectionMode === "end" && draft.startDate) {
+    return draft.hoverEndDate || draft.endDate || addDays(draft.startDate, stayMinimumNightsForDate(draft.startDate));
+  }
+  return draft.endDate || "";
+}
+
 function shouldAutoSelectCheckout(startDate) {
   if (!startDate) return false;
   const minimumStay = stayMinimumNightsForDate(startDate);
@@ -2050,9 +2058,10 @@ function renderDayCell(cellDate, monthDate) {
   const checkinOpen = isArrivalAllowed(iso, state.camp.bookingRules);
   const selectingCheckout = draft.dateSelectionMode === "end" && !!draft.startDate;
   const selected = iso === draft.startDate;
-  const selectedCheckout = !selected && iso === draft.endDate;
+  const previewEndDate = previewCheckoutDate();
+  const selectedCheckout = !selected && iso === previewEndDate;
   const rangeStart = draft.startDate;
-  const rangeEnd = endDateForDraft();
+  const rangeEnd = selectingCheckout ? previewEndDate : endDateForDraft();
   const inRange = !selected && !selectedCheckout && rangeStart && rangeEnd && iso > rangeStart && iso < rangeEnd;
   const isStart = selected;
   const isEnd = selectedCheckout;
@@ -2104,6 +2113,7 @@ function renderDayCell(cellDate, monthDate) {
       type="button"
       class="${classes}"
       ${selectable ? `data-select-date="${iso}"` : "disabled"}
+      data-date="${iso}"
       aria-label="${formatDate(iso)}"
     >
       <span class="day-number">${cellDate.getDate()}</span>
@@ -2149,7 +2159,7 @@ function renderDateSelector() {
           <h3>2. Select your dates</h3>
           <p class="helper">${
             draft.dateSelectionMode === "end" && draft.startDate
-              ? `Choose a check-out date. Minimum stay: ${minimumStay} night${minimumStay === 1 ? "" : "s"}.`
+              ? `Hover to preview your check-out date, then click to confirm. Minimum stay: ${minimumStay} night${minimumStay === 1 ? "" : "s"}.`
               : autoSelectedStay
                 ? `Fixed stay selected automatically. Check-out is set to ${formatDate(endDateForDraft())}.`
               : "Choose a check-in date, then choose a check-out date."
@@ -4509,6 +4519,9 @@ function applyStateToDraft() {
   draft.bookingIntentId = state.bookingIntentId || "";
   draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
   draft.dateSelectionMode = draft.startDate && !draft.endDate ? "end" : "start";
+  if (draft.dateSelectionMode !== "end") {
+    draft.hoverEndDate = "";
+  }
   normalizeAddonSelections();
 }
 
@@ -4856,7 +4869,27 @@ async function confirmBookingReservation() {
 }
 
 function initBookInteractions() {
-    document.addEventListener("click", (event) => {
+  let lastHoverCheckoutDate = "";
+
+  document.addEventListener("pointermove", (event) => {
+    if (draft.dateSelectionMode !== "end" || !draft.startDate) {
+      if (lastHoverCheckoutDate && draft.hoverEndDate) {
+        lastHoverCheckoutDate = "";
+        draft.hoverEndDate = "";
+        renderBookPage();
+      }
+      return;
+    }
+
+    const hoveredCell = event.target?.closest?.("[data-select-date]");
+    const nextHoverDate = hoveredCell?.dataset.selectDate || "";
+    if (nextHoverDate === lastHoverCheckoutDate) return;
+    lastHoverCheckoutDate = nextHoverDate;
+    draft.hoverEndDate = nextHoverDate && isSelectableCheckoutDate(nextHoverDate, draft.startDate) ? nextHoverDate : "";
+    renderBookPage();
+  });
+
+  document.addEventListener("click", (event) => {
       const target = event.target.closest(
         "[data-step], [data-select-package], [data-select-room], [data-room-row-change], [data-addon-row-change], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], [data-apply-promo], #nextFromPackage, #nextFromDate, #nextFromRoom, #continueToBook",
         );
@@ -4885,15 +4918,18 @@ function initBookInteractions() {
         draft.startDate = nextDate;
         draft.endDate = addDays(nextDate, stayMinimumNightsForDate(nextDate));
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
+        draft.hoverEndDate = "";
         draft.roomAllocations = {};
       } else if (isSelectableCheckoutDate(nextDate, draft.startDate)) {
         draft.endDate = nextDate;
         draft.dateSelectionMode = "start";
+        draft.hoverEndDate = "";
         draft.roomAllocations = {};
       } else {
         draft.startDate = nextDate;
         draft.endDate = addDays(nextDate, stayMinimumNightsForDate(nextDate));
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
+        draft.hoverEndDate = "";
         draft.roomAllocations = {};
       }
         state.bookingConfirmation = null;
