@@ -234,6 +234,8 @@ const seedState = {
       nights: 7,
       basePrice: 899,
       description: "Breakfast, surf coaching, boards, and daily surf guiding.",
+      imageUrl:
+        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
     },
     {
       id: "package-7-surf",
@@ -241,6 +243,8 @@ const seedState = {
       nights: 7,
       basePrice: 1100,
       description: "Breakfast, surf coaching, boards, and daily surf guiding.",
+      imageUrl:
+        "https://images.unsplash.com/photo-1473116763249-2faaef81ccda?auto=format&fit=crop&w=1200&q=80",
     },
   ],
   rooms: [
@@ -483,7 +487,15 @@ function normalizeWorkspaceData(data = {}) {
       .sort((a, b) => a.order - b.order);
 
   const normalizedPackages = Array.isArray(data.packages)
-    ? normalizeOrderedCollection(data.packages)
+    ? normalizeOrderedCollection(
+        data.packages.map((item) => ({
+          ...item,
+          imageUrl:
+            item?.imageUrl ||
+            seedState.packages.find((pkg) => pkg.id === item?.id)?.imageUrl ||
+            logoSvg,
+        })),
+      )
     : normalizeOrderedCollection(structuredClone(seedState.packages));
   const normalizedRooms = Array.isArray(data.rooms)
     ? normalizeOrderedCollection(data.rooms)
@@ -2611,11 +2623,12 @@ function renderBookPage() {
       const quantity = packageQuantity(item.id);
       return `
         <article class="package-row">
+          <div class="option-media">${item.imageUrl ? `<img src="${item.imageUrl}" alt="${item.name}" />` : ""}</div>
           <div class="option-body">
             <h3>${item.name}</h3>
             <p>${item.nights} nights</p>
             <details class="package-more">
-              <summary>More...</summary>
+              <summary>Included <span aria-hidden="true">▾</span></summary>
               <p>${item.description}</p>
             </details>
             <div class="option-meta">
@@ -3765,6 +3778,9 @@ function renderAdminPage() {
       packageForm.elements.description.value = editing.description || "";
       packageForm.elements.nights.value = editing.nights || 7;
       packageForm.elements.basePrice.value = editing.basePrice || 0;
+      if (packageForm.elements.imageUrl) {
+        packageForm.elements.imageUrl.value = editing.imageUrl?.startsWith("data:") ? "" : editing.imageUrl || "";
+      }
     }
   }
 
@@ -5849,21 +5865,31 @@ function initAdminInteractions() {
     renderAdminPage();
   });
 
-  packageForm?.addEventListener("submit", (event) => {
+  packageForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = packageForm.elements.id.value || `package-${Date.now()}`;
     const existing = state.packages.find((item) => item.id === id);
+    const imageFile = packageForm.elements.imageFile?.files?.[0];
+    let imageUrl = packageForm.elements.imageUrl?.value.trim() || "";
+    if (imageFile) {
+      imageUrl = await readFileAsDataUrl(imageFile);
+    }
+    if (!imageUrl) {
+      imageUrl = existing?.imageUrl || logoSvg;
+    }
     const payload = {
       id,
       name: packageForm.elements.name.value.trim(),
       description: packageForm.elements.description.value.trim(),
       nights: Number(packageForm.elements.nights.value),
       basePrice: Number(packageForm.elements.basePrice.value),
+      imageUrl,
       order: existing?.order ?? nextOrderValue(state.packages),
     };
     state.packages = orderedItems([...state.packages.filter((item) => item.id !== id), payload]);
     packageForm.reset();
     packageForm.elements.id.value = "";
+    if (packageForm.elements.imageUrl) packageForm.elements.imageUrl.value = "";
     saveState();
     renderAdminPage();
   });
@@ -6124,6 +6150,9 @@ function initAdminInteractions() {
       packageForm.elements.description.value = item.description || "";
       packageForm.elements.nights.value = item.nights || 7;
       packageForm.elements.basePrice.value = item.basePrice || 0;
+      if (packageForm.elements.imageUrl) {
+        packageForm.elements.imageUrl.value = item.imageUrl?.startsWith("data:") ? "" : item.imageUrl || "";
+      }
       renderAdminPage();
       return;
     }

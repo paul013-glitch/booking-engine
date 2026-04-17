@@ -435,9 +435,9 @@ select {
 
 .package-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 220px minmax(0, 1fr) auto;
   gap: 16px;
-  align-items: center;
+  align-items: stretch;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 16px;
@@ -453,6 +453,16 @@ select {
   color: var(--accent);
   font-weight: 700;
   list-style: none;
+}
+
+.package-more summary span {
+  display: inline-block;
+  margin-left: 4px;
+  transition: transform 0.18s ease;
+}
+
+.package-more[open] summary span {
+  transform: rotate(180deg);
 }
 
 .package-more summary::-webkit-details-marker {
@@ -478,6 +488,21 @@ select {
 
 .package-row .option-body {
   min-width: 0;
+}
+
+.package-row .option-media {
+  height: auto;
+  min-height: 100%;
+}
+
+.package-row .option-body {
+  display: grid;
+  align-content: start;
+}
+
+.package-row .package-row-actions {
+  align-self: center;
+  padding-right: 6px;
 }
 
 .package-footer {
@@ -2019,9 +2044,9 @@ select {
   }
 
   .package-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 1fr;
     gap: 12px;
-    align-items: center;
+    align-items: stretch;
     padding: 12px 6px 12px 0;
   }
 
@@ -2029,6 +2054,11 @@ select {
     justify-items: end;
     align-self: center;
     padding-right: 10px;
+  }
+
+  .package-row .option-media {
+    height: 120px;
+    min-height: 0;
   }
 
   .addon-grid {

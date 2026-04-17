@@ -48,6 +48,8 @@ const seedPackages = [
     nights: 7,
     basePrice: 899,
     description: "Breakfast, surf coaching, boards, and daily surf guiding.",
+    imageUrl:
+      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
   },
   {
     id: "package-7-surf",
@@ -55,6 +57,8 @@ const seedPackages = [
     nights: 7,
     basePrice: 1100,
     description: "Breakfast, surf coaching, boards, and daily surf guiding.",
+    imageUrl:
+      "https://images.unsplash.com/photo-1473116763249-2faaef81ccda?auto=format&fit=crop&w=1200&q=80",
   },
 ];
 
@@ -296,7 +300,15 @@ function normalizeWorkspace(data = {}) {
     endDate: data?.endDate,
   });
   const rooms = Array.isArray(data.rooms) ? data.rooms : base.rooms;
-  const packages = Array.isArray(data.packages) ? data.packages : base.packages;
+  const packages = Array.isArray(data.packages)
+    ? data.packages.map((item) => ({
+        ...item,
+        imageUrl:
+          item?.imageUrl ||
+          seedPackages.find((pkg) => pkg.id === item?.id)?.imageUrl ||
+          seedCamp.logoUrl,
+      }))
+    : base.packages;
   const bookingRules = {
     ...base.camp.bookingRules,
     ...((data.camp && data.camp.bookingRules) || {}),
