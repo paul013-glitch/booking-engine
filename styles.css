@@ -419,8 +419,10 @@ select {
 }
 
 .addon-grid .addon-card .option-media {
+  aspect-ratio: 16 / 9;
   height: auto;
-  min-height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .addon-grid .addon-card .option-body {
@@ -491,8 +493,10 @@ select {
 }
 
 .package-row .option-media {
+  aspect-ratio: 16 / 9;
   height: auto;
-  min-height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .package-row .option-body {
@@ -595,8 +599,10 @@ select {
 }
 
 .option-media {
-  height: 130px;
+  aspect-ratio: 16 / 9;
+  height: auto;
   background: #e9dfcf;
+  overflow: hidden;
 }
 
 .option-media img {
