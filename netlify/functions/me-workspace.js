@@ -1,6 +1,7 @@
 const {
   createDefaultWorkspace,
   getUserFromContext,
+  getWorkspaceForIdentity,
   getWorkspaceForOwner,
   saveWorkspace,
   response,
@@ -17,6 +18,11 @@ exports.handler = async (_event, context) => {
     const existing = await getWorkspaceForOwner(ownerId);
     if (existing) {
       return response(200, existing);
+    }
+
+    const identityMatch = await getWorkspaceForIdentity({ ownerId, email: user.email });
+    if (identityMatch) {
+      return response(200, identityMatch);
     }
 
     const created = await saveWorkspace(

@@ -2525,13 +2525,18 @@ function renderGuestGenderControls() {
 }
 
 function bookShellMarkup() {
-  return `
+  const shellHeader = isEmbeddedBooking()
+    ? ""
+    : `
     <header class="book-header">
       <img id="campLogo" class="camp-logo" alt="Camp logo" />
       <div>
         <h1 id="campName">Surf Camp Booking</h1>
       </div>
     </header>
+  `;
+  return `
+    ${shellHeader}
     <main class="booking-shell">
       <section class="panel wizard-panel">
         <nav class="stepper" id="stepper" aria-label="Booking steps"></nav>
@@ -2759,8 +2764,8 @@ function renderBookPage() {
                 <div class="summary-list" style="margin-top: 18px;">
                   <div class="summary-item">
                     <div>
-                      <strong>Booking ID</strong>
-                      <span>${escapeHtml(state.bookingConfirmation.bookingId || "")}</span>
+                      <strong>Reservation ID</strong>
+                      <span>${escapeHtml(state.bookingConfirmation.reservationCode || state.bookingConfirmation.bookingId || "")}</span>
                     </div>
                     <strong>Confirmed</strong>
                   </div>

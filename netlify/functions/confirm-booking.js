@@ -1,5 +1,6 @@
 const {
   corsHeaders,
+  getWorkspaceById,
   getWorkspaceBySlug,
   normalizeWorkspace,
   response,
@@ -274,6 +275,17 @@ function guestGenderList(booking = {}) {
   return Array.from({ length: count }, (_, index) => String(values[index] || "").trim());
 }
 
+async function loadPersistedBookingWorkspace(workspaceId, bookingId, reservationCode) {
+  if (!workspaceId) return null;
+  const persisted = await getWorkspaceById(workspaceId);
+  if (!persisted) return null;
+  const persistedBooking = (persisted.bookings || []).find(
+    (item) => item.id === bookingId || item.reservationCode === reservationCode,
+  );
+  if (!persistedBooking) return null;
+  return persisted;
+}
+
 async function sendConfirmationEmail({ workspace, booking }) {
   const { fromEmail, replyTo, subject, text, html, fromName } = buildEmail({ workspace, booking });
   const apiKey = process.env.RESEND_API_KEY;
@@ -447,10 +459,21 @@ exports.handler = async (event) => {
     normalized.bookings = [bookingRecord, ...(normalized.bookings || []).filter((item) => item.id !== bookingRecord.id)];
 
     const saved = await saveWorkspace(normalized);
+    const persistedAfterBookingSave = await loadPersistedBookingWorkspace(saved.id, bookingId, reservationCode);
+    if (!persistedAfterBookingSave) {
+      console.error("confirm-booking verification failed after primary save", {
+        workspaceId: saved.id,
+        reservationCode,
+        bookingId,
+      });
+      return response(500, {
+        error: "The booking could not be verified after saving. Please refresh the reservations overview before retrying.",
+      });
+    }
 
     let email = { status: "skipped", reason: "Email provider not configured" };
     try {
-      email = await sendConfirmationEmail({ workspace: saved, booking: bookingRecord });
+      email = await sendConfirmationEmail({ workspace: persistedAfterBookingSave, booking: bookingRecord });
     } catch (error) {
       email = {
         status: "error",
@@ -458,24 +481,43 @@ exports.handler = async (event) => {
       };
     }
 
-    saved.bookings = (saved.bookings || []).map((item) =>
+    persistedAfterBookingSave.bookings = (persistedAfterBookingSave.bookings || []).map((item) =>
       item.id === bookingId ? { ...item, confirmationEmail: email } : item,
     );
-    saved.bookingIntents = (saved.bookingIntents || []).map((item) =>
+    persistedAfterBookingSave.bookingIntents = (persistedAfterBookingSave.bookingIntents || []).map((item) =>
       item.id === intentId ? { ...item, confirmationEmail: email } : item,
     );
 
-    let finalWorkspace = saved;
+    let finalWorkspace = persistedAfterBookingSave;
     try {
-      finalWorkspace = await saveWorkspace(saved);
+      await saveWorkspace(persistedAfterBookingSave);
+      const verifiedFinalWorkspace = await loadPersistedBookingWorkspace(persistedAfterBookingSave.id, bookingId, reservationCode);
+      if (verifiedFinalWorkspace) {
+        finalWorkspace = verifiedFinalWorkspace;
+      }
     } catch (persistError) {
       console.warn("confirm-booking final save failed", persistError);
     }
 
+    const verifiedBooking =
+      (finalWorkspace.bookings || []).find((item) => item.id === bookingId || item.reservationCode === reservationCode) || null;
+    if (!verifiedBooking) {
+      console.error("confirm-booking verification failed before response", {
+        workspaceId: finalWorkspace.id,
+        reservationCode,
+        bookingId,
+      });
+      return response(500, {
+        error: "The booking could not be verified after saving. Please refresh the reservations overview before retrying.",
+      });
+    }
+
     return response(200, {
       workspace: finalWorkspace,
-      booking: finalWorkspace.bookings.find((item) => item.id === bookingId) || bookingRecord,
+      booking: verifiedBooking,
       reservationCode,
+      workspaceId: finalWorkspace.id,
+      workspaceSlug: finalWorkspace.camp?.slug || slug,
       email,
     });
   } catch (error) {
