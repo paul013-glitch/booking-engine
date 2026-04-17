@@ -265,9 +265,9 @@
           <div class="panel-head">
             <div>
               <p class="section-label">Availability matrix</p>
-              <h2>Weekly room control</h2>
+              <h2>Daily room control</h2>
             </div>
-            <span class="pill">Sold-out weeks block the booking calendar</span>
+            <span class="pill">Daily rules drive the booking calendar</span>
           </div>
 
           <div class="availability-toolbar">
@@ -275,17 +275,48 @@
               Room type
               <select id="availabilityRoomSelect"></select>
             </label>
-            <label>
-              Update all prices
-              <div class="copy-row">
-                <input id="availabilityBasePrice" type="number" min="0" step="1" placeholder="700" />
-                <button class="button button-secondary" type="button" id="availabilityUpdateAllPrices">
-                  Update all prices
-                </button>
-              </div>
-            </label>
             <button class="button button-primary" type="button" id="saveAvailability">Save availability</button>
           </div>
+
+          <section class="availability-bulk-editor">
+            <div class="list-head">
+              <h3>Bulk editor</h3>
+              <span class="pill">Apply one rule set to a date range</span>
+            </div>
+            <div class="availability-bulk-grid">
+              <label>
+                Start date
+                <input id="availabilityBulkStart" type="date" />
+              </label>
+              <label>
+                End date
+                <input id="availabilityBulkEnd" type="date" />
+              </label>
+              <label>
+                Price per night
+                <input id="availabilityBulkPricePerNight" type="number" min="0" step="1" placeholder="Leave blank to keep" />
+              </label>
+              <label>
+                Minimum length of stay
+                <input id="availabilityBulkMinStay" type="number" min="1" step="1" placeholder="Leave blank to keep" />
+              </label>
+              <label>
+                Available count
+                <input id="availabilityBulkUnits" type="number" min="0" step="1" placeholder="Leave blank to keep" />
+              </label>
+              <label>
+                Open for check-in
+                <select id="availabilityBulkOpenForCheckin">
+                  <option value="keep">Keep current</option>
+                  <option value="open">Open</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </label>
+            </div>
+            <div class="availability-bulk-actions">
+              <button class="button button-secondary" type="button" id="applyAvailabilityBulkEdit">Apply bulk edit</button>
+            </div>
+          </section>
 
           <div id="availabilityMatrix" class="availability-matrix"></div>
         </section>
@@ -391,19 +422,6 @@
                   placeholder="Always show"
                 />
               </label>
-            </div>
-            <label class="checkbox-row">
-              <input name="restrictedArrivalDays" type="checkbox" />
-              Only allow arrivals on selected days
-            </label>
-            <div class="day-grid">
-              <label><input type="checkbox" name="arrivalDays" value="Sunday" /> Sun</label>
-              <label><input type="checkbox" name="arrivalDays" value="Monday" /> Mon</label>
-              <label><input type="checkbox" name="arrivalDays" value="Tuesday" /> Tue</label>
-              <label><input type="checkbox" name="arrivalDays" value="Wednesday" /> Wed</label>
-              <label><input type="checkbox" name="arrivalDays" value="Thursday" /> Thu</label>
-              <label><input type="checkbox" name="arrivalDays" value="Friday" /> Fri</label>
-              <label><input type="checkbox" name="arrivalDays" value="Saturday" /> Sat</label>
             </div>
             <button class="button button-primary" type="submit">Save branding</button>
           </form>

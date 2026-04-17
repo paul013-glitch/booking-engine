@@ -1084,7 +1084,7 @@ select {
 
 .availability-toolbar {
   display: grid;
-  grid-template-columns: 1.2fr 1.5fr auto;
+  grid-template-columns: minmax(240px, 320px) auto;
   gap: 12px;
   align-items: end;
   margin-top: 18px;
@@ -1094,6 +1094,61 @@ select {
   margin-top: 16px;
   display: grid;
   gap: 12px;
+}
+
+.availability-bulk-editor {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fffefb;
+}
+
+.availability-bulk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.availability-bulk-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.availability-window-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.availability-table-shell {
+  max-width: 100%;
+}
+
+.availability-table th,
+.availability-table td {
+  min-width: 124px;
+}
+
+.availability-table th:first-child,
+.availability-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
+.availability-table input,
+.availability-table select {
+  width: 100%;
+}
+
+.availability-checkbox {
+  display: flex;
+  justify-content: center;
 }
 
 .availability-row-header,
@@ -1653,19 +1708,33 @@ select {
   filter: grayscale(1);
 }
 
+.day-cell.checkin-closed-day {
+  color: #8f8a82;
+  border-color: #cfc5b7;
+  background: #ece7df;
+  filter: grayscale(1);
+}
+
 .day-cell.muted-day {
   visibility: hidden;
   pointer-events: none;
 }
 
 .day-cell.in-range {
-  background: #fff8ee;
+  background: var(--accentSoft);
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
 }
 
-.day-cell.range-start {
-  border-width: 3px;
-  background: inherit;
-  box-shadow: none;
+.day-cell.range-start,
+.day-cell.range-end {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: #fffefb;
+  color: var(--text);
+  filter: none;
+  opacity: 1;
+  position: relative;
+  z-index: 1;
 }
 
 .calendar-note {
@@ -1903,6 +1972,7 @@ select {
   .theme-grid,
   .addon-grid,
   .availability-toolbar,
+  .availability-bulk-grid,
   .availability-row-header,
   .availability-row,
   .day-grid {

@@ -149,24 +149,86 @@ function weekKeyForDate(dateInput) {
   return localDateKey(startOfWeek(dateInput));
 }
 
-function createDefaultAvailability(rooms, weeks = 12) {
+function weekdayName(dateInput) {
+  const date = new Date(dateInput);
+  return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][date.getDay()];
+}
+
+function defaultAvailabilityMinStay(packages = seedPackages) {
+  const firstPackage = Array.isArray(packages) ? packages[0] : null;
+  return Math.max(1, Number(firstPackage?.nights || 1));
+}
+
+function defaultAvailabilityCheckinOpen(dateInput, bookingRules = seedCamp.bookingRules) {
+  if (!bookingRules?.restrictedArrivalDays) return true;
+  return (bookingRules.allowedArrivalDays || []).includes(weekdayName(dateInput));
+}
+
+function createDefaultAvailability(rooms, dayCount = 365, bookingRules = seedCamp.bookingRules, packages = seedPackages) {
   const availability = {};
-  const weekStart = startOfWeek(new Date());
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const defaultMinStay = defaultAvailabilityMinStay(packages);
 
   rooms.forEach((room) => {
-    availability[room.id] = { weeks: {} };
-    for (let i = 0; i < weeks; i += 1) {
-      const cursor = new Date(weekStart);
-      cursor.setDate(cursor.getDate() + i * 7);
+    availability[room.id] = { days: {} };
+    for (let i = 0; i < dayCount; i += 1) {
+      const cursor = new Date(dayStart);
+      cursor.setDate(cursor.getDate() + i);
       const key = localDateKey(cursor);
-      availability[room.id].weeks[key] = {
+      availability[room.id].days[key] = {
         units: room.totalUnits,
         pricePerNight: room.pricePerNight,
+        minStay: defaultMinStay,
+        openForCheckin: defaultAvailabilityCheckinOpen(key, bookingRules),
       };
     }
   });
 
   return availability;
+}
+
+function migrateAvailabilityDays(availability = {}, rooms = seedRooms, bookingRules = seedCamp.bookingRules, packages = seedPackages) {
+  const defaultMinStay = defaultAvailabilityMinStay(packages);
+  const nextAvailability = {};
+
+  (Array.isArray(rooms) ? rooms : []).forEach((room) => {
+    const entry = availability?.[room.id] || {};
+    const days = {};
+
+    if (entry.days && typeof entry.days === "object") {
+      Object.entries(entry.days).forEach(([dateKey, row]) => {
+        days[dateKey] = {
+          units: Math.max(0, Number(row?.units ?? room.totalUnits ?? 0)),
+          pricePerNight: Math.max(0, Number(row?.pricePerNight ?? room.pricePerNight ?? 0)),
+          minStay: Math.max(1, Number(row?.minStay ?? defaultMinStay)),
+          openForCheckin:
+            typeof row?.openForCheckin === "boolean"
+              ? row.openForCheckin
+              : defaultAvailabilityCheckinOpen(dateKey, bookingRules),
+        };
+      });
+    } else if (entry.weeks && typeof entry.weeks === "object") {
+      Object.entries(entry.weeks).forEach(([weekKey, row]) => {
+        for (let offset = 0; offset < 7; offset += 1) {
+          const dateKey = localDateKey(addDays(weekKey, offset));
+          days[dateKey] = {
+            units: Math.max(0, Number(row?.units ?? room.totalUnits ?? 0)),
+            pricePerNight: Math.max(0, Number(row?.pricePerNight ?? room.pricePerNight ?? 0)),
+            minStay: Math.max(1, Number(row?.minStay ?? defaultMinStay)),
+            openForCheckin:
+              typeof row?.openForCheckin === "boolean"
+                ? row.openForCheckin
+                : defaultAvailabilityCheckinOpen(dateKey, bookingRules),
+          };
+        }
+      });
+    }
+
+    nextAvailability[room.id] = { days };
+  });
+
+  return nextAvailability;
 }
 
 function slugify(value) {
@@ -197,13 +259,15 @@ function createDefaultWorkspace(input = {}) {
       billing: seedBilling(new Date()),
       customerFields: [],
       bookingRules: { ...seedCamp.bookingRules },
-      availability: createDefaultAvailability(seedRooms),
+      availability: createDefaultAvailability(seedRooms, 365, seedCamp.bookingRules, seedPackages),
     },
     selectedPackageId: "package-7",
     packageQuantities: { "package-7": 1 },
     selectedRoomId: "shared-double",
+    roomAllocations: {},
     selectedAddonIds: [],
     startDate: input.startDate || "",
+    endDate: input.endDate || "",
     guestName: "",
     guestPhone: "",
     guestEmail: "",
@@ -229,12 +293,37 @@ function normalizeWorkspace(data = {}) {
     ownerId: data?.ownerId,
     slug: data?.camp?.slug || data?.slug,
     startDate: data?.startDate,
+    endDate: data?.endDate,
   });
   const rooms = Array.isArray(data.rooms) ? data.rooms : base.rooms;
+  const packages = Array.isArray(data.packages) ? data.packages : base.packages;
+  const bookingRules = {
+    ...base.camp.bookingRules,
+    ...((data.camp && data.camp.bookingRules) || {}),
+    availabilityLowThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityLowThreshold))
+      ? Math.max(1, Number(data.camp.bookingRules.availabilityLowThreshold))
+      : base.camp.bookingRules.availabilityLowThreshold,
+    availabilityMidThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityMidThreshold))
+      ? Math.max(
+          Math.max(
+            1,
+            Number(data?.camp?.bookingRules?.availabilityLowThreshold ?? base.camp.bookingRules.availabilityLowThreshold),
+          ),
+          Number(data.camp.bookingRules.availabilityMidThreshold),
+        )
+      : base.camp.bookingRules.availabilityMidThreshold,
+    availabilityCountVisibilityThreshold:
+      data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === "" ||
+      data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === null ||
+      data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
+        ? null
+        : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
+  };
   const billing = {
     ...base.camp.billing,
     ...((data.camp && data.camp.billing) || {}),
   };
+  const availability = migrateAvailabilityDays((data.camp && data.camp.availability) || {}, rooms, bookingRules, packages);
 
   return {
     ...base,
@@ -251,37 +340,13 @@ function normalizeWorkspace(data = {}) {
         ...((data.camp && data.camp.theme) || {}),
       },
       billing,
-      bookingRules: {
-        ...base.camp.bookingRules,
-        ...((data.camp && data.camp.bookingRules) || {}),
-        availabilityLowThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityLowThreshold))
-          ? Math.max(1, Number(data.camp.bookingRules.availabilityLowThreshold))
-          : base.camp.bookingRules.availabilityLowThreshold,
-        availabilityMidThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityMidThreshold))
-          ? Math.max(
-              Math.max(
-                1,
-                Number(data?.camp?.bookingRules?.availabilityLowThreshold ?? base.camp.bookingRules.availabilityLowThreshold),
-              ),
-              Number(data.camp.bookingRules.availabilityMidThreshold),
-            )
-          : base.camp.bookingRules.availabilityMidThreshold,
-        availabilityCountVisibilityThreshold:
-          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === "" ||
-          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === null ||
-          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
-            ? null
-            : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
-      },
-      availability: {
-        ...(base.camp.availability || {}),
-        ...((data.camp && data.camp.availability) || {}),
-      },
+      bookingRules,
+      availability,
       customerFields: Array.isArray(data?.camp?.customerFields) ? data.camp.customerFields : base.camp.customerFields,
       archivedAt: data?.camp?.archivedAt || base.camp.archivedAt || "",
       slug: (data.camp && data.camp.slug) || data.slug || base.camp.slug,
     },
-    packages: Array.isArray(data.packages) ? data.packages : base.packages,
+    packages,
     rooms: structuredClone(rooms),
     addons: Array.isArray(data.addons) ? data.addons : base.addons,
     bookings: Array.isArray(data.bookings) ? data.bookings : base.bookings,
@@ -299,6 +364,8 @@ function normalizeWorkspace(data = {}) {
     selectedRoomId: rooms.some((room) => room.id === data.selectedRoomId)
       ? data.selectedRoomId
       : base.selectedRoomId,
+    roomAllocations: data.roomAllocations && typeof data.roomAllocations === "object" ? data.roomAllocations : base.roomAllocations,
+    endDate: data.endDate || base.endDate,
     guestCountry:
       data.guestCountry === "Netherlands" &&
       !data.guestName &&

@@ -32,7 +32,14 @@ function createDefaultBilling(now = new Date()) {
 
 const adminUiState = {
   availabilityRoomId: "shared-double",
-  availabilityExtraWeeksByRoom: {},
+  availabilityViewStart: localDateKey(new Date()),
+  availabilityViewDays: 21,
+  availabilityBulkStart: "",
+  availabilityBulkEnd: "",
+  availabilityBulkPricePerNight: "",
+  availabilityBulkMinStay: "",
+  availabilityBulkUnits: "",
+  availabilityBulkOpenForCheckin: "keep",
   activeTab: "bookings",
   configTab: "packages",
   bookingSort: { key: "bookedAt", direction: "desc" },
@@ -43,6 +50,9 @@ const adminUiState = {
   bookingDetailId: "",
   bookingDetailNotice: "",
   bookingDetailNoticeType: "info",
+  availabilitySaving: false,
+  availabilityNotice: "",
+  availabilityNoticeType: "info",
   loadingVisible: true,
   loadingTitle: "Loading admin panel",
   loadingDetail: "Checking access and preparing the workspace.",
@@ -97,8 +107,8 @@ const seedState = {
     billing: createDefaultBilling(),
     customerFields: [],
     bookingRules: {
-      restrictedArrivalDays: true,
-      allowedArrivalDays: ["Saturday"],
+      restrictedArrivalDays: false,
+      allowedArrivalDays: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
       availabilityLowThreshold: 5,
       availabilityMidThreshold: 15,
       availabilityCountVisibilityThreshold: null,
@@ -112,6 +122,7 @@ const seedState = {
   selectedAddonIds: [],
   customerFieldValues: {},
   startDate: "",
+  endDate: "",
   guestName: "",
   guestPhone: "",
   guestEmail: "",
@@ -251,19 +262,33 @@ function weekKeyForDate(dateInput) {
   return localDateKey(weekStart);
 }
 
-function createSeedAvailability(rooms, weeks = 12) {
+function defaultAvailabilityMinStay(packages = seedState.packages) {
+  const firstPackage = Array.isArray(packages) ? packages[0] : null;
+  return Math.max(1, Number(firstPackage?.nights || 1));
+}
+
+function defaultAvailabilityCheckinOpen(dateInput, bookingRules = seedState.camp.bookingRules) {
+  if (!bookingRules?.restrictedArrivalDays) return true;
+  return (bookingRules.allowedArrivalDays || []).includes(weekdayName(dateInput));
+}
+
+function createSeedAvailability(rooms, dayCount = 365, bookingRules = seedState.camp.bookingRules, packages = seedState.packages) {
   const availability = {};
-  const start = startOfWeek(new Date());
+  const start = parseDateValue(new Date()) || new Date();
+  start.setHours(0, 0, 0, 0);
+  const defaultMinStay = defaultAvailabilityMinStay(packages);
 
   rooms.forEach((room) => {
-    availability[room.id] = { weeks: {} };
-    for (let i = 0; i < weeks; i += 1) {
+    availability[room.id] = { days: {} };
+    for (let i = 0; i < dayCount; i += 1) {
       const cursor = new Date(start);
-      cursor.setDate(cursor.getDate() + i * 7);
+      cursor.setDate(cursor.getDate() + i);
       const key = localDateKey(cursor);
-      availability[room.id].weeks[key] = {
+      availability[room.id].days[key] = {
         units: room.totalUnits,
         pricePerNight: room.pricePerNight,
+        minStay: defaultMinStay,
+        openForCheckin: defaultAvailabilityCheckinOpen(key, bookingRules),
       };
     }
   });
@@ -274,6 +299,7 @@ function createSeedAvailability(rooms, weeks = 12) {
 seedState.camp.availability = createSeedAvailability(seedState.rooms);
 
 const state = loadState();
+enableAllDemoCheckinDates(state);
 const draft = {
   packageId: state.selectedPackageId,
   packageQuantities: { ...(state.packageQuantities || {}) },
@@ -282,7 +308,9 @@ const draft = {
   addonIds: [...state.selectedAddonIds],
   customerFieldValues: { ...(state.customerFieldValues || {}) },
   startDate: state.startDate || "",
+  endDate: state.endDate || "",
   calendarMonthOffset: 0,
+  dateSelectionMode: "start",
   guestName: state.guestName,
   guestEmail: state.guestEmail,
   guestCountry: state.guestCountry,
@@ -305,6 +333,55 @@ function nextDefaultDate() {
   return firstAllowedStartDate(localDateKey(date), seedState.camp.bookingRules);
 }
 
+function migrateAvailabilityDays(
+  availability = {},
+  rooms = seedState.rooms,
+  bookingRules = seedState.camp.bookingRules,
+  packages = seedState.packages,
+) {
+  const defaultMinStay = defaultAvailabilityMinStay(packages);
+  const roomList = Array.isArray(rooms) ? rooms : [];
+  const nextAvailability = {};
+
+  roomList.forEach((room) => {
+    const entry = availability?.[room.id] || {};
+    const days = {};
+
+    if (entry.days && typeof entry.days === "object") {
+      Object.entries(entry.days).forEach(([dateKey, row]) => {
+        days[dateKey] = {
+          units: Math.max(0, Number(row?.units ?? room.totalUnits ?? 0)),
+          pricePerNight: Math.max(0, Number(row?.pricePerNight ?? room.pricePerNight ?? 0)),
+          minStay: Math.max(1, Number(row?.minStay ?? defaultMinStay)),
+          openForCheckin:
+            typeof row?.openForCheckin === "boolean"
+              ? row.openForCheckin
+              : defaultAvailabilityCheckinOpen(dateKey, bookingRules),
+        };
+      });
+    } else if (entry.weeks && typeof entry.weeks === "object") {
+      Object.entries(entry.weeks).forEach(([weekKey, row]) => {
+        for (let offset = 0; offset < 7; offset += 1) {
+          const dateKey = addDays(weekKey, offset);
+          days[dateKey] = {
+            units: Math.max(0, Number(row?.units ?? room.totalUnits ?? 0)),
+            pricePerNight: Math.max(0, Number(row?.pricePerNight ?? room.pricePerNight ?? 0)),
+            minStay: Math.max(1, Number(row?.minStay ?? defaultMinStay)),
+            openForCheckin:
+              typeof row?.openForCheckin === "boolean"
+                ? row.openForCheckin
+                : defaultAvailabilityCheckinOpen(dateKey, bookingRules),
+          };
+        }
+      });
+    }
+
+    nextAvailability[room.id] = { days };
+  });
+
+  return nextAvailability;
+}
+
 function normalizeWorkspaceData(data = {}) {
   const normalizeOrderedCollection = (items = []) =>
     items
@@ -313,6 +390,44 @@ function normalizeWorkspaceData(data = {}) {
         order: Number.isFinite(Number(item?.order)) ? Number(item.order) : index,
       }))
       .sort((a, b) => a.order - b.order);
+
+  const normalizedPackages = Array.isArray(data.packages)
+    ? normalizeOrderedCollection(data.packages)
+    : normalizeOrderedCollection(structuredClone(seedState.packages));
+  const normalizedRooms = Array.isArray(data.rooms)
+    ? normalizeOrderedCollection(data.rooms)
+    : normalizeOrderedCollection(structuredClone(seedState.rooms));
+  const normalizedBookingRules = {
+    ...seedState.camp.bookingRules,
+    ...((data.camp && data.camp.bookingRules) || {}),
+    availabilityLowThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityLowThreshold))
+      ? Math.max(1, Number(data.camp.bookingRules.availabilityLowThreshold))
+      : seedState.camp.bookingRules.availabilityLowThreshold,
+    availabilityMidThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityMidThreshold))
+      ? Math.max(
+          Math.max(
+            1,
+            Number(data?.camp?.bookingRules?.availabilityLowThreshold ?? seedState.camp.bookingRules.availabilityLowThreshold),
+          ),
+          Number(data.camp.bookingRules.availabilityMidThreshold),
+        )
+      : seedState.camp.bookingRules.availabilityMidThreshold,
+    availabilityCountVisibilityThreshold:
+      data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === "" ||
+      data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === null ||
+      data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
+        ? null
+        : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
+  };
+  const normalizedAvailability = migrateAvailabilityDays(
+    {
+      ...(seedState.camp.availability || {}),
+      ...((data.camp && data.camp.availability) || {}),
+    },
+    normalizedRooms,
+    normalizedBookingRules,
+    normalizedPackages,
+  );
 
   return {
     ...structuredClone(seedState),
@@ -339,40 +454,12 @@ function normalizeWorkspaceData(data = {}) {
       customerFields: Array.isArray(data?.camp?.customerFields)
         ? data.camp.customerFields.map(normalizeCustomerField)
         : structuredClone(seedState.camp.customerFields || []),
-      bookingRules: {
-        ...seedState.camp.bookingRules,
-        ...((data.camp && data.camp.bookingRules) || {}),
-        availabilityLowThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityLowThreshold))
-          ? Math.max(1, Number(data.camp.bookingRules.availabilityLowThreshold))
-          : seedState.camp.bookingRules.availabilityLowThreshold,
-        availabilityMidThreshold: Number.isFinite(Number(data?.camp?.bookingRules?.availabilityMidThreshold))
-          ? Math.max(
-              Math.max(
-                1,
-                Number(data?.camp?.bookingRules?.availabilityLowThreshold ?? seedState.camp.bookingRules.availabilityLowThreshold),
-              ),
-              Number(data.camp.bookingRules.availabilityMidThreshold),
-            )
-          : seedState.camp.bookingRules.availabilityMidThreshold,
-        availabilityCountVisibilityThreshold:
-          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === "" ||
-          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === null ||
-          data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
-            ? null
-            : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
-      },
-      availability: {
-        ...(seedState.camp.availability || {}),
-        ...((data.camp && data.camp.availability) || {}),
-      },
+      bookingRules: normalizedBookingRules,
+      availability: normalizedAvailability,
       slug: (data.camp && data.camp.slug) || slugify((data.camp && data.camp.name) || seedState.camp.name),
     },
-    packages: Array.isArray(data.packages)
-      ? normalizeOrderedCollection(data.packages)
-      : normalizeOrderedCollection(structuredClone(seedState.packages)),
-    rooms: Array.isArray(data.rooms)
-      ? normalizeOrderedCollection(data.rooms)
-      : normalizeOrderedCollection(structuredClone(seedState.rooms)),
+    packages: normalizedPackages,
+    rooms: normalizedRooms,
     addons: Array.isArray(data.addons)
       ? normalizeOrderedCollection(data.addons)
       : normalizeOrderedCollection(structuredClone(seedState.addons)),
@@ -394,7 +481,8 @@ function normalizeWorkspaceData(data = {}) {
       (data.roomAllocations && typeof data.roomAllocations === "object"
         ? Object.entries(data.roomAllocations).find(([, quantity]) => Number(quantity) > 0)?.[0] || ""
         : ""),
-    startDate: "",
+    startDate: data.startDate || "",
+    endDate: data.endDate || "",
     guestName: data.guestName || "",
     guestPhone: data.guestPhone || "",
     guestEmail: data.guestEmail || "",
@@ -412,6 +500,26 @@ function normalizeWorkspaceData(data = {}) {
     currentStep: Number.isFinite(data.currentStep) ? data.currentStep : 0,
     bookingIntentId: data.bookingIntentId || "",
   };
+}
+
+function isLocalFileDemo() {
+  return typeof window !== "undefined" && window.location?.protocol === "file:";
+}
+
+function enableAllDemoCheckinDates(targetState = state) {
+  if (!isLocalFileDemo() || !targetState?.camp) return;
+  targetState.camp.bookingRules = {
+    ...(targetState.camp.bookingRules || {}),
+    restrictedArrivalDays: false,
+    allowedArrivalDays: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+  };
+  ensureAvailabilityCoverage(targetState);
+  for (const room of orderedItems(targetState.rooms || [])) {
+    const days = targetState.camp.availability?.[room.id]?.days || {};
+    Object.values(days).forEach((row) => {
+      if (row) row.openForCheckin = true;
+    });
+  }
 }
 
 function normalizePromoCode(value) {
@@ -825,8 +933,7 @@ function trackAnalyticsEvent(eventName, params = {}) {
 }
 
 function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules) {
-  if (!bookingRules?.restrictedArrivalDays) return true;
-  return bookingRules.allowedArrivalDays.includes(weekdayName(dateInput));
+  return orderedItems(state.rooms).some((room) => roomOpenForCheckin(room.id, dateInput));
 }
 
 function availabilityThresholds(bookingRules = state?.camp?.bookingRules || seedState.camp.bookingRules) {
@@ -863,12 +970,15 @@ function firstAllowedStartDate(afterDate = nextDefaultDate(), bookingRules = see
 }
 
 function hasAvailabilityForDate(startDate) {
-  return campSpotsLeftForDate(startDate) >= Math.max(1, selectedPackagePeopleCount());
+  return (
+    isArrivalAllowed(startDate, state.camp.bookingRules) &&
+    campSpotsLeftForDate(startDate, stayMinimumNightsForDate(startDate)) >= Math.max(1, selectedPackagePeopleCount())
+  );
 }
 
 function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
   const cursor = parseDateValue(afterDate) || new Date();
-  for (let i = 0; i < 180; i += 1) {
+  for (let i = 0; i < 365; i += 1) {
     const candidate = localDateKey(cursor);
     if (isArrivalAllowed(candidate, bookingRules) && hasAvailabilityForDate(candidate)) {
       return candidate;
@@ -889,6 +999,7 @@ function ensureStartDateSelection() {
   if (!draft.startDate) return;
   if (!isSelectableDate(draft.startDate)) {
     draft.startDate = "";
+    draft.endDate = "";
   }
 }
 
@@ -1260,7 +1371,7 @@ function businessBookingsForDate(checkInDate) {
 
 function businessGuestCapacityForDate(checkInDate) {
   return state.rooms.reduce((sum, room) => {
-    const row = state.camp.availability?.[room.id]?.weeks?.[weekKeyForDate(checkInDate)];
+    const row = state.camp.availability?.[room.id]?.days?.[localDateKey(checkInDate)];
     const units = Number(row?.units ?? room.totalUnits ?? 0);
     return sum + Math.max(0, units);
   }, 0);
@@ -1425,27 +1536,37 @@ function setBookingDetailNotice(message, type = "info") {
 
 function endDateForDraft() {
   if (!draft.startDate) return "";
+  if (draft.endDate) return draft.endDate;
   return addDays(draft.startDate, bookingNights());
 }
 
-function weekKeysBetween(startDate, endDate) {
+function nightsBetween(startDate, endDate) {
+  const start = parseDateValue(startDate);
+  const end = parseDateValue(endDate);
+  if (!start || !end) return 0;
+  const diff = end.getTime() - start.getTime();
+  return diff > 0 ? Math.round(diff / (24 * 60 * 60 * 1000)) : 0;
+}
+
+function dateKeysBetween(startDate, endDate) {
   if (!startDate || !endDate) return [];
   const keys = [];
-  const cursor = startOfWeek(startDate);
-  const endCursor = startOfWeek(addDays(endDate, -1));
-  while (cursor <= endCursor) {
+  const cursor = parseDateValue(startDate);
+  const end = parseDateValue(endDate);
+  if (!cursor || !end || cursor >= end) return [];
+  while (cursor < end) {
     keys.push(localDateKey(cursor));
-    cursor.setDate(cursor.getDate() + 7);
+    cursor.setDate(cursor.getDate() + 1);
   }
   return keys;
 }
 
-function availabilityWeekKeysForRoom(roomId) {
-  return Object.keys(state.camp.availability?.[roomId]?.weeks || {}).sort((a, b) => new Date(a) - new Date(b));
+function availabilityDateKeysForRoom(roomId) {
+  return Object.keys(state.camp.availability?.[roomId]?.days || {}).sort((a, b) => new Date(a) - new Date(b));
 }
 
 function availabilityCalendarBounds() {
-  const keys = Array.from(new Set(state.rooms.flatMap((room) => availabilityWeekKeysForRoom(room.id)))).sort(
+  const keys = Array.from(new Set(state.rooms.flatMap((room) => availabilityDateKeysForRoom(room.id)))).sort(
     (a, b) => new Date(a) - new Date(b),
   );
 
@@ -1472,12 +1593,12 @@ function availabilityCalendarBounds() {
 }
 
 function availabilityHasCoverageForDate(dateInput) {
-  const weekKey = weekKeyForDate(dateInput);
-  return state.rooms.some((room) => !!state.camp.availability?.[room.id]?.weeks?.[weekKey]);
+  const dayKey = localDateKey(dateInput);
+  return state.rooms.some((room) => !!state.camp.availability?.[room.id]?.days?.[dayKey]);
 }
 
 function roomAvailabilityRow(roomId, dateInput) {
-  return state.camp.availability?.[roomId]?.weeks?.[weekKeyForDate(dateInput)] || null;
+  return state.camp.availability?.[roomId]?.days?.[localDateKey(dateInput)] || null;
 }
 
 function roomNightRate(roomId, dateInput) {
@@ -1485,8 +1606,34 @@ function roomNightRate(roomId, dateInput) {
   return Number(roomAvailabilityRow(roomId, dateInput)?.pricePerNight ?? room?.pricePerNight ?? 0);
 }
 
-function roomNightlySurcharge(roomId) {
-  return Number(getRoom(roomId)?.pricePerNight ?? 0);
+function roomMinimumStay(roomId, dateInput) {
+  return Math.max(1, Number(roomAvailabilityRow(roomId, dateInput)?.minStay ?? defaultAvailabilityMinStay(state.packages)));
+}
+
+function roomOpenForCheckin(roomId, dateInput) {
+  const row = roomAvailabilityRow(roomId, dateInput);
+  if (!row) return false;
+  return row.openForCheckin !== false;
+}
+
+function stayMinimumNightsForDate(dateInput) {
+  const openRows = orderedItems(state.rooms)
+    .map((room) => roomAvailabilityRow(room.id, dateInput))
+    .filter((row) => row && row.openForCheckin !== false);
+  if (!openRows.length) return defaultAvailabilityMinStay(state.packages);
+  return Math.max(1, ...openRows.map((row) => Math.max(1, Number(row.minStay ?? 1))));
+}
+
+function bookingNights() {
+  if (!draft.startDate) return 0;
+  const selectedNights = nightsBetween(draft.startDate, draft.endDate);
+  if (selectedNights > 0) return selectedNights;
+  return stayMinimumNightsForDate(draft.startDate);
+}
+
+function previewStayNights(dateInput = draft.startDate || nextDefaultDate()) {
+  if (dateInput) return stayMinimumNightsForDate(dateInput);
+  return defaultAvailabilityMinStay(state.packages);
 }
 
 function formatSurcharge(value) {
@@ -1497,29 +1644,28 @@ function formatSurcharge(value) {
   }).format(amount)} \u20AC`;
 }
 
-function previewStayNights() {
-  return bookingNights() || Number(orderedItems(state.packages)[0]?.nights || seedState.packages[0]?.nights || 7);
-}
-
 function campSpotsLeftForDate(startDate, nights = previewStayNights()) {
   if (!startDate) return 0;
 
   const endDate = addDays(startDate, nights);
-  const weeks = weekKeysBetween(startDate, endDate);
-  if (!weeks.length) return 0;
+  const dateKeys = dateKeysBetween(startDate, endDate);
+  if (!dateKeys.length) return 0;
 
-  const rooms = orderedItems(state.rooms);
-  const weekTotals = weeks.map((weekKey) =>
-    rooms.reduce((sum, room) => sum + Math.max(0, roomAvailableSpots(room.id, startDate, endDate)), 0),
+  const dayTotals = dateKeys.map((dateKey) =>
+    orderedItems(state.rooms).reduce((sum, room) => {
+      const row = roomAvailabilityRow(room.id, dateKey);
+      if (!row) return sum;
+      const booked = bookedUnitsForDate(room.id, dateKey);
+      return sum + Math.max(0, Number(row.units ?? 0) - booked);
+    }, 0),
   );
 
-  return Math.max(0, Math.min(...weekTotals));
+  return Math.max(0, Math.min(...dayTotals));
 }
 
-function roomConfiguredUnits(roomId, startDate, endDate) {
+function roomConfiguredUnits(roomId, startDate) {
   if (!startDate) return 0;
-  const weekKey = weekKeyForDate(startDate);
-  const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
+  const row = state.camp.availability?.[roomId]?.days?.[localDateKey(startDate)];
   return Math.max(0, Number(row?.units ?? 0));
 }
 
@@ -1529,6 +1675,38 @@ function campConfiguredSpotsForDate(startDate, nights = previewStayNights()) {
     (sum, room) => sum + roomConfiguredUnits(room.id, startDate),
     0,
   );
+}
+
+function canStayThrough(startDate, endDate, guestCount = selectedPackagePeopleCount()) {
+  if (!startDate || !endDate) return false;
+  return campSpotsLeftForDate(startDate, nightsBetween(startDate, endDate)) >= Math.max(1, guestCount);
+}
+
+function isSelectableCheckoutDate(dateInput, startDate = draft.startDate) {
+  const today = new Date();
+  const date = parseDateValue(dateInput);
+  if (!date || date < new Date(today.getFullYear(), today.getMonth(), today.getDate())) return false;
+  if (!startDate) return false;
+  const minimumStay = stayMinimumNightsForDate(startDate);
+  const nights = nightsBetween(startDate, dateInput);
+  if (nights < minimumStay) return false;
+  return canStayThrough(startDate, dateInput);
+}
+
+function shouldAutoSelectCheckout(startDate) {
+  if (!startDate) return false;
+  const minimumStay = stayMinimumNightsForDate(startDate);
+  if (minimumStay <= 1) return false;
+  const suggestedCheckout = addDays(startDate, minimumStay);
+  if (!isSelectableCheckoutDate(suggestedCheckout, startDate)) return false;
+
+  for (let offset = 1; offset < minimumStay; offset += 1) {
+    if (isArrivalAllowed(addDays(startDate, offset), state.camp.bookingRules)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function availabilityBandClass(spots) {
@@ -1555,28 +1733,38 @@ function roomCanFitParty(
 function ensureAvailabilityCoverage(targetState = state) {
   if (!targetState.camp) return;
   if (!targetState.camp.availability) targetState.camp.availability = {};
-  const weekStart = startOfWeek(new Date());
+  const dayStart = parseDateValue(new Date()) || new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const defaultMinStay = defaultAvailabilityMinStay(targetState.packages || seedState.packages);
 
   targetState.rooms.forEach((room) => {
     if (!targetState.camp.availability[room.id]) {
-      targetState.camp.availability[room.id] = { weeks: {} };
+      targetState.camp.availability[room.id] = { days: {} };
     }
-    if (!targetState.camp.availability[room.id].weeks) {
-      targetState.camp.availability[room.id].weeks = {};
+    if (!targetState.camp.availability[room.id].days) {
+      const migrated = migrateAvailabilityDays(
+        { [room.id]: targetState.camp.availability[room.id] },
+        [room],
+        targetState.camp.bookingRules,
+        targetState.packages || seedState.packages,
+      );
+      targetState.camp.availability[room.id].days = migrated[room.id]?.days || {};
     }
 
-      for (let i = 0; i < 52; i += 1) {
-        const cursor = new Date(weekStart);
-        cursor.setDate(cursor.getDate() + i * 7);
-        const key = localDateKey(cursor);
-        if (!targetState.camp.availability[room.id].weeks[key]) {
-          targetState.camp.availability[room.id].weeks[key] = {
-          units: room.totalUnits,
-          pricePerNight: room.pricePerNight,
+    for (let i = 0; i < 366; i += 1) {
+      const cursor = new Date(dayStart);
+      cursor.setDate(cursor.getDate() + i);
+      const key = localDateKey(cursor);
+      if (!targetState.camp.availability[room.id].days[key]) {
+        targetState.camp.availability[room.id].days[key] = {
+            units: room.totalUnits,
+            pricePerNight: room.pricePerNight,
+            minStay: defaultMinStay,
+            openForCheckin: defaultAvailabilityCheckinOpen(key, targetState.camp.bookingRules),
         };
       }
     }
-  });
+    });
 }
 
 function packageQuantity(packageId) {
@@ -1628,15 +1816,9 @@ function selectedRoomAllocationPeopleCount() {
 
 function normalizeRoomAllocations() {
   const guestLimit = selectedPackagePeopleCount();
-  console.log("[book] normalizeRoomAllocations:start", {
-    guestLimit,
-    startDate: draft.startDate,
-    roomAllocations: { ...(draft.roomAllocations || {}) },
-  });
   if (!guestLimit) {
     draft.roomAllocations = {};
     draft.roomId = "";
-    console.log("[book] normalizeRoomAllocations:reset-no-guest-limit");
     return;
   }
 
@@ -1654,10 +1836,6 @@ function normalizeRoomAllocations() {
 
   draft.roomAllocations = nextAllocations;
   draft.roomId = selectedRoomAllocationRows()[0]?.id || "";
-  console.log("[book] normalizeRoomAllocations:done", {
-    nextAllocations,
-    roomId: draft.roomId,
-  });
 }
 
 function setRoomAllocationQuantity(roomId, quantity) {
@@ -1670,18 +1848,6 @@ function setRoomAllocationQuantity(roomId, quantity) {
     Math.max(0, guestLimit - otherAllocated),
   );
   const nextQuantity = Math.max(0, Math.min(maxForRoom, Number(quantity) || 0));
-  console.log("[book] setRoomAllocationQuantity", {
-    roomId,
-    requested: quantity,
-    current,
-    guestLimit,
-    otherAllocated,
-    availableSpots,
-    maxForRoom,
-    nextQuantity,
-    startDate: draft.startDate,
-    endDate: endDateForDraft(),
-  });
   draft.roomAllocations = {
     ...(draft.roomAllocations || {}),
     [roomId]: nextQuantity,
@@ -1694,15 +1860,6 @@ function setRoomAllocationQuantity(roomId, quantity) {
 
 function debugRoomAllocationChange(roomId, delta) {
   const current = roomAllocationQuantity(roomId);
-  console.log("[book] room allocation button", {
-    roomId,
-    delta,
-    current,
-    packagePeople: selectedPackagePeopleCount(),
-    startDate: draft.startDate,
-    endDate: endDateForDraft(),
-    availableSpots: roomAvailableSpots(roomId, draft.startDate, endDateForDraft()),
-  });
   setRoomAllocationQuantity(roomId, current + delta);
   state.bookingConfirmation = null;
   updateBookPage();
@@ -1732,18 +1889,6 @@ function setAddonQuantity(addonId, quantity) {
   draft.addonIds = [...remaining, ...Array.from({ length: nextQuantity }, () => addonId)];
 }
 
-function bookingNights() {
-  if (!draft.startDate || !selectedPackageRows().length) {
-    return 0;
-  }
-  const rows = selectedPackageRows();
-  if (!rows.length) {
-    return getPackage(draft.packageId).nights;
-  }
-
-  return Math.max(...rows.map((item) => item.nights));
-}
-
 function overlappingBookings(roomId, startDate, endDate) {
   return state.bookings.filter((booking) => {
     if (!bookingRoomAllocationCountForRoom(booking, roomId)) return false;
@@ -1757,24 +1902,30 @@ function availableUnits(roomId, startDate, endDate) {
   if (!startDate || !endDate) {
     return Math.max(0, Number(room?.totalUnits ?? 0));
   }
-  const weekKey = weekKeyForDate(startDate);
-  const booked = overlappingBookings(roomId, startDate, addDays(startDate, 1)).reduce(
-    (sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId),
-    0,
-  );
-  const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
-  const total = Number(row?.units ?? room?.totalUnits ?? 0);
-  return Math.max(0, total - booked);
+  if (!roomOpenForCheckin(roomId, startDate)) {
+    return 0;
+  }
+  const dateKeys = dateKeysBetween(startDate, endDate);
+  if (!dateKeys.length) return 0;
+  const availableByDate = dateKeys.map((dateKey) => {
+    const row = roomAvailabilityRow(roomId, dateKey);
+    const total = Number(row?.units ?? room?.totalUnits ?? 0);
+    const booked = bookedUnitsForDate(roomId, dateKey);
+    return Math.max(0, total - booked);
+  });
+  return Math.max(0, Math.min(...availableByDate));
 }
 
-function bookedUnitsForWeek(roomId, weekKey) {
-  const startDate = weekKey;
-  const endDate = addDays(weekKey, 7);
-  return state.bookings.filter((booking) => {
-    if (!bookingRoomAllocationCountForRoom(booking, roomId)) return false;
-    if (!blocksInventory(booking)) return false;
-    return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
-  }).reduce((sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId), 0);
+function bookedUnitsForDate(roomId, dateKey) {
+  const startDate = dateKey;
+  const endDate = addDays(dateKey, 1);
+  return state.bookings
+    .filter((booking) => {
+      if (!bookingRoomAllocationCountForRoom(booking, roomId)) return false;
+      if (!blocksInventory(booking)) return false;
+      return rangesOverlap(startDate, endDate, booking.startDate, booking.endDate);
+    })
+    .reduce((sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId), 0);
 }
 
 function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
@@ -1787,9 +1938,16 @@ function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate =
       forSale: available,
     };
   }
-  const weeks = weekKeysBetween(startDate, endDate);
+  if (!roomOpenForCheckin(roomId, startDate)) {
+    return {
+      available: 0,
+      booked: 0,
+      forSale: 0,
+    };
+  }
+  const dateKeys = dateKeysBetween(startDate, endDate);
 
-  if (!weeks.length) {
+  if (!dateKeys.length) {
     const available = 0;
     const booked = overlappingBookings(roomId, startDate, endDate).reduce((sum, booking) => sum + bookingGuestCount(booking), 0);
     return {
@@ -1799,10 +1957,10 @@ function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate =
     };
   }
 
-  const weekStats = weeks.map((weekKey) => {
-    const row = state.camp.availability?.[roomId]?.weeks?.[weekKey];
+  const dayStats = dateKeys.map((dateKey) => {
+    const row = roomAvailabilityRow(roomId, dateKey);
     const available = Number(row?.units ?? 0);
-    const booked = bookedUnitsForWeek(roomId, weekKey);
+    const booked = bookedUnitsForDate(roomId, dateKey);
     return {
       available,
       booked,
@@ -1811,9 +1969,9 @@ function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate =
   });
 
   return {
-    available: Math.min(...weekStats.map((item) => item.available)),
-    booked: Math.max(...weekStats.map((item) => item.booked)),
-    forSale: Math.min(...weekStats.map((item) => item.forSale)),
+    available: Math.min(...dayStats.map((item) => item.available)),
+    booked: Math.max(...dayStats.map((item) => item.booked)),
+    forSale: Math.min(...dayStats.map((item) => item.forSale)),
   };
 }
 
@@ -1835,12 +1993,13 @@ function ensureRoomSelection() {
 
 function roomPrice() {
   if (!draft.startDate || !selectedRoomAllocationRows().length) return 0;
-  const nights = bookingNights();
-  if (!nights) return 0;
-  return selectedRoomAllocationRows().reduce(
-    (sum, room) => sum + roomNightlySurcharge(room.id) * nights * room.quantity,
-    0,
-  );
+  const endDate = endDateForDraft();
+  const dateKeys = dateKeysBetween(draft.startDate, endDate);
+  if (!dateKeys.length) return 0;
+  return selectedRoomAllocationRows().reduce((sum, room) => {
+    const nightlyTotal = dateKeys.reduce((nightSum, dateKey) => nightSum + roomNightRate(room.id, dateKey), 0);
+    return sum + nightlyTotal * room.quantity;
+  }, 0);
 }
 
 function packagePrice() {
@@ -1888,46 +2047,57 @@ function renderDayCell(cellDate, monthDate) {
   const today = new Date();
   const isPast = cellDate < new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const hasCoverage = availabilityHasCoverageForDate(iso);
+  const checkinOpen = isArrivalAllowed(iso, state.camp.bookingRules);
+  const selectingCheckout = draft.dateSelectionMode === "end" && !!draft.startDate;
   const selected = iso === draft.startDate;
+  const selectedCheckout = !selected && iso === draft.endDate;
   const rangeStart = draft.startDate;
   const rangeEnd = endDateForDraft();
-  const inRange = !selected && rangeStart && rangeEnd && iso > rangeStart && iso < rangeEnd;
+  const inRange = !selected && !selectedCheckout && rangeStart && rangeEnd && iso > rangeStart && iso < rangeEnd;
   const isStart = selected;
-  const selectable = inMonth && !isPast && hasCoverage && isSelectableDate(iso);
-  const spotsLeft = inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) ? campSpotsLeftForDate(iso) : 0;
-  const configuredSpots =
-    inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) ? campConfiguredSpotsForDate(iso) : 0;
+  const isEnd = selectedCheckout;
+  const selectable = inMonth && !isPast && hasCoverage && (selectingCheckout ? isSelectableCheckoutDate(iso) : isSelectableDate(iso));
+  const spotsLeft = inMonth && !isPast && hasCoverage ? campSpotsLeftForDate(iso) : 0;
+  const configuredSpots = inMonth && !isPast && hasCoverage ? campConfiguredSpotsForDate(iso) : 0;
   const requiredGuests = Math.max(1, selectedPackagePeopleCount());
-  const isClosed =
-    inMonth && !isPast && hasCoverage && isArrivalAllowed(iso, state.camp.bookingRules) && configuredSpots <= 0;
+  const isClosed = inMonth && !isPast && hasCoverage && configuredSpots <= 0;
   const soldOut =
     inMonth &&
     !isPast &&
     hasCoverage &&
     !isClosed &&
-    isArrivalAllowed(iso, state.camp.bookingRules) &&
+    checkinOpen &&
     spotsLeft < requiredGuests;
   const availabilityClass = isPast
     ? "past-day"
     : !hasCoverage || isClosed
       ? "availability-none"
+      : !checkinOpen
+        ? availabilityBandClass(spotsLeft)
       : soldOut
-        ? "soldout-day"
-        : availabilityBandClass(spotsLeft);
+          ? "soldout-day"
+          : availabilityBandClass(spotsLeft);
   const { showCountThreshold } = availabilityThresholds();
-  const shouldShowCount = !isPast && hasCoverage && (soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold);
-  const dayStatus = isClosed ? "CLOSED" : soldOut ? "FULL" : shouldShowCount && spotsLeft > 0 ? `${spotsLeft} left` : "";
+  const shouldShowCount =
+    !selectingCheckout &&
+    !isPast &&
+    hasCoverage &&
+    checkinOpen &&
+    (soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold);
+  const dayStatus = selectingCheckout ? "" : soldOut ? "FULL" : shouldShowCount && spotsLeft > 0 ? `${spotsLeft} left` : "";
 
   const classes = [
     "day-cell",
     inMonth ? "" : "muted-day",
-    selectable ? "" : "disabled-day",
+    !selectable && (isPast || !hasCoverage || isClosed) ? "disabled-day" : "",
+    !checkinOpen && hasCoverage && !isClosed ? "checkin-closed-day" : "",
     availabilityClass,
     inRange ? "in-range" : "",
     isStart ? "range-start" : "",
+    isEnd ? "range-end" : "",
   ]
-    .filter(Boolean)
-    .join(" ");
+      .filter(Boolean)
+      .join(" ");
 
   return `
     <button
@@ -1970,12 +2140,21 @@ function renderDateSelector() {
   const baseMonth = addMonths(startOfMonth(new Date()), draft.calendarMonthOffset);
   const nextMonth = addMonths(baseMonth, 1);
   const singleMonth = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
+  const minimumStay = draft.startDate ? stayMinimumNightsForDate(draft.startDate) : 0;
+  const autoSelectedStay = draft.startDate && draft.endDate && draft.dateSelectionMode === "start" && shouldAutoSelectCheckout(draft.startDate);
 
   return `
-    <section class="calendar-card">
-      <div class="date-intro">
-        <h3>2. Select your check-in date</h3>
-      </div>
+      <section class="calendar-card">
+        <div class="date-intro">
+          <h3>2. Select your dates</h3>
+          <p class="helper">${
+            draft.dateSelectionMode === "end" && draft.startDate
+              ? `Choose a check-out date. Minimum stay: ${minimumStay} night${minimumStay === 1 ? "" : "s"}.`
+              : autoSelectedStay
+                ? `Fixed stay selected automatically. Check-out is set to ${formatDate(endDateForDraft())}.`
+              : "Choose a check-in date, then choose a check-out date."
+          }</p>
+        </div>
       <div class="calendar-head">
         <div class="calendar-nav">
           <button type="button" class="nav-button" data-month-nav="-1" aria-label="Previous month">&lt;</button>
@@ -1988,14 +2167,14 @@ function renderDateSelector() {
         ${singleMonth ? "" : renderMonthCard(nextMonth)}
       </div>
 
-      <div class="calendar-note">
-        ${state.camp.bookingRules?.restrictedArrivalDays
-          ? `Arrival days: ${state.camp.bookingRules.allowedArrivalDays.join(", ")}`
-          : "Any arrival day is allowed."}
-      </div>
+        <div class="calendar-note">
+          ${draft.startDate
+            ? `Selected stay: ${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}`
+            : "Availability colors reflect remaining sellable spots."}
+        </div>
 
-    </section>
-  `;
+      </section>
+    `;
 }
 
 function renderPromoEntry({ variant = "desktop" } = {}) {
@@ -2269,7 +2448,10 @@ function renderBookPage() {
       const isUnavailable = Boolean(draft.startDate && roomAvailability <= 0);
       const maxForRoom = Math.min(roomAvailability, remainingGuests);
       const canIncrease = quantity < maxForRoom;
-      const stayPrice = draft.startDate && bookingNights() ? roomNightlySurcharge(room.id) * bookingNights() : 0;
+      const stayPrice =
+        draft.startDate && endDateForDraft()
+          ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
+          : 0;
       return `
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
@@ -2654,9 +2836,7 @@ function renderBookPage() {
         <strong>${summaryHasData ? money(totalPrice()) : ""}</strong>
       </div>
       <div class="summary-footer">
-        ${state.camp.bookingRules?.restrictedArrivalDays
-          ? `Arrivals only on ${state.camp.bookingRules.allowedArrivalDays.join(", ")}.`
-          : "Any arrival day is allowed."}
+        Choose dates that are open for check-in in the calendar.
       </div>
       ${isMobileSummary ? "" : `<div class="summary-actions">${summaryActions}</div>`}
     </div>
@@ -2779,7 +2959,13 @@ function renderAdminPage() {
   const promoForm = document.getElementById("promoForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
-  const availabilityBasePrice = document.getElementById("availabilityBasePrice");
+  const availabilityBulkStart = document.getElementById("availabilityBulkStart");
+  const availabilityBulkEnd = document.getElementById("availabilityBulkEnd");
+  const availabilityBulkPricePerNight = document.getElementById("availabilityBulkPricePerNight");
+  const availabilityBulkMinStay = document.getElementById("availabilityBulkMinStay");
+  const availabilityBulkUnits = document.getElementById("availabilityBulkUnits");
+  const availabilityBulkOpenForCheckin = document.getElementById("availabilityBulkOpenForCheckin");
+  const saveAvailabilityButton = document.getElementById("saveAvailability");
   const availabilityMatrix = document.getElementById("availabilityMatrix");
   const panes = document.querySelectorAll("[data-admin-pane]");
   const tabButtons = document.querySelectorAll("[data-admin-tab]");
@@ -2805,18 +2991,12 @@ function renderAdminPage() {
     campForm.elements.accentSoft.value = state.camp.theme?.accentSoft || seedState.camp.theme.accentSoft;
     campForm.elements.titleFont.value = state.camp.theme?.titleFont || seedState.camp.theme.titleFont;
     campForm.elements.bodyFont.value = state.camp.theme?.bodyFont || seedState.camp.theme.bodyFont;
-    campForm.elements.restrictedArrivalDays.checked = !!state.camp.bookingRules?.restrictedArrivalDays;
     campForm.elements.availabilityLowThreshold.value =
       state.camp.bookingRules?.availabilityLowThreshold ?? seedState.camp.bookingRules.availabilityLowThreshold;
     campForm.elements.availabilityMidThreshold.value =
       state.camp.bookingRules?.availabilityMidThreshold ?? seedState.camp.bookingRules.availabilityMidThreshold;
     campForm.elements.availabilityCountVisibilityThreshold.value =
       state.camp.bookingRules?.availabilityCountVisibilityThreshold ?? "";
-    campForm
-      .querySelectorAll('input[name="arrivalDays"]')
-      .forEach((checkbox) => {
-        checkbox.checked = (state.camp.bookingRules?.allowedArrivalDays || []).includes(checkbox.value);
-      });
   }
 
   if (analyticsForm) {
@@ -2901,14 +3081,25 @@ function renderAdminPage() {
       .join("");
   }
 
-  if (availabilityBasePrice) {
-    const selectedRoom = getRoom(adminUiState.availabilityRoomId);
-    const firstRow = availabilityRowsForRoom(adminUiState.availabilityRoomId)[0];
-    availabilityBasePrice.value = firstRow?.pricePerNight || selectedRoom.pricePerNight || 0;
-  }
-
   if (availabilityMatrix) {
     availabilityMatrix.innerHTML = renderAvailabilityMatrix(adminUiState.availabilityRoomId);
+  }
+
+  if (!adminUiState.availabilityBulkStart) {
+    adminUiState.availabilityBulkStart = adminUiState.availabilityViewStart;
+  }
+  if (!adminUiState.availabilityBulkEnd) {
+    adminUiState.availabilityBulkEnd = addDays(adminUiState.availabilityBulkStart, 6);
+  }
+  if (availabilityBulkStart) availabilityBulkStart.value = adminUiState.availabilityBulkStart || "";
+  if (availabilityBulkEnd) availabilityBulkEnd.value = adminUiState.availabilityBulkEnd || "";
+  if (availabilityBulkPricePerNight) availabilityBulkPricePerNight.value = adminUiState.availabilityBulkPricePerNight;
+  if (availabilityBulkMinStay) availabilityBulkMinStay.value = adminUiState.availabilityBulkMinStay;
+  if (availabilityBulkUnits) availabilityBulkUnits.value = adminUiState.availabilityBulkUnits;
+  if (availabilityBulkOpenForCheckin) availabilityBulkOpenForCheckin.value = adminUiState.availabilityBulkOpenForCheckin;
+  if (saveAvailabilityButton) {
+    saveAvailabilityButton.disabled = adminUiState.availabilitySaving;
+    saveAvailabilityButton.textContent = adminUiState.availabilitySaving ? "Saving..." : "Save availability";
   }
 
   if (bookingList) {
@@ -3380,124 +3571,228 @@ function renderAdminPage() {
   }
 }
 
-function availabilityRowsForRoom(roomId, count = 12) {
-  const room = getRoom(roomId);
-  const rowsByKey = new Map();
-  const roomAvailability = state.camp.availability?.[roomId]?.weeks || {};
-  const start = startOfWeek(new Date());
-
-  for (let i = 0; i < count; i += 1) {
+function availabilityMatrixDateKeys(count = adminUiState.availabilityViewDays || 21) {
+  const start = parseDateValue(adminUiState.availabilityViewStart) || parseDateValue(new Date()) || new Date();
+  start.setHours(0, 0, 0, 0);
+  return Array.from({ length: count }, (_, index) => {
     const cursor = new Date(start);
-    cursor.setDate(cursor.getDate() + i * 7);
-    const key = localDateKey(cursor);
-    const row = roomAvailability[key] || {
+    cursor.setDate(cursor.getDate() + index);
+    return localDateKey(cursor);
+  });
+}
+
+function availabilityDaySummary(roomId, dateKey) {
+  const room = getRoom(roomId);
+  const row = roomAvailabilityRow(roomId, dateKey) || {};
+  const units = Math.max(0, Number(row.units ?? room?.totalUnits ?? 0));
+  const booked = bookedUnitsForDate(roomId, dateKey);
+  return {
+    dateKey,
+    units,
+    booked,
+    forSale: Math.max(0, units - booked),
+    pricePerNight: Math.max(0, Number(row.pricePerNight ?? room?.pricePerNight ?? 0)),
+    minStay: Math.max(1, Number(row.minStay ?? defaultAvailabilityMinStay(state.packages))),
+    openForCheckin: row.openForCheckin !== false,
+  };
+}
+
+function ensureAvailabilityDayEntry(roomId, dateKey, targetState = state) {
+  const room = (targetState.rooms || []).find((item) => item.id === roomId);
+  if (!room || !dateKey) return null;
+  ensureAvailabilityCoverage(targetState);
+  if (!targetState.camp.availability[roomId]) {
+    targetState.camp.availability[roomId] = { days: {} };
+  }
+  if (!targetState.camp.availability[roomId].days[dateKey]) {
+    targetState.camp.availability[roomId].days[dateKey] = {
       units: room.totalUnits,
       pricePerNight: room.pricePerNight,
+      minStay: defaultAvailabilityMinStay(targetState.packages || seedState.packages),
+      openForCheckin: defaultAvailabilityCheckinOpen(dateKey, targetState.camp.bookingRules),
     };
-    rowsByKey.set(key, row);
+  }
+  return targetState.camp.availability[roomId].days[dateKey];
+}
+
+function updateAvailabilityDayField(roomId, dateKey, field, rawValue) {
+  const row = ensureAvailabilityDayEntry(roomId, dateKey);
+  if (!row) return;
+
+  if (field === "openForCheckin") {
+    row.openForCheckin = !!rawValue;
+    return;
   }
 
-  Object.entries(roomAvailability).forEach(([key, row]) => {
-    rowsByKey.set(key, row);
-  });
+  if (field === "minStay") {
+    row.minStay = Math.max(1, Number(rawValue || defaultAvailabilityMinStay(state.packages)));
+    return;
+  }
 
-  (adminUiState.availabilityExtraWeeksByRoom?.[roomId] || []).forEach((key) => {
-    if (!rowsByKey.has(key)) {
-      rowsByKey.set(key, {
-        units: room.totalUnits,
-        pricePerNight: room.pricePerNight,
-      });
+  if (field === "units") {
+    row.units = Math.max(0, Number(rawValue || 0));
+    return;
+  }
+
+  if (field === "pricePerNight") {
+    row.pricePerNight = Math.max(0, Number(rawValue || 0));
+  }
+}
+
+function applyAvailabilityBulkEdit(roomId, bulkEdit = {}) {
+  const room = getRoom(roomId);
+  const startDate = bulkEdit.startDate || adminUiState.availabilityBulkStart;
+  const endDate = bulkEdit.endDate || adminUiState.availabilityBulkEnd || startDate;
+  if (!room || !startDate || !endDate) {
+    adminUiState.availabilityNotice = "Choose a valid start and end date for the bulk edit.";
+    adminUiState.availabilityNoticeType = "error";
+    return false;
+  }
+
+  const start = parseDateValue(startDate);
+  const end = parseDateValue(endDate);
+  if (!start || !end || end < start) {
+    adminUiState.availabilityNotice = "The bulk edit end date must be on or after the start date.";
+    adminUiState.availabilityNoticeType = "error";
+    return false;
+  }
+
+  const applyPrice = bulkEdit.pricePerNight !== "" && bulkEdit.pricePerNight !== null && bulkEdit.pricePerNight !== undefined;
+  const applyMinStay = bulkEdit.minStay !== "" && bulkEdit.minStay !== null && bulkEdit.minStay !== undefined;
+  const applyUnits = bulkEdit.units !== "" && bulkEdit.units !== null && bulkEdit.units !== undefined;
+  const openMode = bulkEdit.openForCheckin ?? "keep";
+  const applyOpen = openMode === "open" || openMode === "closed";
+
+  if (!applyPrice && !applyMinStay && !applyUnits && !applyOpen) {
+    adminUiState.availabilityNotice = "Choose at least one field to update in the bulk editor.";
+    adminUiState.availabilityNoticeType = "error";
+    return false;
+  }
+
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    const dateKey = localDateKey(cursor);
+    const row = ensureAvailabilityDayEntry(roomId, dateKey);
+    if (row) {
+      if (applyPrice) row.pricePerNight = Math.max(0, Number(bulkEdit.pricePerNight));
+      if (applyMinStay) row.minStay = Math.max(1, Number(bulkEdit.minStay));
+      if (applyUnits) row.units = Math.max(0, Number(bulkEdit.units));
+      if (applyOpen) row.openForCheckin = openMode === "open";
     }
-  });
+    cursor.setDate(cursor.getDate() + 1);
+  }
 
-  return Array.from(rowsByKey.entries())
-    .sort((a, b) => new Date(a[0]) - new Date(b[0]))
-    .map(([key, row]) => {
-      const units = Number(row.units ?? room.totalUnits ?? 0);
-      const booked = bookedUnitsForWeek(roomId, key);
-      return {
-        weekKey: key,
-        weekLabel: `${formatDate(key)} to ${formatDate(addDays(key, 6))}`,
-        units,
-        booked,
-        forSale: Math.max(0, units - booked),
-        pricePerNight: Number(row.pricePerNight ?? room.pricePerNight ?? 0),
-      };
-    });
+  adminUiState.availabilityNotice = `Bulk edit applied for ${formatDateShort(startDate)} to ${formatDateShort(endDate)}. Save to keep it.`;
+  adminUiState.availabilityNoticeType = "success";
+  return true;
 }
 
 function renderAvailabilityMatrix(roomId) {
-  const rows = availabilityRowsForRoom(roomId);
+  const dateKeys = availabilityMatrixDateKeys();
+  const cells = dateKeys.map((dateKey) => availabilityDaySummary(roomId, dateKey));
+  const noticeMarkup = adminUiState.availabilityNotice
+    ? `<div class="notice notice-${adminUiState.availabilityNoticeType}">${escapeHtml(adminUiState.availabilityNotice)}</div>`
+    : "";
+
+  const renderInputRow = (label, field, options = {}) => `
+    <tr>
+      <th scope="row">${label}</th>
+      ${cells
+        .map((cell) => {
+          if (field === "openForCheckin") {
+            return `
+              <td>
+                <label class="availability-checkbox">
+                  <input
+                    type="checkbox"
+                    ${cell.openForCheckin ? "checked" : ""}
+                    data-availability-field="${field}"
+                    data-availability-date="${cell.dateKey}"
+                    data-availability-room="${roomId}"
+                  />
+                </label>
+              </td>
+            `;
+          }
+          return `
+            <td>
+              <input
+                type="number"
+                min="${options.min ?? 0}"
+                step="${options.step ?? 1}"
+                value="${cell[field]}"
+                data-availability-field="${field}"
+                data-availability-date="${cell.dateKey}"
+                data-availability-room="${roomId}"
+              />
+            </td>
+          `;
+        })
+        .join("")}
+    </tr>
+  `;
+
+  const renderReadOnlyRow = (label, field) => `
+    <tr>
+      <th scope="row">${label}</th>
+      ${cells.map((cell) => `<td><strong>${cell[field]}</strong></td>`).join("")}
+    </tr>
+  `;
+
   return `
-    <div class="availability-row-header">
-      <span>Week</span>
-      <span>Spots available</span>
-      <span>Booked</span>
-      <span>Remaining to sell</span>
-      <span>Price per night</span>
+    ${noticeMarkup}
+    <div class="availability-window-nav">
+      <button class="button button-secondary" type="button" data-availability-shift="-7">&lt; 7 days</button>
+      <strong>${formatDate(dateKeys[0])} to ${formatDate(dateKeys[dateKeys.length - 1])}</strong>
+      <button class="button button-secondary" type="button" data-availability-shift="7">7 days &gt;</button>
     </div>
-    ${rows
-      .map(
-        (row) => `
-          <div class="availability-row">
-            <div>
-              <strong>${escapeHtml(row.weekLabel)}</strong>
-            </div>
-            <label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value="${row.units}"
-                data-availability-units="${row.weekKey}"
-                data-availability-room="${roomId}"
-                aria-label="Spots available for ${escapeHtml(row.weekLabel)}"
-              />
-            </label>
-            <div>
-              <strong>${row.booked}</strong>
-            </div>
-            <div>
-              <strong>${row.forSale}</strong>
-            </div>
-            <label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value="${row.pricePerNight}"
-                data-availability-price="${row.weekKey}"
-                data-availability-room="${roomId}"
-                aria-label="Price per night for ${escapeHtml(row.weekLabel)}"
-              />
-            </label>
-          </div>
-        `,
-      )
-      .join("")}
-    <div class="availability-row availability-row-add">
-      <button class="button button-secondary availability-add-week" type="button" data-availability-add-week="${roomId}">
-        + Add week
-      </button>
+    <div class="table-shell availability-table-shell">
+      <table class="admin-table availability-table" aria-label="Daily availability matrix">
+        <thead>
+          <tr>
+            <th>Setting</th>
+            ${cells.map((cell) => `<th>${escapeHtml(formatDateShort(cell.dateKey))}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${renderInputRow("Price per night", "pricePerNight")}
+          ${renderInputRow("Minimum length of stay", "minStay", { min: 1 })}
+          ${renderInputRow("Open for checkin", "openForCheckin")}
+          ${renderInputRow("Available count", "units")}
+          ${renderReadOnlyRow("Sold count", "booked")}
+          ${renderReadOnlyRow("For sale count", "forSale")}
+        </tbody>
+      </table>
     </div>
   `;
 }
 
 function readAvailabilityMatrix(roomId) {
-  const rows = {};
-  document
-    .querySelectorAll(`[data-availability-room="${roomId}"][data-availability-units]`)
-    .forEach((input) => {
-      const weekKey = input.dataset.availabilityUnits;
-      const priceInput = document.querySelector(
-        `[data-availability-room="${roomId}"][data-availability-price="${weekKey}"]`,
-      );
-      rows[weekKey] = {
-        units: clampPackageQuantity(input.value),
-        pricePerNight: Math.max(0, Number(priceInput?.value || 0)),
-      };
-    });
-  return rows;
+  const room = getRoom(roomId);
+  const existingDays = { ...(state.camp.availability?.[roomId]?.days || {}) };
+  availabilityMatrixDateKeys().forEach((dateKey) => {
+    const priceInput = document.querySelector(
+      `[data-availability-room="${roomId}"][data-availability-date="${dateKey}"][data-availability-field="pricePerNight"]`,
+    );
+    const minStayInput = document.querySelector(
+      `[data-availability-room="${roomId}"][data-availability-date="${dateKey}"][data-availability-field="minStay"]`,
+    );
+    const unitsInput = document.querySelector(
+      `[data-availability-room="${roomId}"][data-availability-date="${dateKey}"][data-availability-field="units"]`,
+    );
+    const openInput = document.querySelector(
+      `[data-availability-room="${roomId}"][data-availability-date="${dateKey}"][data-availability-field="openForCheckin"]`,
+    );
+
+    existingDays[dateKey] = {
+      ...(existingDays[dateKey] || {}),
+      units: Math.max(0, Number(unitsInput?.value ?? room?.totalUnits ?? 0)),
+      pricePerNight: Math.max(0, Number(priceInput?.value ?? room?.pricePerNight ?? 0)),
+      minStay: Math.max(1, Number(minStayInput?.value ?? defaultAvailabilityMinStay(state.packages))),
+      openForCheckin: !!openInput?.checked,
+    };
+  });
+  return existingDays;
 }
 
 function renderLandingPage() {
@@ -3567,6 +3862,7 @@ function initLandingAuth() {
 
 function hydrateStateFromWorkspace(workspace) {
   Object.assign(state, normalizeWorkspaceData(workspace));
+  enableAllDemoCheckinDates(state);
   ensureAvailabilityCoverage(state);
   applyStateToDraft();
   applyTheme(state.camp.theme);
@@ -4161,6 +4457,7 @@ function syncDraftToState() {
   state.selectedAddonIds = [...draft.addonIds];
   state.customerFieldValues = { ...(draft.customerFieldValues || {}) };
   state.startDate = draft.startDate;
+  state.endDate = draft.endDate;
   state.guestName = draft.guestName;
   state.guestPhone = draft.guestPhone;
   state.guestEmail = draft.guestEmail;
@@ -4185,6 +4482,7 @@ function applyStateToDraft() {
   draft.addonIds = [...(state.selectedAddonIds || [])];
   draft.customerFieldValues = { ...(state.customerFieldValues || {}) };
   draft.startDate = state.startDate || "";
+  draft.endDate = state.endDate || "";
   draft.guestName = state.guestName || "";
   draft.guestPhone = state.guestPhone || "";
   draft.guestEmail = state.guestEmail || "";
@@ -4201,6 +4499,7 @@ function applyStateToDraft() {
   draft.currentStep = state.currentStep ?? 0;
   draft.bookingIntentId = state.bookingIntentId || "";
   draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
+  draft.dateSelectionMode = draft.startDate && !draft.endDate ? "end" : "start";
   normalizeAddonSelections();
 }
 
@@ -4440,7 +4739,7 @@ async function confirmBookingReservation() {
       return;
     }
   }
-  if (campSpotsLeftForDate(startDate, bookingNights()) < selectedPackagePeopleCount()) {
+  if (campSpotsLeftForDate(startDate, nightsBetween(startDate, endDate)) < selectedPackagePeopleCount()) {
     alert("There are not enough sellable spots for that date.");
     return;
   }
@@ -4572,15 +4871,31 @@ function initBookInteractions() {
     }
 
     if (target.dataset.selectDate) {
-      draft.startDate = target.dataset.selectDate;
-      state.bookingConfirmation = null;
-      trackAnalyticsEvent("search", {
-        camp: bookingSlug(),
-        check_in: draft.startDate,
-      });
-      updateBookPage();
-      return;
-    }
+      const nextDate = target.dataset.selectDate;
+      if (!draft.startDate || draft.dateSelectionMode !== "end") {
+        draft.startDate = nextDate;
+        draft.endDate = addDays(nextDate, stayMinimumNightsForDate(nextDate));
+        draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
+        draft.roomAllocations = {};
+      } else if (isSelectableCheckoutDate(nextDate, draft.startDate)) {
+        draft.endDate = nextDate;
+        draft.dateSelectionMode = "start";
+        draft.roomAllocations = {};
+      } else {
+        draft.startDate = nextDate;
+        draft.endDate = addDays(nextDate, stayMinimumNightsForDate(nextDate));
+        draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
+        draft.roomAllocations = {};
+      }
+        state.bookingConfirmation = null;
+        trackAnalyticsEvent("search", {
+          camp: bookingSlug(),
+          check_in: draft.startDate,
+          check_out: draft.endDate,
+        });
+        updateBookPage();
+        return;
+      }
 
     if (target.dataset.selectPackage) {
       draft.packageId = target.dataset.selectPackage;
@@ -4589,20 +4904,11 @@ function initBookInteractions() {
       return;
     }
 
-      if (target.dataset.roomRowChange) {
-        const [roomId, delta] = target.dataset.roomRowChange.split(":");
-        console.log("[book] roomRowChange click", {
-          roomId,
-          delta: Number(delta),
-          current: roomAllocationQuantity(roomId),
-          guestLimit: selectedPackagePeopleCount(),
-          startDate: draft.startDate,
-          endDate: endDateForDraft(),
-          availableSpots: roomAvailableSpots(roomId, draft.startDate, endDateForDraft()),
-        });
-        debugRoomAllocationChange(roomId, Number(delta));
-        return;
-      }
+    if (target.dataset.roomRowChange) {
+      const [roomId, delta] = target.dataset.roomRowChange.split(":");
+      debugRoomAllocationChange(roomId, Number(delta));
+      return;
+    }
 
     if (target.dataset.packageRowChange) {
       const [packageId, delta] = target.dataset.packageRowChange.split(":");
@@ -4623,16 +4929,21 @@ function initBookInteractions() {
       return;
     }
 
-    if (target.id === "nextFromDate") {
-      if (!draft.startDate) {
-        alert("Please select a check-in date first.");
+      if (target.id === "nextFromDate") {
+        if (!draft.startDate || !endDateForDraft()) {
+          alert("Please select both a check-in and a check-out date first.");
+          return;
+        }
+        if (!isSelectableCheckoutDate(endDateForDraft(), draft.startDate)) {
+          alert("Please choose a valid check-out date for this stay.");
+          return;
+        }
+        draft.currentStep = 2;
+        draft.dateSelectionMode = "start";
+        updateBookPage();
+        scrollBookPageToTop();
         return;
       }
-      draft.currentStep = 2;
-      updateBookPage();
-      scrollBookPageToTop();
-      return;
-    }
 
     if (target.id === "nextFromRoom") {
       if (selectedRoomAllocationPeopleCount() !== selectedPackagePeopleCount()) {
@@ -4805,8 +5116,13 @@ function initAdminInteractions() {
   const bookingUrlInput = document.getElementById("bookingUrl");
   const copyBookingUrlButton = document.getElementById("copyBookingUrl");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
-  const availabilityBasePrice = document.getElementById("availabilityBasePrice");
-  const availabilityUpdateAllPrices = document.getElementById("availabilityUpdateAllPrices");
+  const availabilityBulkStart = document.getElementById("availabilityBulkStart");
+  const availabilityBulkEnd = document.getElementById("availabilityBulkEnd");
+  const availabilityBulkPricePerNight = document.getElementById("availabilityBulkPricePerNight");
+  const availabilityBulkMinStay = document.getElementById("availabilityBulkMinStay");
+  const availabilityBulkUnits = document.getElementById("availabilityBulkUnits");
+  const availabilityBulkOpenForCheckin = document.getElementById("availabilityBulkOpenForCheckin");
+  const applyAvailabilityBulkEditButton = document.getElementById("applyAvailabilityBulkEdit");
   const saveAvailabilityButton = document.getElementById("saveAvailability");
   const bookingDateFilter = document.getElementById("bookingDateFilter");
   const bookingStatusFilter = document.getElementById("bookingStatusFilter");
@@ -4842,19 +5158,13 @@ function initAdminInteractions() {
       return;
     }
 
-    const addAvailabilityWeekButton = event.target?.closest?.("[data-availability-add-week]");
-    if (addAvailabilityWeekButton) {
-      const roomId = addAvailabilityWeekButton.dataset.availabilityAddWeek || adminUiState.availabilityRoomId;
-      const rows = availabilityRowsForRoom(roomId);
-      const lastWeekKey = rows[rows.length - 1]?.weekKey;
-      if (!roomId || !lastWeekKey) return;
-      const nextWeekKey = localDateKey(addDays(lastWeekKey, 7));
-      const existing = adminUiState.availabilityExtraWeeksByRoom?.[roomId] || [];
-      if (!existing.includes(nextWeekKey)) {
-        adminUiState.availabilityExtraWeeksByRoom = {
-          ...(adminUiState.availabilityExtraWeeksByRoom || {}),
-          [roomId]: [...existing, nextWeekKey],
-        };
+    const availabilityShiftButton = event.target?.closest?.("[data-availability-shift]");
+    if (availabilityShiftButton) {
+      const shiftBy = Number(availabilityShiftButton.dataset.availabilityShift || 0);
+      if (!shiftBy) return;
+      adminUiState.availabilityViewStart = addDays(adminUiState.availabilityViewStart || localDateKey(new Date()), shiftBy);
+      if (!adminUiState.availabilityBulkStart) {
+        adminUiState.availabilityBulkStart = adminUiState.availabilityViewStart;
       }
       renderAdminPage();
       return;
@@ -4897,19 +5207,48 @@ function initAdminInteractions() {
 
   availabilityRoomSelect?.addEventListener("change", (event) => {
     adminUiState.availabilityRoomId = event.target.value;
+    adminUiState.availabilityNotice = "";
     renderAdminPage();
   });
 
-  availabilityUpdateAllPrices?.addEventListener("click", () => {
-    const selectedRoom = getRoom(adminUiState.availabilityRoomId);
-    const price = Math.max(0, Number(availabilityBasePrice?.value || selectedRoom.pricePerNight || 0));
-    document
-      .querySelectorAll(
-        `[data-availability-room="${adminUiState.availabilityRoomId}"][data-availability-price]`,
-      )
-      .forEach((input) => {
-        input.value = price;
-      });
+  availabilityBulkStart?.addEventListener("change", (event) => {
+    adminUiState.availabilityBulkStart = event.target.value || "";
+  });
+
+  availabilityBulkEnd?.addEventListener("change", (event) => {
+    adminUiState.availabilityBulkEnd = event.target.value || "";
+  });
+
+  availabilityBulkPricePerNight?.addEventListener("input", (event) => {
+    adminUiState.availabilityBulkPricePerNight = event.target.value;
+  });
+
+  availabilityBulkMinStay?.addEventListener("input", (event) => {
+    adminUiState.availabilityBulkMinStay = event.target.value;
+  });
+
+  availabilityBulkUnits?.addEventListener("input", (event) => {
+    adminUiState.availabilityBulkUnits = event.target.value;
+  });
+
+  availabilityBulkOpenForCheckin?.addEventListener("change", (event) => {
+    adminUiState.availabilityBulkOpenForCheckin = event.target.value || "keep";
+  });
+
+  applyAvailabilityBulkEditButton?.addEventListener("click", () => {
+    const applied = applyAvailabilityBulkEdit(adminUiState.availabilityRoomId, {
+      startDate: adminUiState.availabilityBulkStart,
+      endDate: adminUiState.availabilityBulkEnd,
+      pricePerNight: adminUiState.availabilityBulkPricePerNight,
+      minStay: adminUiState.availabilityBulkMinStay,
+      units: adminUiState.availabilityBulkUnits,
+      openForCheckin: adminUiState.availabilityBulkOpenForCheckin,
+    });
+    if (applied) {
+      renderAdminPage();
+    } else {
+      renderAdminPage();
+    }
   });
 
   bookingDateFilter?.addEventListener("change", (event) => {
@@ -4953,14 +5292,39 @@ function initAdminInteractions() {
     downloadCsv(`bookings-${bookingSlug()}-${new Date().toISOString().slice(0, 10)}.csv`, bookingsToCsv(rows));
   });
 
-  saveAvailabilityButton?.addEventListener("click", () => {
-    ensureAvailabilityCoverage(state);
-    state.camp.availability = state.camp.availability || {};
-    state.camp.availability[adminUiState.availabilityRoomId] = {
-      weeks: readAvailabilityMatrix(adminUiState.availabilityRoomId),
-    };
+  saveAvailabilityButton?.addEventListener("click", async () => {
+    adminUiState.availabilitySaving = true;
+    adminUiState.availabilityNotice = "Saving availability...";
+    adminUiState.availabilityNoticeType = "info";
+    renderAdminPage();
     saveState();
+    adminUiState.availabilitySaving = false;
+    adminUiState.availabilityNotice = "Availability saved.";
+    adminUiState.availabilityNoticeType = "success";
     applyTheme(state.camp.theme);
+    renderAdminPage();
+  });
+
+  document.addEventListener("input", (event) => {
+    const availabilityField = event.target?.closest?.("[data-availability-field]");
+    if (!availabilityField) return;
+    updateAvailabilityDayField(
+      availabilityField.dataset.availabilityRoom || adminUiState.availabilityRoomId,
+      availabilityField.dataset.availabilityDate || "",
+      availabilityField.dataset.availabilityField || "",
+      availabilityField.type === "checkbox" ? availabilityField.checked : availabilityField.value,
+    );
+  });
+
+  document.addEventListener("change", (event) => {
+    const availabilityField = event.target?.closest?.("[data-availability-field]");
+    if (!availabilityField) return;
+    updateAvailabilityDayField(
+      availabilityField.dataset.availabilityRoom || adminUiState.availabilityRoomId,
+      availabilityField.dataset.availabilityDate || "",
+      availabilityField.dataset.availabilityField || "",
+      availabilityField.type === "checkbox" ? availabilityField.checked : availabilityField.value,
+    );
     renderAdminPage();
   });
 
@@ -5043,10 +5407,6 @@ function initAdminInteractions() {
     event.preventDefault();
     state.camp.name = campForm.elements.campName.value.trim() || state.camp.name;
 
-    const restrictedArrivalDays = campForm.elements.restrictedArrivalDays.checked;
-    const allowedArrivalDays = Array.from(campForm.querySelectorAll('input[name="arrivalDays"]:checked')).map(
-      (checkbox) => checkbox.value,
-    );
     const lowThreshold = Math.max(
       1,
       Number(campForm.elements.availabilityLowThreshold.value || seedState.camp.bookingRules.availabilityLowThreshold),
@@ -5056,8 +5416,7 @@ function initAdminInteractions() {
       Number(campForm.elements.availabilityMidThreshold.value || seedState.camp.bookingRules.availabilityMidThreshold),
     );
     state.camp.bookingRules = {
-      restrictedArrivalDays,
-      allowedArrivalDays: allowedArrivalDays.length ? allowedArrivalDays : seedState.camp.bookingRules.allowedArrivalDays,
+      ...(state.camp.bookingRules || {}),
       availabilityLowThreshold: lowThreshold,
       availabilityMidThreshold: midThreshold,
       availabilityCountVisibilityThreshold:

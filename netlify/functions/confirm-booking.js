@@ -27,24 +27,19 @@ function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return new Date(aStart) < new Date(bEnd) && new Date(bStart) < new Date(aEnd);
 }
 
-function startOfWeek(dateInput) {
+function localDateKey(dateInput) {
   const date = new Date(dateInput);
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
-  start.setHours(0, 0, 0, 0);
-  return start;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function weekKeyForDate(dateInput) {
-  return startOfWeek(dateInput).toISOString().slice(0, 10);
-}
-
-function weekKeysBetween(startDate, endDate) {
+function dateKeysBetween(startDate, endDate) {
   const keys = [];
-  const cursor = startOfWeek(startDate);
-  const endCursor = startOfWeek(new Date(new Date(endDate).getTime() - 1));
-  while (cursor <= endCursor) {
-    keys.push(cursor.toISOString().slice(0, 10));
-    cursor.setDate(cursor.getDate() + 7);
+  const cursor = new Date(startDate);
+  const endCursor = new Date(endDate);
+  if (!(cursor < endCursor)) return keys;
+  while (cursor < endCursor) {
+    keys.push(localDateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
   }
   return keys;
 }
@@ -68,17 +63,43 @@ function overlappingBookings(workspace, roomId, startDate, endDate) {
   });
 }
 
+function roomAvailabilityRow(workspace, roomId, dateKey) {
+  return workspace.camp?.availability?.[roomId]?.days?.[localDateKey(dateKey)] || null;
+}
+
+function roomOpenForCheckin(workspace, roomId, dateKey) {
+  const row = roomAvailabilityRow(workspace, roomId, dateKey);
+  if (!row) return false;
+  return row.openForCheckin !== false;
+}
+
+function roomMinimumStay(workspace, roomId, dateKey) {
+  return Math.max(1, Number(roomAvailabilityRow(workspace, roomId, dateKey)?.minStay ?? 1));
+}
+
+function bookedUnitsForDate(workspace, roomId, dateKey) {
+  return (workspace.bookings || []).reduce((sum, booking) => {
+    if (!bookingRoomAllocationCountForRoom(booking, roomId)) return sum;
+    if (!blocksInventory(booking)) return sum;
+    if (!rangesOverlap(dateKey, localDateKey(new Date(new Date(dateKey).getTime() + 24 * 60 * 60 * 1000)), booking.startDate, booking.endDate)) {
+      return sum;
+    }
+    return sum + bookingRoomAllocationCountForRoom(booking, roomId);
+  }, 0);
+}
+
 function availableUnits(workspace, roomId, startDate, endDate) {
   const room = (workspace.rooms || []).find((item) => item.id === roomId);
   if (!room) return 0;
-  const booked = overlappingBookings(workspace, roomId, startDate, new Date(new Date(startDate).getTime() + 24 * 60 * 60 * 1000)).reduce(
-    (sum, booking) => sum + bookingRoomAllocationCountForRoom(booking, roomId),
-    0,
+  const dateKeys = dateKeysBetween(startDate, endDate);
+  if (!dateKeys.length) return 0;
+  return Math.min(
+    ...dateKeys.map((dateKey) => {
+      const row = roomAvailabilityRow(workspace, roomId, dateKey);
+      if (!row) return 0;
+      return Math.max(0, Number(row.units ?? room.totalUnits ?? 0) - bookedUnitsForDate(workspace, roomId, dateKey));
+    }),
   );
-  const weekKey = weekKeyForDate(startDate);
-  const row = workspace.camp?.availability?.[roomId]?.weeks?.[weekKey];
-  const total = Number(row?.units ?? room.totalUnits ?? 0);
-  return Math.max(0, total - booked);
 }
 
 function packageSummary(workspace, booking) {
@@ -339,12 +360,23 @@ exports.handler = async (event) => {
       return response(400, { error: "Missing room allocation." });
     }
 
+    const stayNights = dateKeysBetween(booking.startDate, booking.endDate).length;
+    if (stayNights <= 0) {
+      return response(400, { error: "Check-out date must be after check-in date." });
+    }
+
     const roomAllocationTotal = roomAllocations.reduce((sum, [, guestCount]) => sum + guestCount, 0);
     if (roomAllocationTotal !== bookingGuestCount(booking)) {
       return response(400, { error: "Room allocations must match the guest count." });
     }
 
     for (const [roomId, guestCount] of roomAllocations) {
+      if (!roomOpenForCheckin(normalized, roomId, booking.startDate)) {
+        return response(409, { error: `Room type ${roomId} is closed for check-in on this date.` });
+      }
+      if (stayNights < roomMinimumStay(normalized, roomId, booking.startDate)) {
+        return response(409, { error: `Room type ${roomId} requires a longer minimum stay for this check-in date.` });
+      }
       if (availableUnits(normalized, roomId, booking.startDate, booking.endDate) < guestCount) {
         return response(409, { error: `Room type ${roomId} is no longer available for these dates.` });
       }
