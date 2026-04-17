@@ -1223,6 +1223,10 @@ function bookingGuestCount(booking = {}) {
   return Math.max(1, Number(booking.packagePeople || 1));
 }
 
+function bookingLengthOfStay(booking = {}) {
+  return Math.max(0, nightsBetween(booking.startDate, booking.endDate));
+}
+
 function bookingPackageSummary(booking = {}) {
   if (booking.packageQuantities && typeof booking.packageQuantities === "object") {
     const rows = Object.entries(booking.packageQuantities)
@@ -1485,6 +1489,7 @@ function bookingsToCsv(rows = []) {
     "Guest name",
     "Nr of guests",
     "Check-in date",
+    "Length of stay",
     "Gender",
     "Room",
     "Email",
@@ -1499,13 +1504,14 @@ function bookingsToCsv(rows = []) {
         bookingTime.label,
         booking.reservationCode || booking.reservationId || "",
         booking.status || "",
-          booking.guestName || "",
-          bookingGuestCount(booking),
-          formatDateShort(booking.startDate),
-          bookingGenderSummary(booking),
-          bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "",
-          booking.guestEmail || "",
-          booking.guestPhone || "",
+        booking.guestName || "",
+        bookingGuestCount(booking),
+        formatDateShort(booking.startDate),
+        bookingLengthOfStay(booking),
+        bookingGenderSummary(booking),
+        bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "",
+        booking.guestEmail || "",
+        booking.guestPhone || "",
         ]
           .map(csvEscape)
           .join(","),
@@ -3208,11 +3214,12 @@ function renderAdminPage() {
   const leadSort = adminUiState.leadSort || { key: "createdAt", direction: "desc" };
   const bookingsForTable = sortAdminRows(visibleBookingRows, bookingSort, {
     guest: (item) => item.guestName || "",
-      checkIn: (item) => item.startDate || "",
-      gender: (item) => bookingGenderSummary(item),
-      email: (item) => item.guestEmail || "",
-      phone: (item) => item.guestPhone || "",
-      room: (item) => getRoom(item.roomId)?.name || "",
+    checkIn: (item) => item.startDate || "",
+    lengthOfStay: (item) => bookingLengthOfStay(item),
+    gender: (item) => bookingGenderSummary(item),
+    email: (item) => item.guestEmail || "",
+    phone: (item) => item.guestPhone || "",
+    room: (item) => getRoom(item.roomId)?.name || "",
     guests: (item) => bookingGuestCount(item),
     status: (item) => item.status || "",
     bookedAt: (item) => item.createdAt || "",
@@ -3246,13 +3253,14 @@ function renderAdminPage() {
             </td>
             <td>${booking.reservationCode || booking.reservationId || "pending"}</td>
             <td><span class="status ${booking.status}">${booking.status}</span></td>
-              <td><strong>${booking.guestName || "Guest"}</strong></td>
-              <td>${bookingGuestCount(booking)}</td>
-              <td>${formatDateShort(booking.startDate)}</td>
-              <td>${escapeHtml(bookingGenderSummary(booking))}</td>
-              <td>${escapeHtml(bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "")}</td>
-              <td>${booking.guestEmail || "No email"}</td>
-              <td>${booking.guestPhone || "No phone"}</td>
+            <td><strong>${booking.guestName || "Guest"}</strong></td>
+            <td>${bookingGuestCount(booking)}</td>
+            <td>${formatDateShort(booking.startDate)}</td>
+            <td>${bookingLengthOfStay(booking)}</td>
+            <td>${escapeHtml(bookingGenderSummary(booking))}</td>
+            <td>${escapeHtml(bookingRoomAllocationSummary(booking) || getRoom(booking.roomId)?.name || booking.roomId || "")}</td>
+            <td>${booking.guestEmail || "No email"}</td>
+            <td>${booking.guestPhone || "No phone"}</td>
             </tr>
           `;
         })
