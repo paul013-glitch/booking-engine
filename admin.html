@@ -304,14 +304,18 @@
                 Available count
                 <input id="availabilityBulkUnits" type="number" min="0" step="1" placeholder="Leave blank to keep" />
               </label>
-              <label>
-                Open for check-in
-                <select id="availabilityBulkOpenForCheckin">
-                  <option value="keep">Keep current</option>
-                  <option value="open">Open</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </label>
+              <div class="availability-bulk-weekdays">
+                <span class="field-label">Open for check-in</span>
+                <div class="weekday-check-grid">
+                  <label><input type="checkbox" id="availabilityBulkMonday" value="Monday" /> Mon</label>
+                  <label><input type="checkbox" id="availabilityBulkTuesday" value="Tuesday" /> Tue</label>
+                  <label><input type="checkbox" id="availabilityBulkWednesday" value="Wednesday" /> Wed</label>
+                  <label><input type="checkbox" id="availabilityBulkThursday" value="Thursday" /> Thu</label>
+                  <label><input type="checkbox" id="availabilityBulkFriday" value="Friday" /> Fri</label>
+                  <label><input type="checkbox" id="availabilityBulkSaturday" value="Saturday" /> Sat</label>
+                  <label><input type="checkbox" id="availabilityBulkSunday" value="Sunday" /> Sun</label>
+                </div>
+              </div>
             </div>
             <div class="availability-bulk-actions">
               <button class="button button-secondary" type="button" id="applyAvailabilityBulkEdit">Apply bulk edit</button>

@@ -1117,6 +1117,30 @@ select {
   margin-top: 14px;
 }
 
+.availability-bulk-weekdays {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.weekday-check-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekday-check-grid label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fffefb;
+  font-size: 0.9rem;
+}
+
 .availability-window-nav {
   display: flex;
   align-items: center;
@@ -1973,6 +1997,7 @@ select {
   .addon-grid,
   .availability-toolbar,
   .availability-bulk-grid,
+  .weekday-check-grid,
   .availability-row-header,
   .availability-row,
   .day-grid {

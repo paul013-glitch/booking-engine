@@ -39,7 +39,7 @@ const adminUiState = {
   availabilityBulkPricePerNight: "",
   availabilityBulkMinStay: "",
   availabilityBulkUnits: "",
-  availabilityBulkOpenForCheckin: "keep",
+  availabilityBulkOpenWeekdays: [],
   activeTab: "bookings",
   configTab: "packages",
   bookingSort: { key: "bookedAt", direction: "desc" },
@@ -2964,7 +2964,10 @@ function renderAdminPage() {
   const availabilityBulkPricePerNight = document.getElementById("availabilityBulkPricePerNight");
   const availabilityBulkMinStay = document.getElementById("availabilityBulkMinStay");
   const availabilityBulkUnits = document.getElementById("availabilityBulkUnits");
-  const availabilityBulkOpenForCheckin = document.getElementById("availabilityBulkOpenForCheckin");
+  const availabilityBulkWeekdayInputs = availabilityWeekdayOptions().map((day) => ({
+    day,
+    input: document.getElementById(`availabilityBulk${day}`),
+  }));
   const saveAvailabilityButton = document.getElementById("saveAvailability");
   const availabilityMatrix = document.getElementById("availabilityMatrix");
   const panes = document.querySelectorAll("[data-admin-pane]");
@@ -3096,7 +3099,9 @@ function renderAdminPage() {
   if (availabilityBulkPricePerNight) availabilityBulkPricePerNight.value = adminUiState.availabilityBulkPricePerNight;
   if (availabilityBulkMinStay) availabilityBulkMinStay.value = adminUiState.availabilityBulkMinStay;
   if (availabilityBulkUnits) availabilityBulkUnits.value = adminUiState.availabilityBulkUnits;
-  if (availabilityBulkOpenForCheckin) availabilityBulkOpenForCheckin.value = adminUiState.availabilityBulkOpenForCheckin;
+  availabilityBulkWeekdayInputs.forEach(({ day, input }) => {
+    if (input) input.checked = (adminUiState.availabilityBulkOpenWeekdays || []).includes(day);
+  });
   if (saveAvailabilityButton) {
     saveAvailabilityButton.disabled = adminUiState.availabilitySaving;
     saveAvailabilityButton.textContent = adminUiState.availabilitySaving ? "Saving..." : "Save availability";
@@ -3597,6 +3602,10 @@ function availabilityDaySummary(roomId, dateKey) {
   };
 }
 
+function availabilityWeekdayOptions() {
+  return ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+}
+
 function ensureAvailabilityDayEntry(roomId, dateKey, targetState = state) {
   const room = (targetState.rooms || []).find((item) => item.id === roomId);
   if (!room || !dateKey) return null;
@@ -3660,8 +3669,8 @@ function applyAvailabilityBulkEdit(roomId, bulkEdit = {}) {
   const applyPrice = bulkEdit.pricePerNight !== "" && bulkEdit.pricePerNight !== null && bulkEdit.pricePerNight !== undefined;
   const applyMinStay = bulkEdit.minStay !== "" && bulkEdit.minStay !== null && bulkEdit.minStay !== undefined;
   const applyUnits = bulkEdit.units !== "" && bulkEdit.units !== null && bulkEdit.units !== undefined;
-  const openMode = bulkEdit.openForCheckin ?? "keep";
-  const applyOpen = openMode === "open" || openMode === "closed";
+  const openWeekdays = Array.isArray(bulkEdit.openWeekdays) ? bulkEdit.openWeekdays : [];
+  const applyOpen = openWeekdays.length > 0;
 
   if (!applyPrice && !applyMinStay && !applyUnits && !applyOpen) {
     adminUiState.availabilityNotice = "Choose at least one field to update in the bulk editor.";
@@ -3677,7 +3686,7 @@ function applyAvailabilityBulkEdit(roomId, bulkEdit = {}) {
       if (applyPrice) row.pricePerNight = Math.max(0, Number(bulkEdit.pricePerNight));
       if (applyMinStay) row.minStay = Math.max(1, Number(bulkEdit.minStay));
       if (applyUnits) row.units = Math.max(0, Number(bulkEdit.units));
-      if (applyOpen) row.openForCheckin = openMode === "open";
+      if (applyOpen) row.openForCheckin = openWeekdays.includes(weekdayName(dateKey));
     }
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -5121,7 +5130,10 @@ function initAdminInteractions() {
   const availabilityBulkPricePerNight = document.getElementById("availabilityBulkPricePerNight");
   const availabilityBulkMinStay = document.getElementById("availabilityBulkMinStay");
   const availabilityBulkUnits = document.getElementById("availabilityBulkUnits");
-  const availabilityBulkOpenForCheckin = document.getElementById("availabilityBulkOpenForCheckin");
+  const availabilityBulkWeekdayInputs = availabilityWeekdayOptions().map((day) => ({
+    day,
+    input: document.getElementById(`availabilityBulk${day}`),
+  }));
   const applyAvailabilityBulkEditButton = document.getElementById("applyAvailabilityBulkEdit");
   const saveAvailabilityButton = document.getElementById("saveAvailability");
   const bookingDateFilter = document.getElementById("bookingDateFilter");
@@ -5231,8 +5243,16 @@ function initAdminInteractions() {
     adminUiState.availabilityBulkUnits = event.target.value;
   });
 
-  availabilityBulkOpenForCheckin?.addEventListener("change", (event) => {
-    adminUiState.availabilityBulkOpenForCheckin = event.target.value || "keep";
+  availabilityBulkWeekdayInputs.forEach(({ day, input }) => {
+    input?.addEventListener("change", () => {
+      const selected = new Set(adminUiState.availabilityBulkOpenWeekdays || []);
+      if (input.checked) {
+        selected.add(day);
+      } else {
+        selected.delete(day);
+      }
+      adminUiState.availabilityBulkOpenWeekdays = Array.from(selected);
+    });
   });
 
   applyAvailabilityBulkEditButton?.addEventListener("click", () => {
@@ -5242,7 +5262,7 @@ function initAdminInteractions() {
       pricePerNight: adminUiState.availabilityBulkPricePerNight,
       minStay: adminUiState.availabilityBulkMinStay,
       units: adminUiState.availabilityBulkUnits,
-      openForCheckin: adminUiState.availabilityBulkOpenForCheckin,
+      openWeekdays: adminUiState.availabilityBulkOpenWeekdays,
     });
     if (applied) {
       renderAdminPage();
