@@ -1123,6 +1123,10 @@ select {
   gap: 10px;
 }
 
+.availability-bulk-edit-toggle {
+  margin-top: 8px;
+}
+
 .weekday-check-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
