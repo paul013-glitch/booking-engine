@@ -143,6 +143,10 @@ const adminUiState = {
   availabilitySaving: false,
   availabilityNotice: "",
   availabilityNoticeType: "info",
+  packageFormDirty: false,
+  packageSaving: false,
+  packageNotice: "",
+  packageNoticeType: "info",
   loadingVisible: true,
   loadingTitle: "Loading admin panel",
   loadingDetail: "Checking access and preparing the workspace.",
@@ -3664,10 +3668,14 @@ function renderAdminPage() {
       .map(
         (item) => `
           <div class="stack-item">
+            <div class="stack-item-media">
+              ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${escapeHtml(item.name)}" />` : ""}
+            </div>
             <div class="stack-item-top">
               <strong>${item.name}</strong>
               <span class="pill">${item.nights} nights</span>
             </div>
+            <div class="tiny">${escapeHtml(item.description || "No description set.")}</div>
             <div class="tiny">${money(item.basePrice)}</div>
             <div class="stack-item-actions">
               <button type="button" class="button button-secondary" data-move-package="${item.id}" data-move-direction="-1">Up</button>
@@ -3773,7 +3781,7 @@ function renderAdminPage() {
   if (packageForm) {
     const editId = packageForm.elements.id.value;
     const editing = state.packages.find((item) => item.id === editId);
-    if (editing) {
+    if (editing && !adminUiState.packageFormDirty) {
       packageForm.elements.name.value = editing.name || "";
       packageForm.elements.description.value = editing.description || "";
       packageForm.elements.nights.value = editing.nights || 7;
@@ -3782,6 +3790,11 @@ function renderAdminPage() {
         packageForm.elements.imageUrl.value = editing.imageUrl?.startsWith("data:") ? "" : editing.imageUrl || "";
       }
     }
+    const packageNotice = document.getElementById("packageNotice");
+    if (packageNotice) {
+      packageNotice.innerHTML = packageNoticeMarkup();
+    }
+    setPackageSaveLoading(adminUiState.packageSaving);
   }
 
   if (roomForm) {
@@ -4951,6 +4964,22 @@ function setBookingDetailSaveLoading(isLoading) {
     : "Save status";
 }
 
+function setPackageSaveLoading(isLoading) {
+  const button = document.getElementById("packageSaveButton");
+  if (!button) return;
+  button.disabled = isLoading;
+  button.classList.toggle("is-loading", isLoading);
+  button.innerHTML = isLoading
+    ? `<span class="button-spinner" aria-hidden="true"></span><span>Saving...</span>`
+    : "Save package";
+}
+
+function packageNoticeMarkup() {
+  if (!adminUiState.packageNotice) return "";
+  const tone = adminUiState.packageNoticeType === "success" ? "success" : adminUiState.packageNoticeType === "error" ? "error" : "warning";
+  return `<div class="notice ${tone}">${escapeHtml(adminUiState.packageNotice)}</div>`;
+}
+
 async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", currentStatus = "") {
   if (!bookingId || !targetStatus) return;
   const normalizedStatus = ["confirmed", "held", "cancelled"].includes(targetStatus) ? targetStatus : "confirmed";
@@ -5867,31 +5896,53 @@ function initAdminInteractions() {
 
   packageForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const id = packageForm.elements.id.value || `package-${Date.now()}`;
-    const existing = state.packages.find((item) => item.id === id);
-    const imageFile = packageForm.elements.imageFile?.files?.[0];
-    let imageUrl = packageForm.elements.imageUrl?.value.trim() || "";
-    if (imageFile) {
-      imageUrl = await readFileAsDataUrl(imageFile);
-    }
-    if (!imageUrl) {
-      imageUrl = existing?.imageUrl || logoSvg;
-    }
-    const payload = {
-      id,
-      name: packageForm.elements.name.value.trim(),
-      description: packageForm.elements.description.value.trim(),
-      nights: Number(packageForm.elements.nights.value),
-      basePrice: Number(packageForm.elements.basePrice.value),
-      imageUrl,
-      order: existing?.order ?? nextOrderValue(state.packages),
-    };
-    state.packages = orderedItems([...state.packages.filter((item) => item.id !== id), payload]);
-    packageForm.reset();
-    packageForm.elements.id.value = "";
-    if (packageForm.elements.imageUrl) packageForm.elements.imageUrl.value = "";
-    saveState();
+    adminUiState.packageSaving = true;
+    adminUiState.packageNotice = "Saving package...";
+    adminUiState.packageNoticeType = "info";
     renderAdminPage();
+    try {
+      const id = packageForm.elements.id.value || `package-${Date.now()}`;
+      const existing = state.packages.find((item) => item.id === id);
+      const imageFile = packageForm.elements.imageFile?.files?.[0];
+      let imageUrl = packageForm.elements.imageUrl?.value.trim() || "";
+      if (imageFile) {
+        imageUrl = await readFileAsDataUrl(imageFile);
+      }
+      if (!imageUrl) {
+        imageUrl = existing?.imageUrl || logoSvg;
+      }
+      const payload = {
+        id,
+        name: packageForm.elements.name.value.trim(),
+        description: packageForm.elements.description.value.trim(),
+        nights: Number(packageForm.elements.nights.value),
+        basePrice: Number(packageForm.elements.basePrice.value),
+        imageUrl,
+        order: existing?.order ?? nextOrderValue(state.packages),
+      };
+      state.packages = orderedItems([...state.packages.filter((item) => item.id !== id), payload]);
+      packageForm.reset();
+      packageForm.elements.id.value = "";
+      if (packageForm.elements.imageUrl) packageForm.elements.imageUrl.value = "";
+      adminUiState.packageFormDirty = false;
+      saveState();
+      adminUiState.packageNotice = "Package saved.";
+      adminUiState.packageNoticeType = "success";
+    } catch (error) {
+      adminUiState.packageNotice = error instanceof Error ? error.message : "Could not save package.";
+      adminUiState.packageNoticeType = "error";
+    } finally {
+      adminUiState.packageSaving = false;
+      renderAdminPage();
+    }
+  });
+
+  packageForm?.addEventListener("input", () => {
+    adminUiState.packageFormDirty = true;
+  });
+
+  packageForm?.addEventListener("change", () => {
+    adminUiState.packageFormDirty = true;
   });
 
   roomForm?.addEventListener("submit", async (event) => {
@@ -6145,6 +6196,7 @@ function initAdminInteractions() {
       if (!item) return;
       adminUiState.activeTab = "configure";
       adminUiState.configTab = "packages";
+      adminUiState.packageFormDirty = false;
       packageForm.elements.id.value = item.id;
       packageForm.elements.name.value = item.name || "";
       packageForm.elements.description.value = item.description || "";
