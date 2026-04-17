@@ -8,6 +8,47 @@ const authState = {
   syncTimer: null,
 };
 
+let bookInteractionsInitialized = false;
+
+function bookingEmbedRuntime() {
+  return typeof window !== "undefined" ? window.__SURFCAMP_BOOKING_EMBED__ || null : null;
+}
+
+function isEmbeddedBooking() {
+  return !!bookingEmbedRuntime();
+}
+
+function bookingThemeTarget() {
+  return bookingEmbedRuntime()?.themeTarget || document.documentElement;
+}
+
+function bookingRootNode() {
+  return bookingEmbedRuntime()?.root || document;
+}
+
+function bookingHostElement() {
+  return bookingEmbedRuntime()?.hostElement || null;
+}
+
+function getBookElement(id) {
+  const root = bookingRootNode();
+  if (root === document) return document.getElementById(id);
+  return root.querySelector(`#${id}`);
+}
+
+function hasBookSurface() {
+  return Boolean(getBookElement("stepper"));
+}
+
+function bookEventTarget() {
+  return bookingEmbedRuntime()?.root || document;
+}
+
+function currentStorageKey() {
+  const slug = requestedCampSlug();
+  return slug ? `${STORAGE_KEY}:${slug}` : STORAGE_KEY;
+}
+
 const bookingUiState = {
   submitting: false,
 };
@@ -652,7 +693,7 @@ function applyPromoCodesFromInput(rawValue) {
 }
 
 function applyTheme(theme = {}) {
-  const root = document.documentElement;
+  const root = bookingThemeTarget();
   const tokens = {
     bg: theme.bg,
     panel: theme.panel,
@@ -675,7 +716,7 @@ function applyTheme(theme = {}) {
 }
 
 function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(currentStorageKey());
   if (!raw) {
     return normalizeWorkspaceData();
   }
@@ -689,7 +730,7 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(currentStorageKey(), JSON.stringify(state));
   queueWorkspaceSync();
 }
 
@@ -811,6 +852,22 @@ function bookingUrl() {
   }
 }
 
+function embedScriptUrl() {
+  if (window.location.protocol === "file:") {
+    return `./embed.js?slug=${bookingSlug()}`;
+  }
+
+  try {
+    return new URL("/embed.js", window.location.origin).toString();
+  } catch {
+    return "/embed.js";
+  }
+}
+
+function embedScriptSnippet() {
+  return `<script src="${embedScriptUrl()}" data-slug="${bookingSlug()}"></script>`;
+}
+
 function confirmationUrl(reservationCode = "", guestEmail = "") {
   const params = new URLSearchParams();
   if (reservationCode) params.set("reservation", reservationCode);
@@ -829,6 +886,13 @@ function confirmationUrl(reservationCode = "", guestEmail = "") {
 }
 
 function requestedCampSlug() {
+  const embedSlug = String(
+    bookingEmbedRuntime()?.slug || bookingEmbedRuntime()?.camp || bookingEmbedRuntime()?.workspaceSlug || "",
+  ).trim();
+  if (isEmbeddedBooking()) {
+    return embedSlug;
+  }
+
   const params = new URLSearchParams(window.location.search);
   const querySlug = params.get("camp");
   if (querySlug) return querySlug;
@@ -840,15 +904,20 @@ function requestedCampSlug() {
 }
 
 function apiUrl(path) {
-  return `/.netlify/functions/${path}`;
+  const siteUrl = String(bookingEmbedRuntime()?.siteUrl || "").replace(/\/$/, "");
+  return `${siteUrl}/.netlify/functions/${path}`;
 }
 
 async function apiJson(path, options = {}) {
+  const headers = {
+    Accept: "application/json",
+    ...(options.headers || {}),
+  };
+  if (options.body && !("Content-Type" in headers) && !("content-type" in headers)) {
+    headers["Content-Type"] = "application/json";
+  }
   const response = await fetch(apiUrl(path), {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
+    headers,
     ...options,
   });
 
@@ -2388,13 +2457,49 @@ function renderGuestGenderControls() {
   `;
 }
 
+function bookShellMarkup() {
+  return `
+    <header class="book-header">
+      <img id="campLogo" class="camp-logo" alt="Camp logo" />
+      <div>
+        <h1 id="campName">Surf Camp Booking</h1>
+      </div>
+    </header>
+    <main class="booking-shell">
+      <section class="panel wizard-panel">
+        <nav class="stepper" id="stepper" aria-label="Booking steps"></nav>
+        <div id="wizardContent"></div>
+      </section>
+      <aside class="panel summary-panel" id="summaryPanel" aria-live="polite"></aside>
+      <div id="summaryActionsShell"></div>
+    </main>
+  `;
+}
+
+function renderEmbeddedBookError(message) {
+  const host = bookingHostElement();
+  if (!host) return;
+  host.innerHTML = `
+    <section class="panel wizard-panel">
+      <div class="notice">${escapeHtml(message)}</div>
+    </section>
+  `;
+}
+
+function ensureEmbeddedBookShell() {
+  if (!isEmbeddedBooking()) return;
+  const host = bookingHostElement();
+  if (!host || host.querySelector("#stepper")) return;
+  host.innerHTML = bookShellMarkup();
+}
+
 function renderBookPage() {
-  const logo = document.getElementById("campLogo");
-  const name = document.getElementById("campName");
-  const stepper = document.getElementById("stepper");
-  const wizard = document.getElementById("wizardContent");
-  const summary = document.getElementById("summaryPanel");
-  const summaryActionsShell = document.getElementById("summaryActionsShell");
+  const logo = getBookElement("campLogo");
+  const name = getBookElement("campName");
+  const stepper = getBookElement("stepper");
+  const wizard = getBookElement("wizardContent");
+  const summary = getBookElement("summaryPanel");
+  const summaryActionsShell = getBookElement("summaryActionsShell");
 
   if (!stepper || !wizard || !summary || !summaryActionsShell) return;
 
@@ -2977,6 +3082,8 @@ function renderAdminPage() {
   const addonForm = document.getElementById("addonForm");
   const promoForm = document.getElementById("promoForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
+  const embedUrlInput = document.getElementById("embedUrl");
+  const embedCodeInput = document.getElementById("embedCode");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
   const availabilityBulkStart = document.getElementById("availabilityBulkStart");
   const availabilityBulkEnd = document.getElementById("availabilityBulkEnd");
@@ -3030,6 +3137,12 @@ function renderAdminPage() {
 
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
+  }
+  if (embedUrlInput) {
+    embedUrlInput.value = embedScriptUrl();
+  }
+  if (embedCodeInput) {
+    embedCodeInput.value = embedScriptSnippet();
   }
   if (topbarBookingUrl) {
     topbarBookingUrl.setAttribute("href", bookingUrl());
@@ -3976,12 +4089,28 @@ async function loadPublicWorkspace() {
 
   try {
     const slug = requestedCampSlug();
+    if (!slug) {
+      if (isEmbeddedBooking()) {
+        renderEmbeddedBookError("Missing camp slug for the embedded booking engine. Add data-slug to the script tag.");
+      }
+      return;
+    }
     const workspace = await apiJson(`public-workspace?slug=${encodeURIComponent(slug)}`);
     if (workspace) {
+      if (isEmbeddedBooking()) {
+        ensureEmbeddedBookShell();
+        initBookInteractions();
+      }
       hydrateStateFromWorkspace(workspace);
       renderBookPage();
     }
-  } catch {
+  } catch (error) {
+    if (isEmbeddedBooking()) {
+      renderEmbeddedBookError(
+        error instanceof Error ? error.message : "Could not load this booking engine right now.",
+      );
+      return;
+    }
     // Fall back to local demo state when the public API is unavailable.
   }
 }
@@ -4695,6 +4824,10 @@ function updateBookPage() {
 
 function scrollBookPageToTop() {
   if (typeof window === "undefined") return;
+  if (isEmbeddedBooking()) {
+    bookingHostElement()?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    return;
+  }
   const isMobile = window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
   if (!isMobile) return;
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -4715,7 +4848,7 @@ function setBookingFieldErrors(fieldIds = []) {
     ...Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) => `fieldGuestGender${index}`),
   ];
   for (const id of allFieldIds) {
-    document.getElementById(id)?.classList.toggle("is-invalid", fieldIds.includes(id));
+    getBookElement(id)?.classList.toggle("is-invalid", fieldIds.includes(id));
   }
 }
 
@@ -4773,17 +4906,17 @@ async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", 
 async function confirmBookingReservation() {
   if (bookingUiState.submitting) return;
 
-  const guestName = document.getElementById("guestName")?.value.trim();
-  const guestPhone = document.getElementById("guestPhone")?.value.trim();
-  const guestEmail = document.getElementById("guestEmail")?.value.trim();
-  const guestCountry = document.getElementById("guestCountry")?.value.trim();
-  const guestBirthDay = document.getElementById("guestBirthDay")?.value.trim();
-  const guestBirthMonth = document.getElementById("guestBirthMonth")?.value.trim();
-  const guestBirthYear = document.getElementById("guestBirthYear")?.value.trim();
-  const notes = document.getElementById("guestNotes")?.value.trim();
+  const guestName = getBookElement("guestName")?.value.trim();
+  const guestPhone = getBookElement("guestPhone")?.value.trim();
+  const guestEmail = getBookElement("guestEmail")?.value.trim();
+  const guestCountry = getBookElement("guestCountry")?.value.trim();
+  const guestBirthDay = getBookElement("guestBirthDay")?.value.trim();
+  const guestBirthMonth = getBookElement("guestBirthMonth")?.value.trim();
+  const guestBirthYear = getBookElement("guestBirthYear")?.value.trim();
+  const notes = getBookElement("guestNotes")?.value.trim();
   const guestGenders = normalizedGuestGenders(
     Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) =>
-      document.querySelector(`[data-guest-gender-index="${index}"]`)?.value.trim() || "",
+      bookingRootNode().querySelector(`[data-guest-gender-index="${index}"]`)?.value.trim() || "",
     ),
   );
 
@@ -4923,7 +5056,13 @@ async function confirmBookingReservation() {
         ? "Booking confirmed and confirmation email sent."
         : "Booking confirmed. Confirmation email will be sent when email delivery is configured.",
     );
-    window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
+    if (isEmbeddedBooking()) {
+      draft.currentStep = 4;
+      renderBookPage();
+      scrollBookPageToTop();
+    } else {
+      window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
+    }
   } catch (error) {
     setBookingDetailNotice?.("", "info");
     alert(
@@ -4935,9 +5074,12 @@ async function confirmBookingReservation() {
 }
 
 function initBookInteractions() {
+  if (bookInteractionsInitialized) return;
+  bookInteractionsInitialized = true;
   let lastHoverCheckoutDate = "";
+  const eventRoot = bookEventTarget();
 
-  document.addEventListener("pointermove", (event) => {
+  eventRoot.addEventListener("pointermove", (event) => {
     if (draft.dateSelectionMode !== "end" || !draft.startDate) {
       if (lastHoverCheckoutDate && draft.hoverEndDate) {
         lastHoverCheckoutDate = "";
@@ -4955,7 +5097,7 @@ function initBookInteractions() {
     renderBookPage();
   });
 
-  document.addEventListener("click", (event) => {
+  eventRoot.addEventListener("click", (event) => {
       const target = event.target.closest(
         "[data-step], [data-select-package], [data-select-room], [data-room-row-change], [data-addon-row-change], [data-month-nav], [data-select-date], [data-package-row-change], [data-package-row-input], [data-go-step], [data-apply-promo], #nextFromPackage, #nextFromDate, #nextFromRoom, #continueToBook",
         );
@@ -5099,7 +5241,7 @@ function initBookInteractions() {
     }
 
     if (target.dataset.applyPromo !== undefined) {
-      const promoInput = document.getElementById(
+      const promoInput = getBookElement(
         target.dataset.applyPromo === "mobile" ? "promoCodeInputMobile" : "promoCodeInputDesktop",
       );
       applyPromoCodesFromInput(promoInput?.value || "");
@@ -5107,7 +5249,7 @@ function initBookInteractions() {
     }
   });
 
-  document.addEventListener("input", (event) => {
+  eventRoot.addEventListener("input", (event) => {
     const target = event.target;
     if (!target) return;
 
@@ -5192,7 +5334,7 @@ function initBookInteractions() {
     saveState();
   });
 
-  document.addEventListener("click", (event) => {
+  eventRoot.addEventListener("click", (event) => {
     if (event.target?.id === "bookButton") {
       void confirmBookingReservation();
     }
@@ -5226,6 +5368,10 @@ function initAdminInteractions() {
   const addonForm = document.getElementById("addonForm");
   const bookingUrlInput = document.getElementById("bookingUrl");
   const copyBookingUrlButton = document.getElementById("copyBookingUrl");
+  const embedUrlInput = document.getElementById("embedUrl");
+  const copyEmbedUrlButton = document.getElementById("copyEmbedUrl");
+  const embedCodeInput = document.getElementById("embedCode");
+  const copyEmbedCodeButton = document.getElementById("copyEmbedCode");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
   const availabilityBulkStart = document.getElementById("availabilityBulkStart");
   const availabilityBulkEnd = document.getElementById("availabilityBulkEnd");
@@ -5246,6 +5392,12 @@ function initAdminInteractions() {
 
   if (bookingUrlInput) {
     bookingUrlInput.value = bookingUrl();
+  }
+  if (embedUrlInput) {
+    embedUrlInput.value = embedScriptUrl();
+  }
+  if (embedCodeInput) {
+    embedCodeInput.value = embedScriptSnippet();
   }
 
   document.addEventListener("click", (event) => {
@@ -5469,17 +5621,28 @@ function initAdminInteractions() {
     window.netlifyIdentity?.logout?.();
   });
 
-  copyBookingUrlButton?.addEventListener("click", async () => {
-    const url = bookingUrl();
+  const copyValue = async (value, button, idleLabel, fallbackLabel) => {
     try {
-      await navigator.clipboard.writeText(url);
-      copyBookingUrlButton.textContent = "Copied";
+      await navigator.clipboard.writeText(value);
+      if (button) button.textContent = "Copied";
       setTimeout(() => {
-        copyBookingUrlButton.textContent = "Copy link";
+        if (button) button.textContent = idleLabel;
       }, 1800);
     } catch {
-      alert(`Copy this link: ${url}`);
+      alert(`${fallbackLabel}: ${value}`);
     }
+  };
+
+  copyBookingUrlButton?.addEventListener("click", async () => {
+    await copyValue(bookingUrl(), copyBookingUrlButton, "Copy link", "Copy this link");
+  });
+
+  copyEmbedUrlButton?.addEventListener("click", async () => {
+    await copyValue(embedScriptUrl(), copyEmbedUrlButton, "Copy URL", "Copy this URL");
+  });
+
+  copyEmbedCodeButton?.addEventListener("click", async () => {
+    await copyValue(embedScriptSnippet(), copyEmbedCodeButton, "Copy code", "Copy this embed code");
   });
 
   const liveBrandingFields = new Set([
@@ -5523,6 +5686,12 @@ function initAdminInteractions() {
     saveState();
     if (bookingUrlInput) {
       bookingUrlInput.value = bookingUrl();
+    }
+    if (embedUrlInput) {
+      embedUrlInput.value = embedScriptUrl();
+    }
+    if (embedCodeInput) {
+      embedCodeInput.value = embedScriptSnippet();
     }
   };
 
@@ -5587,6 +5756,12 @@ function initAdminInteractions() {
     renderAdminPage();
     if (bookingUrlInput) {
       bookingUrlInput.value = bookingUrl();
+    }
+    if (embedUrlInput) {
+      embedUrlInput.value = embedScriptUrl();
+    }
+    if (embedCodeInput) {
+      embedCodeInput.value = embedScriptSnippet();
     }
   });
 
@@ -6042,23 +6217,40 @@ function initMasterInteractions() {
   });
 }
 
+function initBookSurface() {
+  if (isEmbeddedBooking()) {
+    if (!requestedCampSlug()) {
+      renderEmbeddedBookError("Missing camp slug for the embedded booking engine. Add data-slug to the script tag.");
+      return;
+    }
+    void loadPublicWorkspace();
+    return;
+  }
+
+  if (!hasBookSurface()) return;
+  initBookInteractions();
+  ensureAvailabilityCoverage(state);
+  saveState();
+  draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+  renderBookPage();
+  void loadPublicWorkspace();
+}
+
 function init() {
   cleanExpiredHolds();
   applyTheme(state.camp.theme);
-  renderLandingPage();
-  initLandingAuth();
+  if (!isEmbeddedBooking()) {
+    renderLandingPage();
+    initLandingAuth();
+  }
   if (typeof window !== "undefined") {
     window.bookRoomAllocationDebug = debugRoomAllocationChange;
+    window.SurfCampBookingEmbed = {
+      boot: initBookSurface,
+    };
   }
 
-  if (document.getElementById("stepper")) {
-      initBookInteractions();
-      ensureAvailabilityCoverage(state);
-      saveState();
-      draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
-      renderBookPage();
-      void loadPublicWorkspace();
-    }
+  initBookSurface();
 
   if (document.getElementById("adminWorkspace")) {
     initNetlifyIdentityAuth();
@@ -6078,7 +6270,7 @@ function init() {
 init();
 setInterval(() => {
   cleanExpiredHolds();
-  if (document.getElementById("stepper")) renderBookPage();
+  if (hasBookSurface()) renderBookPage();
   if (document.getElementById("adminWorkspace")) {
     renderAdminPage();
     void refreshAdminWorkspace({ silent: true });

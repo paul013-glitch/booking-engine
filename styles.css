@@ -1061,6 +1061,16 @@ select {
   flex: 1;
 }
 
+.copy-row-stack {
+  align-items: flex-start;
+}
+
+.copy-row-stack textarea {
+  flex: 1;
+  min-height: 84px;
+  resize: vertical;
+}
+
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

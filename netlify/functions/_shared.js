@@ -403,8 +403,17 @@ function stores() {
 function response(statusCode, body) {
   return {
     statusCode,
-    headers: { "Content-Type": "application/json" },
+    headers: corsHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
+  };
+}
+
+function corsHeaders(extra = {}) {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    ...extra,
   };
 }
 
@@ -611,6 +620,7 @@ module.exports = {
   listWorkspaces,
   normalizeWorkspace,
   deleteWorkspaceById,
+  corsHeaders,
   response,
   saveWorkspace,
   slugify,

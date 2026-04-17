@@ -1,4 +1,5 @@
 const {
+  corsHeaders,
   getWorkspaceBySlug,
   normalizeWorkspace,
   response,
@@ -314,6 +315,14 @@ async function sendConfirmationEmail({ workspace, booking }) {
 
 exports.handler = async (event) => {
   try {
+    if (event.httpMethod === "OPTIONS") {
+      return {
+        statusCode: 204,
+        headers: corsHeaders(),
+        body: "",
+      };
+    }
+
     if (event.httpMethod !== "POST") {
       return response(405, { error: "Method not allowed" });
     }
