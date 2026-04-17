@@ -49,6 +49,52 @@ function currentStorageKey() {
   return slug ? `${STORAGE_KEY}:${slug}` : STORAGE_KEY;
 }
 
+function buildPersistedStateSnapshot(source = state) {
+  const snapshot = normalizeWorkspaceData({
+    __persistedSnapshot: true,
+    camp: {
+      ...(source?.camp || {}),
+      availability: {},
+    },
+    currentStep: source?.currentStep ?? 0,
+    selectedPackageId: source?.selectedPackageId || "",
+    packageQuantities: { ...(source?.packageQuantities || {}) },
+    selectedRoomId: source?.selectedRoomId || "",
+    roomAllocations: { ...(source?.roomAllocations || {}) },
+    selectedAddonIds: Array.isArray(source?.selectedAddonIds) ? [...source.selectedAddonIds] : [],
+    customerFieldValues:
+      source?.customerFieldValues && typeof source.customerFieldValues === "object"
+        ? { ...source.customerFieldValues }
+        : {},
+    startDate: source?.startDate || "",
+    endDate: source?.endDate || "",
+    guestName: source?.guestName || "",
+    guestPhone: source?.guestPhone || "",
+    guestEmail: source?.guestEmail || "",
+    guestCountry: source?.guestCountry || "",
+    guestBirthDay: source?.guestBirthDay || "",
+    guestBirthMonth: source?.guestBirthMonth || "",
+    guestBirthYear: source?.guestBirthYear || "",
+    guestGender: source?.guestGender || "",
+    guestGenders: Array.isArray(source?.guestGenders) ? [...source.guestGenders] : [],
+    notes: source?.notes || "",
+    bookingConfirmation: source?.bookingConfirmation || null,
+    promoCodeInput: source?.promoCodeInput || "",
+    promoCodes: Array.isArray(source?.promoCodes) ? [...source.promoCodes] : [],
+    promoError: source?.promoError || "",
+    bookingIntentId: source?.bookingIntentId || "",
+    packages: Array.isArray(source?.packages) ? structuredClone(source.packages) : [],
+    rooms: Array.isArray(source?.rooms) ? structuredClone(source.rooms) : [],
+    addons: Array.isArray(source?.addons) ? structuredClone(source.addons) : [],
+    promos: Array.isArray(source?.promos) ? structuredClone(source.promos) : [],
+    bookings: [],
+    leads: [],
+    bookingIntents: [],
+  });
+
+  return snapshot;
+}
+
 const bookingUiState = {
   submitting: false,
 };
@@ -464,9 +510,10 @@ function normalizeWorkspaceData(data = {}) {
         ? null
         : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
   };
+  const isPersistedSnapshot = data?.__persistedSnapshot === true;
   const normalizedAvailability = migrateAvailabilityDays(
     {
-      ...(seedState.camp.availability || {}),
+      ...(!isPersistedSnapshot ? seedState.camp.availability || {} : {}),
       ...((data.camp && data.camp.availability) || {}),
     },
     normalizedRooms,
@@ -730,7 +777,27 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem(currentStorageKey(), JSON.stringify(state));
+  const storageKey = currentStorageKey();
+  const snapshot = JSON.stringify(buildPersistedStateSnapshot(state));
+
+  try {
+    localStorage.setItem(storageKey, snapshot);
+  } catch (error) {
+    console.warn("[storage] failed to persist workspace snapshot", {
+      key: storageKey,
+      message: error?.message || String(error),
+    });
+    try {
+      localStorage.removeItem(storageKey);
+      localStorage.setItem(storageKey, snapshot);
+    } catch (retryError) {
+      console.warn("[storage] failed to persist workspace snapshot after clearing key", {
+        key: storageKey,
+        message: retryError?.message || String(retryError),
+      });
+    }
+  }
+
   queueWorkspaceSync();
 }
 
