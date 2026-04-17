@@ -4896,11 +4896,12 @@ function updateBookPage() {
 
 function scrollBookPageToTop() {
   if (typeof window === "undefined") return;
+  const isMobile = window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
   if (isEmbeddedBooking()) {
+    if (!isMobile) return;
     bookingHostElement()?.scrollIntoView?.({ block: "start", behavior: "smooth" });
     return;
   }
-  const isMobile = window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
   if (!isMobile) return;
   window.scrollTo({ top: 0, behavior: "auto" });
 }
