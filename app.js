@@ -2355,11 +2355,15 @@ function roomUpgradePrice() {
 }
 
 function roomDisplayedPrice(roomTotalPrice) {
-  return additionalPriceDisplayMode() === "rooms" ? roomTotalPrice : Math.max(0, roomTotalPrice - stayBasePrice());
+  return Math.max(0, roomTotalPrice - stayBasePrice());
 }
 
 function selectedRoomDisplayedPrice() {
-  return additionalPriceDisplayMode() === "rooms" ? roomPrice() : roomUpgradePrice();
+  return roomUpgradePrice();
+}
+
+function calendarOffsetForDate(dateInput) {
+  return monthOffsetBetween(firstBookableMonth(), dateInput);
 }
 
 function packagePrice() {
@@ -2395,11 +2399,6 @@ function isSoldOutStartDate(dateInput) {
 
 function refreshCalendarPreview(roomFilter = draft.calendarRoomFilter) {
   draft.calendarRoomFilter = roomFilter || "all";
-  if (!draft.startDate) {
-    draft.calendarMonthOffset = 0;
-  } else {
-    draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
-  }
   syncDraftToState();
   saveState();
   bookingUiState.calendarReloading = true;
@@ -2534,7 +2533,7 @@ function renderMonthCard(monthDate) {
 }
 
 function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
-  const baseAnchor = draft.startDate ? startOfMonth(new Date()) : firstBookableMonth();
+  const baseAnchor = firstBookableMonth();
   const baseMonth = addMonths(baseAnchor, draft.calendarMonthOffset);
   const nextMonth = addMonths(baseMonth, 1);
   const singleMonth = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
@@ -5171,7 +5170,7 @@ function applyStateToDraft() {
   draft.promoError = state.promoError || "";
   draft.currentStep = state.currentStep ?? 0;
   draft.bookingIntentId = state.bookingIntentId || "";
-  draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
+  draft.calendarMonthOffset = draft.startDate ? calendarOffsetForDate(draft.startDate) : 0;
   normalizePackageSelections();
   normalizeCurrentBookStep();
   draft.dateSelectionMode = draft.startDate && !draft.endDate ? "end" : "start";
@@ -5661,6 +5660,7 @@ function initBookInteractions() {
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
         draft.hoverEndDate = "";
         draft.roomAllocations = {};
+        draft.calendarMonthOffset = calendarOffsetForDate(nextDate);
       } else if (isSelectableCheckoutDate(nextDate, draft.startDate)) {
         draft.endDate = nextDate;
         draft.dateSelectionMode = "start";
@@ -5672,6 +5672,7 @@ function initBookInteractions() {
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
         draft.hoverEndDate = "";
         draft.roomAllocations = {};
+        draft.calendarMonthOffset = calendarOffsetForDate(nextDate);
       }
         state.bookingConfirmation = null;
         trackAnalyticsEvent("search", {
@@ -5796,7 +5797,7 @@ function initBookInteractions() {
 
     if (target.id === "startDate") {
       draft.startDate = target.value;
-      draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+      draft.calendarMonthOffset = draft.startDate ? calendarOffsetForDate(draft.startDate) : 0;
       state.bookingConfirmation = null;
       trackAnalyticsEvent("search", {
         camp: bookingSlug(),
@@ -6897,7 +6898,7 @@ function initBookSurface() {
   initBookInteractions();
   ensureAvailabilityCoverage(state);
   saveState();
-  draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+  draft.calendarMonthOffset = draft.startDate ? calendarOffsetForDate(draft.startDate) : 0;
   renderBookPage();
   void loadPublicWorkspace();
 }
