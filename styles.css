@@ -263,6 +263,11 @@ select {
   opacity: 0.92;
 }
 
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -574,8 +579,25 @@ select {
   font-weight: 700;
 }
 
+.room-allocation-grid .people-button[data-room-row-change$=":1"]:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff8ef;
+}
+
+.room-allocation-grid .people-button[data-room-row-change$=":-1"]:not(:disabled) {
+  background: var(--panel-soft);
+  border-color: var(--border);
+  color: var(--text);
+}
+
 .people-button:disabled,
 .nav-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.people-button.is-disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
@@ -833,6 +855,13 @@ select {
   border-color: #b8ab97;
   color: #ffffff;
   cursor: wait;
+}
+
+.summary-actions .summary-button:disabled {
+  background: #d8cfc0;
+  border-color: #d8cfc0;
+  color: #fff9f1;
+  box-shadow: none;
 }
 
 .button-spinner {
@@ -1726,7 +1755,7 @@ select {
 .month-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: 2px;
 }
 
 .weekday-row {
@@ -1819,6 +1848,8 @@ select {
 .day-cell.in-range {
   background: var(--accentSoft);
   border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: 0;
+  margin-inline: -1px;
 }
 
 .day-cell.range-start,
@@ -1831,6 +1862,27 @@ select {
   opacity: 1;
   position: relative;
   z-index: 1;
+}
+
+.day-cell.range-start {
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: -1px;
+}
+
+.day-cell.range-end {
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px;
+}
+
+.day-cell.range-start.range-end {
+  border-radius: 999px;
+  margin-inline: 0;
 }
 
 .calendar-note {

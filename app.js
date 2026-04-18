@@ -1144,6 +1144,10 @@ function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = se
   return afterDate;
 }
 
+function firstBookableMonth() {
+  return startOfMonth(parseDateValue(firstBookableStartDate()) || new Date());
+}
+
 function isSelectableDate(dateInput) {
   const today = new Date();
   const date = new Date(dateInput);
@@ -2308,7 +2312,8 @@ function renderMonthCard(monthDate) {
 }
 
 function renderDateSelector() {
-  const baseMonth = addMonths(startOfMonth(new Date()), draft.calendarMonthOffset);
+  const baseAnchor = draft.startDate ? startOfMonth(new Date()) : firstBookableMonth();
+  const baseMonth = addMonths(baseAnchor, draft.calendarMonthOffset);
   const nextMonth = addMonths(baseMonth, 1);
   const singleMonth = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
   const minimumStay = draft.startDate ? stayMinimumNightsForDate(draft.startDate) : 0;
@@ -2640,9 +2645,9 @@ function renderBookPage() {
             </div>
           </div>
           <div class="package-row-actions">
-            <span class="tiny">People</span>
+            <span class="tiny">Number of people</span>
             <div class="people-control" role="group" aria-label="${item.name} people count">
-              <button type="button" class="people-button" data-package-row-change="${item.id}:-1">-</button>
+              <button type="button" class="people-button${quantity <= 0 ? " is-disabled" : ""}" data-package-row-change="${item.id}:-1" ${quantity <= 0 ? "disabled" : ""}>-</button>
               <div class="people-count" aria-live="polite" aria-label="${item.name} quantity">${quantity}</div>
               <button type="button" class="people-button" data-package-row-change="${item.id}:1">+</button>
             </div>
@@ -2966,7 +2971,7 @@ function renderBookPage() {
           `
         : ""
     }
-    <button class="button button-primary summary-button${summaryButtonLoading ? " is-loading" : ""}" type="button" ${summaryButton.id ? `id="${summaryButton.id}"` : ""} ${summaryButton.disabled ? "disabled aria-busy=\"true\"" : ""}>${summaryButtonLoading ? `<span class="button-spinner" aria-hidden="true"></span><span>${summaryButton.label}</span>` : summaryButton.label}</button>
+    <button class="button button-primary summary-button${summaryButtonLoading ? " is-loading" : ""}" type="button" ${summaryButton.id ? `id="${summaryButton.id}"` : ""} ${summaryButton.disabled ? 'disabled aria-busy="true" aria-disabled="true"' : 'aria-disabled="false"'}>${summaryButtonLoading ? `<span class="button-spinner" aria-hidden="true"></span><span>${summaryButton.label}</span>` : summaryButton.label}</button>
   `;
 
   summary.hidden = isMobileSummary && !showMobileTripSummary;
@@ -2978,12 +2983,8 @@ function renderBookPage() {
           <div>
             <strong>Package</strong>
             <span class="summary-package-lines">
-              ${selectedPackageRows().length ? `<span class="summary-package-line">${selectedPackagePeopleCount()} people</span>` : ""}
               ${selectedPackageRows()
-                .map(
-                  (item) =>
-                    `<span class="summary-package-line">${escapeHtml(item.name)} x ${escapeHtml(item.quantity)}</span>`,
-                )
+                .map((item) => `<span class="summary-package-line">${escapeHtml(item.quantity)}x ${escapeHtml(item.name)}.</span>`)
                 .join("")}
             </span>
           </div>
@@ -4813,7 +4814,9 @@ function applyStateToDraft() {
   draft.promoError = state.promoError || "";
   draft.currentStep = state.currentStep ?? 0;
   draft.bookingIntentId = state.bookingIntentId || "";
-  draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
+  draft.calendarMonthOffset = draft.startDate
+    ? monthOffsetBetween(new Date(), draft.startDate)
+    : monthOffsetBetween(startOfMonth(new Date()), firstBookableMonth());
   draft.dateSelectionMode = draft.startDate && !draft.endDate ? "end" : "start";
   if (draft.dateSelectionMode !== "end") {
     draft.hoverEndDate = "";
