@@ -2351,16 +2351,20 @@ function stayBasePrice(startDate = draft.startDate, endDate = endDateForDraft())
   return roomTotals.length ? Math.min(...roomTotals) : 0;
 }
 
+function roomExtraTotal(roomTotalPrice) {
+  return Math.max(0, Number(roomTotalPrice) - stayBasePrice());
+}
+
 function roomUpgradePrice() {
-  return Math.max(0, roomPrice() - stayBasePrice());
+  return roomExtraTotal(roomPrice());
 }
 
 function roomDisplayedPrice(roomTotalPrice) {
-  return Math.max(0, roomTotalPrice - stayBasePrice());
+  return roomExtraTotal(roomTotalPrice);
 }
 
 function selectedRoomDisplayedPrice() {
-  return roomUpgradePrice();
+  return roomExtraTotal(roomPrice());
 }
 
 function calendarOffsetForDate(dateInput) {
@@ -2953,7 +2957,7 @@ function renderBookPage() {
         draft.startDate && endDateForDraft()
           ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
           : 0;
-      const roomDisplayedCost = roomDisplayedPrice(roomTotalPrice);
+      const roomDisplayedCost = roomExtraTotal(roomTotalPrice);
       const roomPriceLabel = roomDisplayedCost > 0 ? formatSurcharge(roomDisplayedCost) : roomTotalPrice ? "Included" : "";
       return `
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
