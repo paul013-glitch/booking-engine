@@ -2355,11 +2355,11 @@ function roomUpgradePrice() {
 }
 
 function roomDisplayedPrice(roomTotalPrice) {
-  return Math.max(0, roomTotalPrice - stayBasePrice());
+  return additionalPriceDisplayMode() === "rooms" ? roomTotalPrice : Math.max(0, roomTotalPrice - stayBasePrice());
 }
 
 function selectedRoomDisplayedPrice() {
-  return roomUpgradePrice();
+  return additionalPriceDisplayMode() === "rooms" ? roomPrice() : roomUpgradePrice();
 }
 
 function packagePrice() {
@@ -2589,7 +2589,10 @@ function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
             <option value="all" ${currentRoomFilter === "all" ? "selected" : ""}>All rooms</option>
             ${roomFilterRooms
               .map(
-                (room) => `<option value="${escapeHtml(room.id)}" ${currentRoomFilter === room.id ? "selected" : ""}>${escapeHtml(room.name || room.id)}</option>`,
+                (room) =>
+                  `<option value="${escapeHtml(room.id)}" ${currentRoomFilter === room.id ? "selected" : ""}>${escapeHtml(
+                    `${room.name || room.id} (+${formatCalendarPrice(room.pricePerNight || 0)} / night)`,
+                  )}</option>`,
               )
               .join("")}
           </select>
@@ -3316,7 +3319,7 @@ function renderBookPage() {
             selectedRoomAllocationRows().length
               ? selectedRoomDisplayedPrice() > 0
                 ? formatSurcharge(selectedRoomDisplayedPrice())
-                : roomPrice()
+                : selectedRoomDisplayedPrice() === 0 && selectedRoomAllocationRows().length
                   ? "Included"
                   : ""
               : ""
@@ -5652,14 +5655,12 @@ function initBookInteractions() {
 
     if (target.dataset.selectDate) {
       const nextDate = target.dataset.selectDate;
-      const selectedMonthOffset = monthOffsetBetween(new Date(), nextDate);
       if (!draft.startDate || draft.dateSelectionMode !== "end") {
         draft.startDate = nextDate;
         draft.endDate = addDays(nextDate, stayMinimumNightsForDate(nextDate));
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
         draft.hoverEndDate = "";
         draft.roomAllocations = {};
-        draft.calendarMonthOffset = selectedMonthOffset;
       } else if (isSelectableCheckoutDate(nextDate, draft.startDate)) {
         draft.endDate = nextDate;
         draft.dateSelectionMode = "start";
@@ -5671,7 +5672,6 @@ function initBookInteractions() {
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
         draft.hoverEndDate = "";
         draft.roomAllocations = {};
-        draft.calendarMonthOffset = selectedMonthOffset;
       }
         state.bookingConfirmation = null;
         trackAnalyticsEvent("search", {
