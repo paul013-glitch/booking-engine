@@ -1184,7 +1184,7 @@ function showAvailabilityCounts(bookingRules = bookingRulesConfig()) {
 }
 
 function showPricePerNightInCalendar(bookingRules = bookingRulesConfig()) {
-  return bookingRules?.additionalPriceDisplay === "calendar" || bookingRules?.showPricePerNight === true;
+  return bookingRules?.showPricePerNight === true;
 }
 
 function additionalPriceDisplayMode(bookingRules = bookingRulesConfig()) {
