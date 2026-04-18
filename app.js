@@ -2601,7 +2601,7 @@ function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
               .map(
                 (room) =>
                   `<option value="${escapeHtml(room.id)}" ${currentRoomFilter === room.id ? "selected" : ""}>${escapeHtml(
-                    `${room.name || room.id} (+${formatCalendarPrice(room.pricePerNight || 0)} / night)`,
+                    `${room.name || room.id} (+additional cost)`,
                   )}</option>`,
               )
               .join("")}
