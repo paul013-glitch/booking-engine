@@ -2851,7 +2851,7 @@ function renderBookPage() {
   const maxUnlockedStep = Math.max(0, Math.min(draft.currentStep, stepFlow.length - 1));
   const currentStepKey = currentBookingStepKey();
   const orderedPackages = orderedItems(state.packages);
-  const orderedRooms = bookingVisibleRooms();
+  const orderedRooms = bookingCalendarRooms(draft.calendarRoomFilter);
   const orderedAddons = orderedItems(state.addons);
   const addonGuestLimit = selectedPackagePeopleCount();
   const allocatedRoomGuests = selectedRoomAllocationPeopleCount();
@@ -3022,7 +3022,6 @@ function renderBookPage() {
         <div class="step-title">
           <div>
             <h3>${addonsStepNumber}. Select add-ons</h3>
-            <p class="helper">Choose quantities up to the ${isFullUnitMode() ? "number of units" : "number of guests"} in your booking.</p>
           </div>
         </div>
         <div class="card-grid addon-grid">${addonCards}</div>
