@@ -2963,8 +2963,7 @@ function renderBookPage() {
         draft.startDate && endDateForDraft()
           ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
           : 0;
-      const roomDisplayedCost = roomExtraTotal(roomTotalPrice);
-      const roomPriceLabel = roomTotalPrice ? formatExtraPrice(roomDisplayedCost) : "";
+      const roomPriceLabel = roomTotalPrice ? money(roomTotalPrice) : "";
       return `
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
