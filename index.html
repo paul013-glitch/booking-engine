@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Campify</title>
+    <title>Campify | Booking engine SaaS for villas, hostels, surf camps, retreats, and hotels</title>
     <meta
       name="description"
-      content="Campify helps surf camps sell rooms, packages, and bookings from one simple admin."
+      content="Campify is a minimal booking engine SaaS for villas, hostels, surf camps, retreats, and hotels."
     />
     <script>
       (function () {
@@ -15,25 +15,158 @@
       })();
     </script>
   </head>
-  <body class="page page-landing page-landing-slim">
-    <main class="landing-shell landing-shell-center">
-      <section class="hero-card hero-card-center">
-        <p class="eyebrow">Campify</p>
-        <h1>Booking software for surf camps.</h1>
-        <p class="lede">
-          A simple, private admin for camp owners and a clean booking flow for guests.
-        </p>
+  <body class="page page-landing">
+    <main class="landing-shell">
+      <header class="landing-nav">
+        <div class="brand-mark">Campify</div>
+        <nav class="landing-links" aria-label="Primary">
+          <a href="#journey">Journey</a>
+          <a href="#audiences">Audiences</a>
+          <a href="#features">Features</a>
+          <a href="#contact">Contact</a>
+        </nav>
+        <div class="landing-actions landing-actions-nav">
+          <button class="button button-primary" type="button" id="landingLogin">Log in</button>
+        </div>
+      </header>
 
-        <div class="landing-actions landing-actions-center">
-          <button class="button button-primary" type="button" id="landingLogin">
-            Login / Sign up
-          </button>
-          <a class="button button-secondary" href="./book/amigos-surf-camp">See demo</a>
+      <section class="landing-section landing-section-hero hero-card landing-hero">
+        <div class="landing-hero-copy">
+          <p class="eyebrow">Direct booking SaaS</p>
+          <h1>Sell direct. Manage simply.</h1>
+          <p class="lede">One booking engine for villas, hostels, surf camps, retreats, and hotels.</p>
+
+          <div class="landing-actions">
+            <a class="button button-primary" href="mailto:hello@campify.com?subject=Book%20a%20call">Book a call</a>
+            <a class="button button-secondary" href="./book/amigos-surf-camp">See demo</a>
+          </div>
+
+          <div class="landing-chip-row" aria-label="Core product features">
+            <span class="pill">Rooms + beds</span>
+            <span class="pill">Packages</span>
+            <span class="pill">Add-ons</span>
+            <span class="pill">Availability</span>
+            <span class="pill">Payments</span>
+            <span class="pill">Promos</span>
+          </div>
         </div>
 
-        <p class="tiny landing-note">
-          Logged in users are sent straight to the admin editor.
-        </p>
+        <aside class="landing-hero-aside" aria-label="Product highlights">
+          <div class="hero-mini-card">
+            <p class="section-label">Customer journey</p>
+            <ul class="hero-mini-list">
+              <li>Discover</li>
+              <li>Book</li>
+              <li>Manage</li>
+              <li>Repeat</li>
+            </ul>
+          </div>
+          <div class="hero-mini-card hero-mini-card-soft">
+            <p class="section-label">Built to sell</p>
+            <p>Minimal setup. Clear pricing. Fast checkout.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="landing-section landing-section-full" id="journey">
+        <p class="section-label">Journey</p>
+        <div class="journey-grid">
+          <article class="journey-card">
+            <span>01</span>
+            <strong>See the offer</strong>
+            <p>Simple pages that convert.</p>
+          </article>
+          <article class="journey-card">
+            <span>02</span>
+            <strong>Reserve direct</strong>
+            <p>Rooms, beds, packages, add-ons.</p>
+          </article>
+          <article class="journey-card">
+            <span>03</span>
+            <strong>Run the stay</strong>
+            <p>Availability, payments, guests.</p>
+          </article>
+          <article class="journey-card">
+            <span>04</span>
+            <strong>Bring them back</strong>
+            <p>Promos, notes, repeat bookings.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-section landing-section-full" id="audiences">
+        <p class="section-label">Made for</p>
+        <div class="audience-grid">
+          <article class="audience-card">
+            <p class="audience-title">Villas</p>
+            <strong>From EUR149/mo</strong>
+            <p>Multi-property control.</p>
+          </article>
+          <article class="audience-card">
+            <p class="audience-title">Hostels</p>
+            <strong>From EUR59/mo</strong>
+            <p>Beds, dorms, groups.</p>
+          </article>
+          <article class="audience-card">
+            <p class="audience-title">Surf camps</p>
+            <strong>From EUR49/mo</strong>
+            <p>Packages and extras.</p>
+          </article>
+          <article class="audience-card">
+            <p class="audience-title">Retreats</p>
+            <strong>From EUR99/mo</strong>
+            <p>Programs and deposits.</p>
+          </article>
+          <article class="audience-card">
+            <p class="audience-title">Hotels</p>
+            <strong>From EUR199/mo</strong>
+            <p>Rooms, teams, channels.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-section landing-section-full" id="features">
+        <p class="section-label">Core features</p>
+        <div class="feature-strip">
+          <article class="feature-card">
+            <strong>Calendar</strong>
+            <p>One live view.</p>
+          </article>
+          <article class="feature-card">
+            <strong>Payments</strong>
+            <p>Deposits and balance due.</p>
+          </article>
+          <article class="feature-card">
+            <strong>Add-ons</strong>
+            <p>Upsells that fit the stay.</p>
+          </article>
+          <article class="feature-card">
+            <strong>Promos</strong>
+            <p>Codes, discounts, and bundles.</p>
+          </article>
+          <article class="feature-card">
+            <strong>Guests</strong>
+            <p>Profiles, notes, and contact info.</p>
+          </article>
+          <article class="feature-card">
+            <strong>Admin</strong>
+            <p>Bookings, availability, settings.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-section landing-section-full landing-contact" id="contact">
+        <div class="hero-card contact-card">
+          <div>
+            <p class="section-label">Talk to us</p>
+            <h2>See if Campify fits.</h2>
+            <p class="lede">Book a quick call or open the demo. That is it.</p>
+          </div>
+          <div class="landing-actions">
+            <a class="button button-primary" href="mailto:hello@campify.com?subject=Book%20a%20call">Book a call</a>
+            <a class="button button-secondary" href="./book/amigos-surf-camp">See demo</a>
+          </div>
+        </div>
       </section>
     </main>
 

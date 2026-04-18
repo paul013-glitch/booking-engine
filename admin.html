@@ -38,7 +38,7 @@
             <p class="eyebrow">Backend editor</p>
             <h1>Manage the camp setup.</h1>
             <p class="lede">
-              Keep bookings, availability, booking engine settings, analytics, and product setup in one place.
+              Keep bookings, availability, booking engine settings, and product setup in one place.
             </p>
           </div>
         </section>
@@ -48,7 +48,6 @@
           <button type="button" class="admin-tab-button" data-admin-tab="business">Business</button>
           <button type="button" class="admin-tab-button" data-admin-tab="leads">Leads</button>
           <button type="button" class="admin-tab-button" data-admin-tab="availability">Availability matrix</button>
-          <button type="button" class="admin-tab-button" data-admin-tab="analytics">Analytics</button>
           <button type="button" class="admin-tab-button" data-admin-tab="configure">Configure</button>
           <button type="button" class="admin-tab-button" data-admin-tab="billing">Billing</button>
           <button type="button" class="admin-tab-button" data-admin-tab="branding">Booking engine</button>
@@ -351,6 +350,12 @@
               Or upload logo
               <input name="logoFile" type="file" accept="image/*" />
             </label>
+            <div class="booking-engine-logo-preview">
+              <span class="tiny">Logo preview</span>
+              <div class="booking-engine-logo-frame">
+                <img id="bookingEngineLogoPreview" alt="Logo preview" />
+              </div>
+            </div>
             <div class="theme-grid">
               <label>
                 Background
@@ -458,6 +463,10 @@
               <label class="checkbox-field">
                 <input name="showPricePerNight" type="checkbox" />
                 Show price per night
+              </label>
+              <label class="checkbox-field">
+                <input name="filterByRoomInCalendar" type="checkbox" />
+                Filter by room in calendar
               </label>
             </div>
             <div class="two-col">

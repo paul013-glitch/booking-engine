@@ -28,6 +28,7 @@ const seedCamp = {
     showAvailabilityColors: true,
     showAvailability: true,
     showPricePerNight: false,
+    filterByRoomInCalendar: true,
     packageMode: "individual_guests",
     packagesEnabled: true,
   },
@@ -354,6 +355,10 @@ function normalizeWorkspace(data = {}) {
       typeof data?.camp?.bookingRules?.showPricePerNight === "boolean"
         ? data.camp.bookingRules.showPricePerNight
         : base.camp.bookingRules.showPricePerNight,
+    filterByRoomInCalendar:
+      typeof data?.camp?.bookingRules?.filterByRoomInCalendar === "boolean"
+        ? data.camp.bookingRules.filterByRoomInCalendar
+        : base.camp.bookingRules.filterByRoomInCalendar,
     packageMode: data?.camp?.bookingRules?.packageMode === "full_unit" ? "full_unit" : "individual_guests",
     packagesEnabled:
       typeof data?.camp?.bookingRules?.packagesEnabled === "boolean"
