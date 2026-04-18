@@ -2558,9 +2558,7 @@ function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
           ${
             draft.startDate
               ? `Selected stay: ${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}`
-              : showAvailabilityColors()
-                ? "Availability colors reflect remaining sellable spots."
-                : ""
+              : ""
           }
         </div>
         ${
