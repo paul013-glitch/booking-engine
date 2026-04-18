@@ -1170,6 +1170,25 @@ select {
   gap: 12px;
 }
 
+.checkbox-field {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--text);
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.checkbox-field-inline {
+  align-self: end;
+  min-height: 48px;
+}
+
 .theme-grid label {
   gap: 6px;
 }

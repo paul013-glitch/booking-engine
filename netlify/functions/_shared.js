@@ -25,6 +25,11 @@ const seedCamp = {
     availabilityLowThreshold: 5,
     availabilityMidThreshold: 15,
     availabilityCountVisibilityThreshold: null,
+    showAvailabilityColors: true,
+    showAvailability: true,
+    showPricePerNight: false,
+    packageMode: "individual_guests",
+    packagesEnabled: true,
   },
   showBookingIntents: true,
   theme: {
@@ -330,6 +335,23 @@ function normalizeWorkspace(data = {}) {
       data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
         ? null
         : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
+    showAvailabilityColors:
+      typeof data?.camp?.bookingRules?.showAvailabilityColors === "boolean"
+        ? data.camp.bookingRules.showAvailabilityColors
+        : base.camp.bookingRules.showAvailabilityColors,
+    showAvailability:
+      typeof data?.camp?.bookingRules?.showAvailability === "boolean"
+        ? data.camp.bookingRules.showAvailability
+        : base.camp.bookingRules.showAvailability,
+    showPricePerNight:
+      typeof data?.camp?.bookingRules?.showPricePerNight === "boolean"
+        ? data.camp.bookingRules.showPricePerNight
+        : base.camp.bookingRules.showPricePerNight,
+    packageMode: data?.camp?.bookingRules?.packageMode === "full_unit" ? "full_unit" : "individual_guests",
+    packagesEnabled:
+      typeof data?.camp?.bookingRules?.packagesEnabled === "boolean"
+        ? data.camp.bookingRules.packagesEnabled
+        : base.camp.bookingRules.packagesEnabled,
   };
   const billing = {
     ...base.camp.billing,

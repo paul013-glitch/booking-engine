@@ -242,7 +242,8 @@ function formatDateParts(dateInput) {
 
 function bookingGuestCount(booking = {}) {
   if (booking.packageQuantities && typeof booking.packageQuantities === "object") {
-    return Object.values(booking.packageQuantities).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
+    const total = Object.values(booking.packageQuantities).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
+    if (total > 0) return total;
   }
   return Math.max(1, Number(booking.packagePeople || 1));
 }

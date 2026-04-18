@@ -206,6 +206,11 @@ const seedState = {
       availabilityLowThreshold: 5,
       availabilityMidThreshold: 15,
       availabilityCountVisibilityThreshold: null,
+      showAvailabilityColors: true,
+      showAvailability: true,
+      showPricePerNight: false,
+      packageMode: "individual_guests",
+      packagesEnabled: true,
     },
   },
   currentStep: 0,
@@ -1115,6 +1120,61 @@ function availabilityThresholds(bookingRules = state?.camp?.bookingRules || seed
   return { lowThreshold, midThreshold, showCountThreshold };
 }
 
+function bookingRulesConfig() {
+  return state?.camp?.bookingRules || seedState.camp.bookingRules;
+}
+
+function packagesEnabled(bookingRules = bookingRulesConfig()) {
+  return bookingRules?.packagesEnabled !== false;
+}
+
+function bookingPackageMode(bookingRules = bookingRulesConfig()) {
+  return bookingRules?.packageMode === "full_unit" ? "full_unit" : "individual_guests";
+}
+
+function isFullUnitMode(bookingRules = bookingRulesConfig()) {
+  return bookingPackageMode(bookingRules) === "full_unit";
+}
+
+function showAvailabilityColors(bookingRules = bookingRulesConfig()) {
+  return bookingRules?.showAvailabilityColors !== false;
+}
+
+function showAvailabilityCounts(bookingRules = bookingRulesConfig()) {
+  return bookingRules?.showAvailability !== false;
+}
+
+function showPricePerNightInCalendar(bookingRules = bookingRulesConfig()) {
+  return bookingRules?.showPricePerNight === true;
+}
+
+function effectivePackageId() {
+  return draft.packageId || orderedItems(state.packages)[0]?.id || "";
+}
+
+function bookingStepFlow() {
+  return packagesEnabled() ? ["package", "date", "room", "addons", "book"] : ["date", "room", "addons", "book"];
+}
+
+function bookingStepIndex(stepKey) {
+  const index = bookingStepFlow().indexOf(stepKey);
+  return index >= 0 ? index : 0;
+}
+
+function currentBookingStepKey() {
+  const flow = bookingStepFlow();
+  return flow[Math.max(0, Math.min(draft.currentStep || 0, flow.length - 1))] || flow[0] || "date";
+}
+
+function normalizeCurrentBookStep() {
+  const flow = bookingStepFlow();
+  draft.currentStep = Math.max(0, Math.min(draft.currentStep || 0, flow.length - 1));
+}
+
+function bookingQuantityLabel() {
+  return isFullUnitMode() ? "Units" : "Number of people";
+}
+
 function firstAllowedStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
   const cursor = parseDateValue(afterDate) || new Date();
   for (let i = 0; i < 120; i += 1) {
@@ -1373,7 +1433,8 @@ function bookingGuestCount(booking = {}) {
   }
 
   if (booking.packageQuantities && typeof booking.packageQuantities === "object") {
-    return Object.values(booking.packageQuantities).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
+    const total = Object.values(booking.packageQuantities).reduce((sum, quantity) => sum + Math.max(0, Number(quantity) || 0), 0);
+    if (total > 0) return total;
   }
 
   return Math.max(1, Number(booking.packagePeople || 1));
@@ -1802,6 +1863,23 @@ function previewStayNights(dateInput = draft.startDate || nextDefaultDate()) {
   return defaultAvailabilityMinStay(state.packages);
 }
 
+function formatCalendarPrice(value) {
+  if (!value) return "";
+  return `EUR ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)}`;
+}
+
+function calendarDatePrice(dateInput) {
+  if (!dateInput) return 0;
+  const stayNights = shouldAutoSelectCheckout(dateInput) ? stayMinimumNightsForDate(dateInput) : 1;
+  const stayEndDate = addDays(dateInput, stayNights);
+  const totals = orderedItems(state.rooms)
+    .filter((room) => roomOpenForCheckin(room.id, dateInput) && roomAvailableSpots(room.id, dateInput, stayEndDate) > 0)
+    .map((room) => dateKeysBetween(dateInput, stayEndDate).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0))
+    .filter((value) => value > 0);
+
+  return totals.length ? Math.min(...totals) : 0;
+}
+
 function formatSurcharge(value) {
   const amount = Math.max(0, Number(value) || 0);
   if (!amount) return "";
@@ -1944,6 +2022,25 @@ function packageQuantity(packageId) {
   return Math.max(0, Number(draft.packageQuantities?.[packageId] || 0));
 }
 
+function normalizePackageSelections() {
+  const firstPackageId = orderedItems(state.packages)[0]?.id || "";
+  if (!packagesEnabled()) {
+    draft.packageQuantities = {};
+    draft.packageId = draft.packageId || firstPackageId;
+    return;
+  }
+
+  if (isFullUnitMode()) {
+    const selectedPackageId = selectedPackageRows()[0]?.id || draft.packageId || firstPackageId;
+    const hasSelection = Object.values(draft.packageQuantities || {}).some((quantity) => Number(quantity) > 0);
+    draft.packageQuantities = hasSelection && selectedPackageId ? { [selectedPackageId]: 1 } : {};
+    draft.packageId = selectedPackageId;
+    return;
+  }
+
+  draft.packageId = draft.packageId || selectedPackageRows()[0]?.id || firstPackageId;
+}
+
 function selectedPackageRows() {
   return orderedItems(state.packages)
     .map((item) => ({
@@ -1954,6 +2051,8 @@ function selectedPackageRows() {
 }
 
 function selectedPackagePeopleCount() {
+  if (!packagesEnabled()) return 1;
+  if (isFullUnitMode()) return Math.min(1, selectedPackageRows().reduce((sum, item) => sum + item.quantity, 0));
   return selectedPackageRows().reduce((sum, item) => sum + item.quantity, 0);
 }
 
@@ -2242,23 +2341,38 @@ function renderDayCell(cellDate, monthDate) {
     !isClosed &&
     checkinOpen &&
     spotsLeft < requiredGuests;
+  const showColors = showAvailabilityColors();
   const availabilityClass = isPast
     ? "past-day"
     : !hasCoverage || isClosed
       ? "availability-none"
       : !checkinOpen
-        ? availabilityBandClass(spotsLeft)
+        ? showColors ? availabilityBandClass(spotsLeft) : ""
       : soldOut
           ? "soldout-day"
-          : availabilityBandClass(spotsLeft);
+          : showColors ? availabilityBandClass(spotsLeft) : "";
   const { showCountThreshold } = availabilityThresholds();
   const shouldShowCount =
+    showAvailabilityCounts() &&
     !selectingCheckout &&
     !isPast &&
     hasCoverage &&
     checkinOpen &&
     (soldOut || showCountThreshold === null || spotsLeft <= showCountThreshold);
-  const dayStatus = selectingCheckout ? "" : soldOut ? "FULL" : shouldShowCount && spotsLeft > 0 ? `${spotsLeft} left` : "";
+  const showPrice = showPricePerNightInCalendar();
+  const priceLabel =
+    !selectingCheckout && !isPast && hasCoverage && checkinOpen && !isClosed && !soldOut && showPrice
+      ? formatCalendarPrice(calendarDatePrice(iso))
+      : "";
+  const dayStatus = selectingCheckout
+    ? ""
+    : priceLabel
+      ? priceLabel
+      : soldOut
+        ? shouldShowCount ? "FULL" : ""
+        : shouldShowCount && spotsLeft > 0
+          ? `${spotsLeft} left`
+          : "";
 
   const classes = [
     "day-cell",
@@ -2311,7 +2425,7 @@ function renderMonthCard(monthDate) {
   `;
 }
 
-function renderDateSelector() {
+function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
   const baseAnchor = draft.startDate ? startOfMonth(new Date()) : firstBookableMonth();
   const baseMonth = addMonths(baseAnchor, draft.calendarMonthOffset);
   const nextMonth = addMonths(baseMonth, 1);
@@ -2322,7 +2436,7 @@ function renderDateSelector() {
   return `
       <section class="calendar-card">
         <div class="date-intro">
-          <h3>2. Select your dates</h3>
+          <h3>${stepNumber}. Select your dates</h3>
           <p class="helper">${
             draft.dateSelectionMode === "end" && draft.startDate
               ? `Hover to preview your check-out date, then click to confirm. Minimum stay: ${minimumStay} night${minimumStay === 1 ? "" : "s"}.`
@@ -2602,26 +2716,48 @@ function renderBookPage() {
 
   ensureRoomSelection();
 
-  const maxUnlockedStep = Math.max(0, draft.currentStep);
+  const stepFlow = bookingStepFlow();
+  const stepLabels = {
+    package: "Package",
+    date: "Date",
+    room: "Room",
+    addons: "Add-ons",
+    book: "Book",
+  };
+  const maxUnlockedStep = Math.max(0, Math.min(draft.currentStep, stepFlow.length - 1));
+  const currentStepKey = currentBookingStepKey();
   const orderedPackages = orderedItems(state.packages);
   const orderedRooms = orderedItems(state.rooms);
   const orderedAddons = orderedItems(state.addons);
   const addonGuestLimit = selectedPackagePeopleCount();
   const allocatedRoomGuests = selectedRoomAllocationPeopleCount();
+  const quantityLabel = bookingQuantityLabel();
   const addonRows = selectedAddonRows();
+  const packageRows = selectedPackageRows();
   const customerFields = customerFieldDefinitions();
   const countryChoices = countryOptions();
+  const packageStepNumber = bookingStepIndex("package") + 1;
+  const dateStepNumber = bookingStepIndex("date") + 1;
+  const roomStepNumber = bookingStepIndex("room") + 1;
+  const addonsStepNumber = bookingStepIndex("addons") + 1;
+  const bookStepNumber = bookingStepIndex("book") + 1;
+  const packageHelperText = isFullUnitMode()
+    ? "Select the unit you want to sell for this booking."
+    : "Set the number of people for each package row.";
+  const roomHelperText = isFullUnitMode()
+    ? "Assign this booking to one or more room types. Each room caps at its own remaining units."
+    : "Assign guests to one or more room types. Each room caps at its own remaining spots.";
 
-  stepper.innerHTML = ["Package", "Date", "Room", "Add-ons", "Book"]
+  stepper.innerHTML = stepFlow
     .map(
-      (label, index) => `
+      (stepKey, index) => `
         <button
           type="button"
           class="${index === draft.currentStep ? "active" : ""}"
           ${index > maxUnlockedStep ? "disabled" : ""}
           data-step="${index}"
         >
-          ${index + 1}. ${label}
+          ${index + 1}. ${stepLabels[stepKey] || stepKey}
         </button>
       `,
     )
@@ -2645,7 +2781,7 @@ function renderBookPage() {
             </div>
           </div>
           <div class="package-row-actions">
-            <span class="tiny">Number of people</span>
+            <span class="tiny">${quantityLabel}</span>
             <div class="people-control" role="group" aria-label="${item.name} people count">
               <button type="button" class="people-button${quantity <= 0 ? " is-disabled" : ""}" data-package-row-change="${item.id}:-1" ${quantity <= 0 ? "disabled" : ""}>-</button>
               <div class="people-count" aria-live="polite" aria-label="${item.name} quantity">${quantity}</div>
@@ -2687,7 +2823,7 @@ function renderBookPage() {
             <div class="tiny">${room.capacity} guests per room</div>
           </div>
           <div class="package-row-actions addon-row-actions">
-            <span class="tiny">People</span>
+            <span class="tiny">${quantityLabel}</span>
             <div class="people-control" role="group" aria-label="${room.name} guest allocation">
               <button type="button" class="people-button" data-room-row-change="${room.id}:-1" ${quantity <= 0 ? "disabled" : ""} aria-label="Decrease ${room.name} allocation">-</button>
               <div class="people-count" aria-live="polite" aria-label="${room.name} allocated guests">${quantity}</div>
@@ -2716,7 +2852,7 @@ function renderBookPage() {
             </div>
           </div>
           <div class="package-row-actions addon-row-actions">
-            <span class="tiny">People</span>
+            <span class="tiny">${quantityLabel}</span>
             <div class="people-control" role="group" aria-label="${addon.name} quantity">
               <button type="button" class="people-button" data-addon-row-change="${addon.id}:-1" ${quantity <= 0 ? "disabled" : ""} aria-label="Decrease ${addon.name}">-</button>
               <div class="people-count" aria-live="polite" aria-label="${addon.name} quantity">${quantity}</div>
@@ -2728,13 +2864,13 @@ function renderBookPage() {
     })
     .join("");
 
-  const views = [
-    `
+  const viewsByKey = {
+    package: `
       <section class="wizard-step">
         <div class="step-title">
           <div>
-            <h3>1. Pick a package</h3>
-            <p class="helper">Set the number of people for each package row.</p>
+            <h3>${packageStepNumber}. Pick a package</h3>
+            <p class="helper">${packageHelperText}</p>
           </div>
         </div>
         <div class="stack">${packageCards}</div>
@@ -2743,34 +2879,34 @@ function renderBookPage() {
         </div>
       </section>
     `,
-    renderDateSelector(),
-    `
+    date: renderDateSelector(dateStepNumber),
+    room: `
       <section class="wizard-step">
         <div class="step-title">
           <div>
-            <h3>3. Pick room allocations</h3>
-            <p class="helper">Assign guests to one or more room types. Each room caps at its own remaining spots.</p>
+            <h3>${roomStepNumber}. Pick room allocations</h3>
+            <p class="helper">${roomHelperText}</p>
           </div>
         </div>
         <div class="card-grid addon-grid room-allocation-grid">${roomCards}</div>
       </section>
     `,
-    `
+    addons: `
       <section class="wizard-step">
         <div class="step-title">
           <div>
-            <h3>4. Select add-ons</h3>
-            <p class="helper">Choose quantities up to the number of guests in your booking.</p>
+            <h3>${addonsStepNumber}. Select add-ons</h3>
+            <p class="helper">Choose quantities up to the ${isFullUnitMode() ? "number of units" : "number of guests"} in your booking.</p>
           </div>
         </div>
         <div class="card-grid addon-grid">${addonCards}</div>
       </section>
     `,
-    `
+    book: `
       <section class="wizard-step">
         <div class="step-title">
           <div>
-            <h3>5. Book</h3>
+            <h3>${bookStepNumber}. Book</h3>
             <p class="helper">We save the guest details before confirming the reservation.</p>
           </div>
         </div>
@@ -2911,39 +3047,39 @@ function renderBookPage() {
         }
       </section>
     `,
-  ];
+  };
 
-  wizard.innerHTML = views[draft.currentStep];
+  wizard.innerHTML = viewsByKey[currentStepKey] || viewsByKey[stepFlow[0]] || "";
   const summaryHasData =
-    selectedPackageRows().length > 0 || !!draft.startDate || selectedRoomAllocationRows().length > 0 || draft.addonIds.length > 0;
+    packageRows.length > 0 || !!draft.startDate || selectedRoomAllocationRows().length > 0 || draft.addonIds.length > 0;
   const isMobileSummary = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
-  const showMobileTripSummary = isMobileSummary && draft.currentStep === 4;
-  const summaryButtonLoading = draft.currentStep === 4 && bookingUiState.submitting;
-  const summaryButton = draft.currentStep === 0
+  const showMobileTripSummary = isMobileSummary && currentStepKey === "book";
+  const summaryButtonLoading = currentStepKey === "book" && bookingUiState.submitting;
+  const summaryButton = currentStepKey === "package"
     ? {
         id: "nextFromPackage",
-        disabled: !selectedPackageRows().length,
+        disabled: !packageRows.length,
         label: "Select dates >",
       }
-    : draft.currentStep === 1
+    : currentStepKey === "date"
       ? {
           id: "nextFromDate",
           disabled: !draft.startDate,
           label: "Select room >",
         }
-      : draft.currentStep === 2
+      : currentStepKey === "room"
         ? {
             id: "nextFromRoom",
             disabled: selectedRoomAllocationPeopleCount() !== selectedPackagePeopleCount(),
             label: "Add-ons >",
           }
-        : draft.currentStep === 3
+        : currentStepKey === "addons"
           ? {
               id: "continueToBook",
               disabled: false,
               label: "Booking details >",
             }
-          : draft.currentStep === 4
+          : currentStepKey === "book"
             ? {
                 id: "bookButton",
                 disabled: summaryButtonLoading,
@@ -2979,17 +3115,23 @@ function renderBookPage() {
     <div class="summary-hero">
       <h3 class="summary-title">Trip summary</h3>
       <div class="summary-list">
-        <div class="summary-item">
-          <div>
-            <strong>Package</strong>
-            <span class="summary-package-lines">
-              ${selectedPackageRows()
-                .map((item) => `<span class="summary-package-line">${escapeHtml(item.quantity)}x ${escapeHtml(item.name)}.</span>`)
-                .join("")}
-            </span>
-          </div>
-          <strong>${selectedPackageRows().length ? money(packagePrice()) : ""}</strong>
-        </div>
+        ${
+          packagesEnabled()
+            ? `
+              <div class="summary-item">
+                <div>
+                  <strong>Package</strong>
+                  <span class="summary-package-lines">
+                    ${packageRows
+                      .map((item) => `<span class="summary-package-line">${escapeHtml(item.quantity)}x ${escapeHtml(item.name)}.</span>`)
+                      .join("")}
+                  </span>
+                </div>
+                <strong>${packageRows.length ? money(packagePrice()) : ""}</strong>
+              </div>
+            `
+            : ""
+        }
         <div class="summary-item">
           <div>
             <strong>Date</strong>
@@ -3060,7 +3202,7 @@ function renderBookPage() {
   if (!analyticsState.loadTracked && (analyticsConfig().ga4Id || analyticsConfig().pixelId)) {
     trackAnalyticsEvent("booking_engine_load", {
       camp: bookingSlug(),
-      step: draft.currentStep + 1,
+      step: bookingStepIndex(currentStepKey) + 1,
     });
     analyticsState.loadTracked = true;
   }
@@ -3218,6 +3360,11 @@ function renderAdminPage() {
       state.camp.bookingRules?.availabilityMidThreshold ?? seedState.camp.bookingRules.availabilityMidThreshold;
     campForm.elements.availabilityCountVisibilityThreshold.value =
       state.camp.bookingRules?.availabilityCountVisibilityThreshold ?? "";
+    campForm.elements.showAvailabilityColors.checked = showAvailabilityColors(state.camp.bookingRules);
+    campForm.elements.showAvailability.checked = showAvailabilityCounts(state.camp.bookingRules);
+    campForm.elements.showPricePerNight.checked = showPricePerNightInCalendar(state.camp.bookingRules);
+    campForm.elements.packageMode.value = bookingPackageMode(state.camp.bookingRules);
+    campForm.elements.packagesEnabled.checked = packagesEnabled(state.camp.bookingRules);
   }
 
   if (analyticsForm) {
@@ -4766,7 +4913,7 @@ function initNetlifyIdentityAuth() {
 
 function syncDraftToState() {
   state.currentStep = draft.currentStep;
-  state.selectedPackageId = draft.packageId;
+  state.selectedPackageId = effectivePackageId();
   state.packageQuantities = { ...draft.packageQuantities };
   state.selectedRoomId = draft.roomId;
   state.roomAllocations = { ...(draft.roomAllocations || {}) };
@@ -4817,6 +4964,8 @@ function applyStateToDraft() {
   draft.calendarMonthOffset = draft.startDate
     ? monthOffsetBetween(new Date(), draft.startDate)
     : monthOffsetBetween(startOfMonth(new Date()), firstBookableMonth());
+  normalizePackageSelections();
+  normalizeCurrentBookStep();
   draft.dateSelectionMode = draft.startDate && !draft.endDate ? "end" : "start";
   if (draft.dateSelectionMode !== "end") {
     draft.hoverEndDate = "";
@@ -4829,6 +4978,7 @@ function upsertCheckoutLead(stage = "checkout") {
   const id = draft.bookingIntentId || `intent-${Date.now()}`;
   draft.bookingIntentId = id;
   const existing = state.bookingIntents.find((item) => item.id === id);
+  const packageId = effectivePackageId();
   const payload = {
     id,
     guestName: draft.guestName || existing?.guestName || "",
@@ -4837,11 +4987,13 @@ function upsertCheckoutLead(stage = "checkout") {
     guestCountry: draft.guestCountry || existing?.guestCountry || "",
     guestGender: draft.guestGenders?.[0] || draft.guestGender || existing?.guestGender || "",
     guestGenders: normalizedGuestGenders(draft.guestGenders || (draft.guestGender ? [draft.guestGender] : [])),
-    packageId: draft.packageId,
+    packageId,
+    packagePeople: selectedPackagePeopleCount(),
+    packageMode: bookingPackageMode(),
     packageQuantities: { ...draft.packageQuantities },
-  roomId: draft.roomId,
-  roomAllocations: { ...(draft.roomAllocations || {}) },
-  addonIds: [...draft.addonIds],
+    roomId: draft.roomId,
+    roomAllocations: { ...(draft.roomAllocations || {}) },
+    addonIds: [...draft.addonIds],
     customerFieldValues: { ...(draft.customerFieldValues || {}) },
     customerDetails: customerDetailsPayload(),
     startDate: draft.startDate,
@@ -4900,6 +5052,17 @@ function clampPackageQuantity(value) {
 }
 
 function setPackageQuantity(packageId, quantity) {
+  if (isFullUnitMode()) {
+    const nextQuantity = Number(quantity) > 0 ? 1 : 0;
+    draft.packageQuantities = nextQuantity > 0 ? { [packageId]: 1 } : {};
+    draft.packageId = packageId || effectivePackageId();
+    draft.guestGenders = normalizedGuestGenders(draft.guestGenders || (draft.guestGender ? [draft.guestGender] : []));
+    draft.guestGender = draft.guestGenders[0] || draft.guestGender || "";
+    normalizeAddonSelections();
+    normalizeRoomAllocations();
+    return;
+  }
+
   const nextQuantity = clampPackageQuantity(quantity);
   draft.packageQuantities = {
     ...draft.packageQuantities,
@@ -4919,6 +5082,8 @@ function setPackageQuantity(packageId, quantity) {
 }
 
 function updateBookPage() {
+  normalizePackageSelections();
+  normalizeCurrentBookStep();
   syncDraftToState();
   saveState();
   cleanExpiredHolds();
@@ -5101,8 +5266,11 @@ async function confirmBookingReservation() {
     guestBirthYear,
     guestGender: guestGenders[0] || "",
     guestGenders,
-    packageId: draft.packageId,
-    packageQuantities: { ...draft.packageQuantities },
+    packageId: effectivePackageId(),
+    packagePeople: selectedPackagePeopleCount(),
+    packageMode: bookingPackageMode(),
+    packagesEnabled: packagesEnabled(),
+    packageQuantities: packagesEnabled() ? { ...draft.packageQuantities } : null,
     roomId: selectedRooms[0]?.id || "",
     roomAllocations: Object.fromEntries(selectedRooms.map((room) => [room.id, room.quantity])),
     addonIds: [...draft.addonIds],
@@ -5297,7 +5465,7 @@ function initBookInteractions() {
         alert("Please choose at least one package row before continuing.");
         return;
       }
-      draft.currentStep = 1;
+      draft.currentStep = bookingStepIndex("date");
       updateBookPage();
       scrollBookPageToTop();
       return;
@@ -5312,7 +5480,7 @@ function initBookInteractions() {
           alert("Please choose a valid check-out date for this stay.");
           return;
         }
-        draft.currentStep = 2;
+        draft.currentStep = bookingStepIndex("room");
         draft.dateSelectionMode = "start";
         updateBookPage();
         scrollBookPageToTop();
@@ -5324,11 +5492,11 @@ function initBookInteractions() {
         alert("Please assign all guests to room types before continuing.");
         return;
       }
-      draft.currentStep = 3;
+      draft.currentStep = bookingStepIndex("addons");
       trackAnalyticsEvent("add_to_cart", {
         camp: bookingSlug(),
         room: bookingRoomAllocationSummary({ roomAllocations: draft.roomAllocations }),
-        package: getPackage(draft.packageId)?.name || draft.packageId,
+        package: getPackage(effectivePackageId())?.name || effectivePackageId(),
         check_in: draft.startDate,
       });
       updateBookPage();
@@ -5353,7 +5521,7 @@ function initBookInteractions() {
     }
 
     if (target.id === "continueToBook") {
-      draft.currentStep = 4;
+      draft.currentStep = bookingStepIndex("book");
       state.bookingConfirmation = null;
       upsertCheckoutLead("checkout");
       updateBookPage();
@@ -5850,6 +6018,11 @@ function initAdminInteractions() {
         campForm.elements.availabilityCountVisibilityThreshold.value === ""
           ? null
           : Math.max(0, Number(campForm.elements.availabilityCountVisibilityThreshold.value)),
+      showAvailabilityColors: !!campForm.elements.showAvailabilityColors.checked,
+      showAvailability: !!campForm.elements.showAvailability.checked,
+      showPricePerNight: !!campForm.elements.showPricePerNight.checked,
+      packageMode: campForm.elements.packageMode.value === "full_unit" ? "full_unit" : "individual_guests",
+      packagesEnabled: !!campForm.elements.packagesEnabled.checked,
     };
 
     const logoFile = campForm.elements.logoFile.files?.[0];
@@ -5872,6 +6045,10 @@ function initAdminInteractions() {
       titleFont: campForm.elements.titleFont.value,
       bodyFont: campForm.elements.bodyFont.value,
     };
+    normalizePackageSelections();
+    normalizeCurrentBookStep();
+    normalizeAddonSelections();
+    normalizeRoomAllocations();
     saveState();
     applyTheme(state.camp.theme);
     renderAdminPage();

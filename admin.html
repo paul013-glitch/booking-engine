@@ -446,6 +446,33 @@
                 />
               </label>
             </div>
+            <div class="threshold-grid">
+              <label class="checkbox-field">
+                <input name="showAvailabilityColors" type="checkbox" />
+                Limited availability background colors
+              </label>
+              <label class="checkbox-field">
+                <input name="showAvailability" type="checkbox" />
+                Show availability
+              </label>
+              <label class="checkbox-field">
+                <input name="showPricePerNight" type="checkbox" />
+                Show price per night
+              </label>
+            </div>
+            <div class="two-col">
+              <label>
+                Package system
+                <select name="packageMode">
+                  <option value="individual_guests">Individual guests</option>
+                  <option value="full_unit">Full unit (villa mode)</option>
+                </select>
+              </label>
+              <label class="checkbox-field checkbox-field-inline">
+                <input name="packagesEnabled" type="checkbox" />
+                Packages enabled
+              </label>
+            </div>
             <button class="button button-primary" type="submit">Save booking engine</button>
           </form>
         </section>
