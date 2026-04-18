@@ -2958,7 +2958,12 @@ function renderBookPage() {
           ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
           : 0;
       const roomDisplayedCost = roomExtraTotal(roomTotalPrice);
-      const roomPriceLabel = roomDisplayedCost > 0 ? formatSurcharge(roomDisplayedCost) : roomTotalPrice ? "Included" : "";
+      const roomPriceLabel = roomTotalPrice
+        ? `
+            <span class="room-price-total">${money(roomTotalPrice)}</span>
+            <span class="room-price-extra">${roomDisplayedCost > 0 ? formatSurcharge(roomDisplayedCost) : "Included"}</span>
+          `
+        : "";
       return `
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
@@ -2970,8 +2975,8 @@ function renderBookPage() {
                 ? `<a class="learn-more-link" href="${escapeHtml(room.learnMoreUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Learn more</a>`
                 : ""
             }
-            <div class="option-meta">
-              <span>${roomPriceLabel}</span>
+            <div class="option-meta room-card-price">
+              ${roomPriceLabel}
             </div>
             <div class="tiny">${room.capacity} guests per room</div>
           </div>

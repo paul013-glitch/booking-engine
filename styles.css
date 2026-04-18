@@ -692,6 +692,21 @@ select {
   font-weight: 700;
 }
 
+.room-card-price {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.room-card-price .room-price-total {
+  color: var(--text);
+}
+
+.room-card-price .room-price-extra {
+  color: var(--accent);
+}
+
 .availability.low {
   color: #876e44;
 }
