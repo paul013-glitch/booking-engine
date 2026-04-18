@@ -739,21 +739,21 @@ function promoFreeAddonValue(addonId) {
 function promoTotals() {
   const packageTotal = packagePrice();
   const stayTotal = stayBasePrice();
-  const roomUpgradeTotal = roomUpgradePrice();
+  const roomTotal = additionalPriceDisplayMode() === "rooms" ? roomPrice() : roomUpgradePrice();
   const baseAddonTotal = draft.addonIds.reduce((sum, addonId) => sum + Number(getAddon(addonId)?.price || 0), 0);
   const freeAddonDiscount = draft.addonIds.reduce(
     (sum, addonId) => sum + (selectedFreeAddonIds().includes(addonId) ? Number(getAddon(addonId)?.price || 0) : 0),
     0,
   );
   const appliedStayTotal = additionalPriceDisplayMode() === "calendar" ? stayTotal : 0;
-  const subtotal = packageTotal + appliedStayTotal + roomUpgradeTotal + baseAddonTotal - freeAddonDiscount;
+  const subtotal = packageTotal + appliedStayTotal + roomTotal + baseAddonTotal - freeAddonDiscount;
   const percentPromos = selectedPercentPromos();
   const totalAfterPercent = percentPromos.reduce((running, percent) => running - running * (percent / 100), subtotal);
   const roundedTotal = Math.max(0, Math.round(totalAfterPercent));
   return {
     packageTotal,
     stayTotal,
-    roomUpgradeTotal,
+    roomTotal,
     baseAddonTotal,
     freeAddonDiscount,
     percentPromos,
@@ -2370,7 +2370,7 @@ function roomDisplayedPrice(roomTotalPrice) {
 }
 
 function selectedRoomDisplayedPrice() {
-  return roomExtraTotal(roomPrice());
+  return additionalPriceDisplayMode() === "rooms" ? roomPrice() : roomExtraTotal(roomPrice());
 }
 
 function calendarOffsetForDate(dateInput) {
@@ -3316,11 +3316,7 @@ function renderBookPage() {
                 : ""}
             </span>
           </div>
-          <strong>${
-            selectedRoomAllocationRows().length
-              ? formatExtraPrice(selectedRoomDisplayedPrice())
-              : ""
-          }</strong>
+          <strong>${selectedRoomAllocationRows().length ? money(selectedRoomDisplayedPrice()) : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
