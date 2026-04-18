@@ -113,6 +113,8 @@ function buildPersistedStateSnapshot(source = state) {
 
 const bookingUiState = {
   submitting: false,
+  calendarReloading: false,
+  calendarReloadTimer: null,
 };
 
 function createDefaultBilling(now = new Date()) {
@@ -167,6 +169,7 @@ const adminUiState = {
   bookingEngineSaving: false,
   bookingEngineNotice: "",
   bookingEngineNoticeType: "info",
+  bookingEngineLogoPreviewUrl: "",
   loadingVisible: true,
   loadingTitle: "Loading admin panel",
   loadingDetail: "Checking access and preparing the workspace.",
@@ -229,6 +232,7 @@ const seedState = {
       showAvailabilityColors: true,
       showAvailability: true,
       showPricePerNight: false,
+      filterByRoomInCalendar: true,
       packageMode: "individual_guests",
       packagesEnabled: true,
     },
@@ -430,6 +434,7 @@ const draft = {
   packageQuantities: { ...(state.packageQuantities || {}) },
   roomId: state.selectedRoomId,
   roomAllocations: { ...(state.roomAllocations || {}) },
+  calendarRoomFilter: state.calendarRoomFilter || "all",
   addonIds: [...state.selectedAddonIds],
   customerFieldValues: { ...(state.customerFieldValues || {}) },
   startDate: state.startDate || "",
@@ -555,6 +560,10 @@ function normalizeWorkspaceData(data = {}) {
       data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
         ? null
         : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
+    filterByRoomInCalendar:
+      typeof data?.camp?.bookingRules?.filterByRoomInCalendar === "boolean"
+        ? data.camp.bookingRules.filterByRoomInCalendar
+        : seedState.camp.bookingRules.filterByRoomInCalendar,
   };
   const isPersistedSnapshot = data?.__persistedSnapshot === true;
   const normalizedAvailability = migrateAvailabilityDays(
@@ -619,6 +628,7 @@ function normalizeWorkspaceData(data = {}) {
       (data.roomAllocations && typeof data.roomAllocations === "object"
         ? Object.entries(data.roomAllocations).find(([, quantity]) => Number(quantity) > 0)?.[0] || ""
         : ""),
+    calendarRoomFilter: data.calendarRoomFilter || "all",
     startDate: data.startDate || "",
     endDate: data.endDate || "",
     guestName: data.guestName || "",
@@ -727,19 +737,21 @@ function promoFreeAddonValue(addonId) {
 
 function promoTotals() {
   const packageTotal = packagePrice();
-  const roomTotal = roomPrice();
+  const stayTotal = stayBasePrice();
+  const roomUpgradeTotal = roomUpgradePrice();
   const baseAddonTotal = draft.addonIds.reduce((sum, addonId) => sum + Number(getAddon(addonId)?.price || 0), 0);
   const freeAddonDiscount = draft.addonIds.reduce(
     (sum, addonId) => sum + (selectedFreeAddonIds().includes(addonId) ? Number(getAddon(addonId)?.price || 0) : 0),
     0,
   );
-  const subtotal = packageTotal + roomTotal + baseAddonTotal - freeAddonDiscount;
+  const subtotal = packageTotal + stayTotal + roomUpgradeTotal + baseAddonTotal - freeAddonDiscount;
   const percentPromos = selectedPercentPromos();
   const totalAfterPercent = percentPromos.reduce((running, percent) => running - running * (percent / 100), subtotal);
   const roundedTotal = Math.max(0, Math.round(totalAfterPercent));
   return {
     packageTotal,
-    roomTotal,
+    stayTotal,
+    roomUpgradeTotal,
     baseAddonTotal,
     freeAddonDiscount,
     percentPromos,
@@ -1119,7 +1131,7 @@ function trackAnalyticsEvent(eventName, params = {}) {
 }
 
 function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules) {
-  return bookingVisibleRooms().some((room) => roomOpenForCheckin(room.id, dateInput));
+  return bookingCalendarRooms().some((room) => roomOpenForCheckin(room.id, dateInput));
 }
 
 function availabilityThresholds(bookingRules = state?.camp?.bookingRules || seedState.camp.bookingRules) {
@@ -1286,6 +1298,18 @@ function getRoom(id) {
 
 function bookingVisibleRooms() {
   return orderedItems(state.rooms).filter((room) => room.enabled !== false);
+}
+
+function bookingCalendarFilterEnabled(bookingRules = bookingRulesConfig()) {
+  return bookingRules?.filterByRoomInCalendar !== false;
+}
+
+function bookingCalendarRooms(roomFilter = draft.calendarRoomFilter) {
+  const visibleRooms = bookingVisibleRooms();
+  if (!bookingCalendarFilterEnabled()) return visibleRooms;
+  if (!roomFilter || roomFilter === "all") return visibleRooms;
+  const selectedRoom = visibleRooms.find((room) => room.id === roomFilter);
+  return selectedRoom ? [selectedRoom] : visibleRooms;
 }
 
 function getAddon(id) {
@@ -1822,7 +1846,7 @@ function availabilityDateKeysForRoom(roomId) {
 }
 
 function availabilityCalendarBounds() {
-  const keys = Array.from(new Set(bookingVisibleRooms().flatMap((room) => availabilityDateKeysForRoom(room.id)))).sort(
+  const keys = Array.from(new Set(bookingCalendarRooms().flatMap((room) => availabilityDateKeysForRoom(room.id)))).sort(
     (a, b) => new Date(a) - new Date(b),
   );
 
@@ -1850,7 +1874,7 @@ function availabilityCalendarBounds() {
 
 function availabilityHasCoverageForDate(dateInput) {
   const dayKey = localDateKey(dateInput);
-  return bookingVisibleRooms().some((room) => !!state.camp.availability?.[room.id]?.days?.[dayKey]);
+  return bookingCalendarRooms().some((room) => !!state.camp.availability?.[room.id]?.days?.[dayKey]);
 }
 
 function roomAvailabilityRow(roomId, dateInput) {
@@ -1873,7 +1897,7 @@ function roomOpenForCheckin(roomId, dateInput) {
 }
 
 function stayMinimumNightsForDate(dateInput) {
-  const openRows = bookingVisibleRooms()
+  const openRows = bookingCalendarRooms()
     .map((room) => roomAvailabilityRow(room.id, dateInput))
     .filter((row) => row && row.openForCheckin !== false);
   if (!openRows.length) return defaultAvailabilityMinStay(state.packages);
@@ -1901,7 +1925,7 @@ function calendarDatePrice(dateInput) {
   if (!dateInput) return 0;
   const stayNights = shouldAutoSelectCheckout(dateInput) ? stayMinimumNightsForDate(dateInput) : 1;
   const stayEndDate = addDays(dateInput, stayNights);
-  const totals = bookingVisibleRooms()
+  const totals = bookingCalendarRooms()
     .filter((room) => roomOpenForCheckin(room.id, dateInput) && roomAvailableSpots(room.id, dateInput, stayEndDate) > 0)
     .map((room) => dateKeysBetween(dateInput, stayEndDate).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0))
     .filter((value) => value > 0);
@@ -1925,7 +1949,7 @@ function campSpotsLeftForDate(startDate, nights = previewStayNights()) {
   if (!dateKeys.length) return 0;
 
   const dayTotals = dateKeys.map((dateKey) =>
-    bookingVisibleRooms().reduce((sum, room) => {
+    bookingCalendarRooms().reduce((sum, room) => {
       const row = roomAvailabilityRow(room.id, dateKey);
       if (!row) return sum;
       const booked = bookedUnitsForDate(room.id, dateKey);
@@ -1944,7 +1968,7 @@ function roomConfiguredUnits(roomId, startDate) {
 
 function campConfiguredSpotsForDate(startDate, nights = previewStayNights()) {
   if (!startDate) return 0;
-  return bookingVisibleRooms().reduce(
+  return bookingCalendarRooms().reduce(
     (sum, room) => sum + roomConfiguredUnits(room.id, startDate),
     0,
   );
@@ -2304,6 +2328,21 @@ function roomPrice() {
   }, 0);
 }
 
+function stayBasePrice(startDate = draft.startDate, endDate = endDateForDraft()) {
+  if (!startDate || !endDate) return 0;
+  const dateKeys = dateKeysBetween(startDate, endDate);
+  if (!dateKeys.length) return 0;
+  const roomTotals = bookingCalendarRooms()
+    .filter((room) => roomOpenForCheckin(room.id, startDate))
+    .map((room) => dateKeys.reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0))
+    .filter((value) => value > 0);
+  return roomTotals.length ? Math.min(...roomTotals) : 0;
+}
+
+function roomUpgradePrice() {
+  return Math.max(0, roomPrice() - stayBasePrice());
+}
+
 function packagePrice() {
   return selectedPackageRows().reduce((sum, item) => sum + item.basePrice * item.quantity, 0);
 }
@@ -2333,6 +2372,26 @@ function isSoldOutStartDate(dateInput) {
   if (date < new Date(today.getFullYear(), today.getMonth(), today.getDate())) return false;
   if (!isArrivalAllowed(dateInput, state.camp.bookingRules)) return false;
   return !hasAvailabilityForDate(dateInput);
+}
+
+function refreshCalendarPreview(roomFilter = draft.calendarRoomFilter) {
+  draft.calendarRoomFilter = roomFilter || "all";
+  if (!draft.startDate) {
+    draft.calendarMonthOffset = 0;
+  } else {
+    draft.calendarMonthOffset = monthOffsetBetween(new Date(), draft.startDate);
+  }
+  syncDraftToState();
+  saveState();
+  bookingUiState.calendarReloading = true;
+  if (bookingUiState.calendarReloadTimer) {
+    clearTimeout(bookingUiState.calendarReloadTimer);
+  }
+  renderBookPage();
+  bookingUiState.calendarReloadTimer = window.setTimeout(() => {
+    bookingUiState.calendarReloading = false;
+    renderBookPage();
+  }, 180);
 }
 
 function escapeHtml(value) {
@@ -2462,9 +2521,15 @@ function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
   const singleMonth = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
   const minimumStay = draft.startDate ? stayMinimumNightsForDate(draft.startDate) : 0;
   const autoSelectedStay = draft.startDate && draft.endDate && draft.dateSelectionMode === "start" && shouldAutoSelectCheckout(draft.startDate);
+  const roomFilterEnabled = bookingCalendarFilterEnabled();
+  const roomFilterRooms = bookingVisibleRooms();
+  const currentRoomFilter =
+    roomFilterEnabled && (draft.calendarRoomFilter === "all" || roomFilterRooms.some((room) => room.id === draft.calendarRoomFilter))
+      ? draft.calendarRoomFilter
+      : "all";
 
   return `
-      <section class="calendar-card">
+      <section class="calendar-card ${bookingUiState.calendarReloading ? "is-reloading" : ""}" aria-busy="${bookingUiState.calendarReloading ? "true" : "false"}">
         <div class="date-intro">
           <h3>${stepNumber}. Select your dates</h3>
           <p class="helper">${
@@ -2487,11 +2552,29 @@ function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
         ${singleMonth ? "" : renderMonthCard(nextMonth)}
       </div>
 
+      <div class="calendar-footer">
         <div class="calendar-note">
           ${draft.startDate
             ? `Selected stay: ${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}`
             : "Availability colors reflect remaining sellable spots."}
         </div>
+        ${
+          roomFilterEnabled
+            ? `
+        <label class="calendar-filter-row">
+          <span>Room filter</span>
+          <select data-calendar-room-filter aria-label="Filter calendar by room">
+            <option value="all" ${currentRoomFilter === "all" ? "selected" : ""}>All rooms</option>
+            ${roomFilterRooms
+              .map(
+                (room) => `<option value="${escapeHtml(room.id)}" ${currentRoomFilter === room.id ? "selected" : ""}>${escapeHtml(room.name || room.id)}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>`
+            : ""
+        }
+      </div>
 
       </section>
     `;
@@ -2774,6 +2857,7 @@ function renderBookPage() {
   const packageRows = selectedPackageRows();
   const customerFields = customerFieldDefinitions();
   const countryChoices = countryOptions();
+  const sharedRoomMode = !isFullUnitMode();
   const packageStepNumber = bookingStepIndex("package") + 1;
   const dateStepNumber = bookingStepIndex("date") + 1;
   const roomStepNumber = bookingStepIndex("room") + 1;
@@ -2840,10 +2924,11 @@ function renderBookPage() {
       const isUnavailable = Boolean(draft.startDate && roomAvailability <= 0);
       const maxForRoom = Math.min(roomAvailability, remainingGuests);
       const canIncrease = quantity < maxForRoom;
-      const stayPrice =
+      const roomTotalPrice =
         draft.startDate && endDateForDraft()
           ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
           : 0;
+      const roomUpgradeCost = Math.max(0, roomTotalPrice - stayBasePrice());
       return `
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
@@ -2856,7 +2941,7 @@ function renderBookPage() {
                 : ""
             }
             <div class="option-meta">
-              <span>${stayPrice ? formatSurcharge(stayPrice) : ""}</span>
+              <span>${roomUpgradeCost > 0 ? formatSurcharge(roomUpgradeCost) : roomTotalPrice ? "Included" : ""}</span>
             </div>
             <div class="tiny">${room.capacity} guests per room</div>
           </div>
@@ -3009,62 +3094,68 @@ function renderBookPage() {
                   </select>
                 </label>
               </div>
-              <div class="three-col dob-row" style="margin-top: 14px;">
-                <div class="field" id="fieldGuestBirthDate" style="grid-column: 1 / -1;">
-                  Birth date
-                  <div class="three-col" style="margin-top: 8px;">
-                    <label class="field" id="fieldGuestBirthDay">
-                      <input
-                        id="guestBirthDay"
-                        type="number"
-                        min="1"
-                        max="31"
-                        step="1"
-                        placeholder="Day"
-                        value="${escapeHtml(draft.guestBirthDay)}"
-                      />
-                    </label>
-                    <label class="field" id="fieldGuestBirthMonth">
-                      <select id="guestBirthMonth">
-                        <option value="">Month</option>
-                        ${[
-                          "January",
-                          "February",
-                          "March",
-                          "April",
-                          "May",
-                          "June",
-                          "July",
-                          "August",
-                          "September",
-                          "October",
-                          "November",
-                          "December",
-                        ]
-                          .map(
-                            (month, index) =>
-                              `<option value="${String(index + 1)}" ${String(draft.guestBirthMonth) === String(index + 1) ? "selected" : ""}>${month}</option>`,
-                          )
-                          .join("")}
-                      </select>
-                    </label>
-                    <label class="field" id="fieldGuestBirthYear">
-                      <input
-                        id="guestBirthYear"
-                        type="number"
-                        min="1900"
-                        max="${new Date().getFullYear()}"
-                        step="1"
-                        placeholder="Year"
-                        value="${escapeHtml(draft.guestBirthYear)}"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div id="fieldGuestGenderGroup" style="margin-top: 14px;">
-                ${renderGuestGenderControls()}
-              </div>
+              ${
+                sharedRoomMode
+                  ? `
+                    <div class="three-col dob-row" style="margin-top: 14px;">
+                      <div class="field" id="fieldGuestBirthDate" style="grid-column: 1 / -1;">
+                        Birth date
+                        <div class="three-col" style="margin-top: 8px;">
+                          <label class="field" id="fieldGuestBirthDay">
+                            <input
+                              id="guestBirthDay"
+                              type="number"
+                              min="1"
+                              max="31"
+                              step="1"
+                              placeholder="Day"
+                              value="${escapeHtml(draft.guestBirthDay)}"
+                            />
+                          </label>
+                          <label class="field" id="fieldGuestBirthMonth">
+                            <select id="guestBirthMonth">
+                              <option value="">Month</option>
+                              ${[
+                                "January",
+                                "February",
+                                "March",
+                                "April",
+                                "May",
+                                "June",
+                                "July",
+                                "August",
+                                "September",
+                                "October",
+                                "November",
+                                "December",
+                              ]
+                                .map(
+                                  (month, index) =>
+                                    `<option value="${String(index + 1)}" ${String(draft.guestBirthMonth) === String(index + 1) ? "selected" : ""}>${month}</option>`,
+                                )
+                                .join("")}
+                            </select>
+                          </label>
+                          <label class="field" id="fieldGuestBirthYear">
+                            <input
+                              id="guestBirthYear"
+                              type="number"
+                              min="1900"
+                              max="${new Date().getFullYear()}"
+                              step="1"
+                              placeholder="Year"
+                              value="${escapeHtml(draft.guestBirthYear)}"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    <div id="fieldGuestGenderGroup" style="margin-top: 14px;">
+                      ${renderGuestGenderControls()}
+                    </div>
+                  `
+                  : ""
+              }
               ${
                 customerFields.length
                   ? `
@@ -3175,7 +3266,7 @@ function renderBookPage() {
             <strong>Date</strong>
             <span>${draft.startDate ? `${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}` : ""}</span>
           </div>
-          <strong></strong>
+          <strong>${draft.startDate ? money(stayBasePrice()) : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
@@ -3188,7 +3279,7 @@ function renderBookPage() {
                 : ""}
             </span>
           </div>
-          <strong>${selectedRoomAllocationRows().length ? formatSurcharge(roomPrice()) : ""}</strong>
+          <strong>${selectedRoomAllocationRows().length ? (roomUpgradePrice() > 0 ? formatSurcharge(roomUpgradePrice()) : "Included") : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
@@ -3404,8 +3495,10 @@ function renderAdminPage() {
     campForm.elements.showAvailabilityColors.checked = showAvailabilityColors(state.camp.bookingRules);
     campForm.elements.showAvailability.checked = showAvailabilityCounts(state.camp.bookingRules);
     campForm.elements.showPricePerNight.checked = showPricePerNightInCalendar(state.camp.bookingRules);
+    campForm.elements.filterByRoomInCalendar.checked = bookingCalendarFilterEnabled(state.camp.bookingRules);
     campForm.elements.packageMode.value = bookingPackageMode(state.camp.bookingRules);
     campForm.elements.packagesEnabled.checked = packagesEnabled(state.camp.bookingRules);
+    adminUiState.bookingEngineLogoPreviewUrl = "";
   }
 
   if (campForm) {
@@ -3427,6 +3520,10 @@ function renderAdminPage() {
   }
   if (topbarBookingUrl) {
     topbarBookingUrl.setAttribute("href", bookingUrl());
+  }
+  const bookingEngineLogoPreview = document.getElementById("bookingEngineLogoPreview");
+  if (bookingEngineLogoPreview instanceof HTMLImageElement) {
+    bookingEngineLogoPreview.src = adminUiState.bookingEngineLogoPreviewUrl || state.camp.logoUrl || logoSvg;
   }
   applyTheme(state.camp.theme);
 
@@ -4942,6 +5039,7 @@ function initNetlifyIdentityAuth() {
     authState.token = null;
     authState.workspace = null;
     authState.workspaceLoaded = false;
+    adminUiState.bookingEngineLogoPreviewUrl = "";
     updateAdminAuthUI(null);
   });
 
@@ -4972,6 +5070,7 @@ function syncDraftToState() {
   state.packageQuantities = { ...draft.packageQuantities };
   state.selectedRoomId = draft.roomId;
   state.roomAllocations = { ...(draft.roomAllocations || {}) };
+  state.calendarRoomFilter = draft.calendarRoomFilter || "all";
   state.selectedAddonIds = [...draft.addonIds];
   state.customerFieldValues = { ...(draft.customerFieldValues || {}) };
   state.startDate = draft.startDate;
@@ -4997,6 +5096,7 @@ function applyStateToDraft() {
   draft.packageQuantities = { ...(state.packageQuantities || {}) };
   draft.roomId = state.selectedRoomId;
   draft.roomAllocations = { ...(state.roomAllocations || {}) };
+  draft.calendarRoomFilter = state.calendarRoomFilter || "all";
   draft.addonIds = [...(state.selectedAddonIds || [])];
   draft.customerFieldValues = { ...(state.customerFieldValues || {}) };
   draft.startDate = state.startDate || "";
@@ -5159,19 +5259,24 @@ function scrollBookPageToTop() {
 }
 
 function setBookingFieldErrors(fieldIds = []) {
+  const sharedRoomMode = !isFullUnitMode();
   const allFieldIds = [
     "fieldGuestName",
     "fieldGuestEmail",
     "fieldGuestPhone",
     "fieldGuestCountry",
-    "fieldGuestBirthDay",
-    "fieldGuestBirthMonth",
-    "fieldGuestBirthYear",
-    "fieldGuestGenderGroup",
     "fieldGuestNotes",
     ...customerFieldDefinitions().map((field) => customerFieldDomId(field)),
-    ...Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) => `fieldGuestGender${index}`),
   ];
+  if (sharedRoomMode) {
+    allFieldIds.push(
+      "fieldGuestBirthDay",
+      "fieldGuestBirthMonth",
+      "fieldGuestBirthYear",
+      "fieldGuestGenderGroup",
+      ...Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) => `fieldGuestGender${index}`),
+    );
+  }
   for (const id of allFieldIds) {
     getBookElement(id)?.classList.toggle("is-invalid", fieldIds.includes(id));
   }
@@ -5272,14 +5377,17 @@ async function confirmBookingReservation() {
   const guestPhone = getBookElement("guestPhone")?.value.trim();
   const guestEmail = getBookElement("guestEmail")?.value.trim();
   const guestCountry = getBookElement("guestCountry")?.value.trim();
-  const guestBirthDay = getBookElement("guestBirthDay")?.value.trim();
-  const guestBirthMonth = getBookElement("guestBirthMonth")?.value.trim();
-  const guestBirthYear = getBookElement("guestBirthYear")?.value.trim();
+  const sharedRoomMode = !isFullUnitMode();
+  const guestBirthDay = sharedRoomMode ? getBookElement("guestBirthDay")?.value.trim() : "";
+  const guestBirthMonth = sharedRoomMode ? getBookElement("guestBirthMonth")?.value.trim() : "";
+  const guestBirthYear = sharedRoomMode ? getBookElement("guestBirthYear")?.value.trim() : "";
   const notes = getBookElement("guestNotes")?.value.trim();
   const guestGenders = normalizedGuestGenders(
-    Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) =>
-      bookingRootNode().querySelector(`[data-guest-gender-index="${index}"]`)?.value.trim() || "",
-    ),
+    sharedRoomMode
+      ? Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) =>
+          bookingRootNode().querySelector(`[data-guest-gender-index="${index}"]`)?.value.trim() || "",
+        )
+      : [],
   );
 
   const missingFields = [];
@@ -5287,12 +5395,14 @@ async function confirmBookingReservation() {
   if (!guestEmail) missingFields.push("fieldGuestEmail");
   if (!guestPhone) missingFields.push("fieldGuestPhone");
   if (!guestCountry) missingFields.push("fieldGuestCountry");
-  if (!guestBirthDay) missingFields.push("fieldGuestBirthDay");
-  if (!guestBirthMonth) missingFields.push("fieldGuestBirthMonth");
-  if (!guestBirthYear) missingFields.push("fieldGuestBirthYear");
-  guestGenders.forEach((gender, index) => {
-    if (!gender) missingFields.push(`fieldGuestGender${index}`);
-  });
+  if (sharedRoomMode) {
+    if (!guestBirthDay) missingFields.push("fieldGuestBirthDay");
+    if (!guestBirthMonth) missingFields.push("fieldGuestBirthMonth");
+    if (!guestBirthYear) missingFields.push("fieldGuestBirthYear");
+    guestGenders.forEach((gender, index) => {
+      if (!gender) missingFields.push(`fieldGuestGender${index}`);
+    });
+  }
   for (const field of customerFieldDefinitions()) {
     if (field.required && !String(draft.customerFieldValues?.[field.key] || "").trim()) {
       missingFields.push(customerFieldDomId(field));
@@ -5485,6 +5595,11 @@ function initBookInteractions() {
       return;
     }
 
+    if (target.dataset.calendarRoomFilter !== undefined) {
+      refreshCalendarPreview(target.value || "all");
+      return;
+    }
+
     if (target.dataset.selectDate) {
       const nextDate = target.dataset.selectDate;
       if (!draft.startDate || draft.dateSelectionMode !== "end") {
@@ -5611,6 +5726,14 @@ function initBookInteractions() {
       );
       applyPromoCodesFromInput(promoInput?.value || "");
       return;
+    }
+  });
+
+  eventRoot.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.matches?.("[data-calendar-room-filter]")) {
+      refreshCalendarPreview(target instanceof HTMLSelectElement ? target.value : "all");
     }
   });
 
@@ -6051,6 +6174,7 @@ function initAdminInteractions() {
     };
     if (campForm.elements.logoUrl.value.trim()) {
       state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
+      adminUiState.bookingEngineLogoPreviewUrl = "";
     }
     state.camp.theme = nextTheme;
     applyTheme(state.camp.theme);
@@ -6064,6 +6188,9 @@ function initAdminInteractions() {
     if (embedCodeInput) {
       embedCodeInput.value = embedScriptSnippet();
     }
+    if (bookingEngineLogoPreview instanceof HTMLImageElement) {
+      bookingEngineLogoPreview.src = adminUiState.bookingEngineLogoPreviewUrl || state.camp.logoUrl || logoSvg;
+    }
   };
 
   campForm?.addEventListener("input", (event) => {
@@ -6072,6 +6199,19 @@ function initAdminInteractions() {
     adminUiState.bookingEngineFormDirty = true;
     adminUiState.bookingEngineNotice = "";
     adminUiState.bookingEngineNoticeType = "info";
+    if (target.name === "logoFile") {
+      const file = campForm.elements.logoFile.files?.[0];
+      if (file) {
+        void readFileAsDataUrl(file).then((dataUrl) => {
+          adminUiState.bookingEngineLogoPreviewUrl = String(dataUrl || "");
+          if (bookingEngineLogoPreview instanceof HTMLImageElement) {
+            bookingEngineLogoPreview.src = adminUiState.bookingEngineLogoPreviewUrl || state.camp.logoUrl || logoSvg;
+          }
+        });
+      } else {
+        adminUiState.bookingEngineLogoPreviewUrl = "";
+      }
+    }
     if (!liveBrandingFields.has(target.name)) return;
     syncBrandingPreview();
   });
@@ -6082,6 +6222,12 @@ function initAdminInteractions() {
     adminUiState.bookingEngineFormDirty = true;
     adminUiState.bookingEngineNotice = "";
     adminUiState.bookingEngineNoticeType = "info";
+    if (target.name === "logoFile" && !campForm.elements.logoFile.files?.[0]) {
+      adminUiState.bookingEngineLogoPreviewUrl = "";
+      if (bookingEngineLogoPreview instanceof HTMLImageElement) {
+        bookingEngineLogoPreview.src = state.camp.logoUrl || logoSvg;
+      }
+    }
     if (!liveBrandingFields.has(target.name)) return;
     syncBrandingPreview();
   });
@@ -6114,6 +6260,7 @@ function initAdminInteractions() {
         showAvailabilityColors: !!campForm.elements.showAvailabilityColors.checked,
         showAvailability: !!campForm.elements.showAvailability.checked,
         showPricePerNight: !!campForm.elements.showPricePerNight.checked,
+        filterByRoomInCalendar: !!campForm.elements.filterByRoomInCalendar.checked,
         packageMode: campForm.elements.packageMode.value === "full_unit" ? "full_unit" : "individual_guests",
         packagesEnabled: !!campForm.elements.packagesEnabled.checked,
       };
@@ -6121,8 +6268,10 @@ function initAdminInteractions() {
       const logoFile = campForm.elements.logoFile.files?.[0];
       if (logoFile) {
         state.camp.logoUrl = await readFileAsDataUrl(logoFile);
+        adminUiState.bookingEngineLogoPreviewUrl = "";
       } else if (campForm.elements.logoUrl.value.trim()) {
         state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
+        adminUiState.bookingEngineLogoPreviewUrl = "";
       }
 
       state.camp.theme = {
@@ -6161,6 +6310,9 @@ function initAdminInteractions() {
       }
       if (embedCodeInput) {
         embedCodeInput.value = embedScriptSnippet();
+      }
+      if (bookingEngineLogoPreview instanceof HTMLImageElement) {
+        bookingEngineLogoPreview.src = adminUiState.bookingEngineLogoPreviewUrl || state.camp.logoUrl || logoSvg;
       }
     }
   });
