@@ -1249,10 +1249,6 @@ function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = se
 }
 
 function firstBookableMonth() {
-  const bounds = availabilityCalendarBounds();
-  if (bounds.hasBounds) {
-    return bounds.firstMonth;
-  }
   return startOfMonth(parseDateValue(firstBookableStartDate()) || new Date());
 }
 
@@ -2354,6 +2350,14 @@ function roomUpgradePrice() {
   return Math.max(0, roomPrice() - stayBasePrice());
 }
 
+function roomDisplayedPrice(roomTotalPrice) {
+  return additionalPriceDisplayMode() === "rooms" ? roomTotalPrice : Math.max(0, roomTotalPrice - stayBasePrice());
+}
+
+function selectedRoomDisplayedPrice() {
+  return additionalPriceDisplayMode() === "rooms" ? roomPrice() : roomUpgradePrice();
+}
+
 function packagePrice() {
   return selectedPackageRows().reduce((sum, item) => sum + item.basePrice * item.quantity, 0);
 }
@@ -2942,12 +2946,12 @@ function renderBookPage() {
         draft.startDate && endDateForDraft()
           ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
           : 0;
-      const roomUpgradeCost = Math.max(0, roomTotalPrice - stayBasePrice());
+      const roomDisplayedCost = roomDisplayedPrice(roomTotalPrice);
       const additionalPriceMode = additionalPriceDisplayMode();
       const roomPriceLabel =
         additionalPriceMode === "rooms"
-          ? roomUpgradeCost > 0
-            ? formatSurcharge(roomUpgradeCost)
+          ? roomDisplayedCost > 0
+            ? formatSurcharge(roomDisplayedCost)
             : roomTotalPrice
               ? "Included"
               : ""
@@ -3291,7 +3295,7 @@ function renderBookPage() {
               ${draft.startDate ? `<span class="summary-subline">${bookingNights()} night${bookingNights() === 1 ? "" : "s"}</span>` : ""}
             </span>
           </div>
-          <strong>${draft.startDate ? money(stayBasePrice()) : ""}</strong>
+          <strong>${draft.startDate && additionalPriceDisplayMode() === "calendar" ? money(stayBasePrice()) : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
@@ -3304,7 +3308,15 @@ function renderBookPage() {
                 : ""}
             </span>
           </div>
-          <strong>${selectedRoomAllocationRows().length ? (roomUpgradePrice() > 0 ? formatSurcharge(roomUpgradePrice()) : "Included") : ""}</strong>
+          <strong>${
+            selectedRoomAllocationRows().length
+              ? selectedRoomDisplayedPrice() > 0
+                ? formatSurcharge(selectedRoomDisplayedPrice())
+                : roomPrice()
+                  ? "Included"
+                  : ""
+              : ""
+          }</strong>
         </div>
         <div class="summary-item">
           <div>
@@ -5152,9 +5164,7 @@ function applyStateToDraft() {
   draft.promoError = state.promoError || "";
   draft.currentStep = state.currentStep ?? 0;
   draft.bookingIntentId = state.bookingIntentId || "";
-  draft.calendarMonthOffset = draft.startDate
-    ? monthOffsetBetween(new Date(), draft.startDate)
-    : monthOffsetBetween(startOfMonth(new Date()), firstBookableMonth());
+  draft.calendarMonthOffset = draft.startDate ? monthOffsetBetween(new Date(), draft.startDate) : 0;
   normalizePackageSelections();
   normalizeCurrentBookStep();
   draft.dateSelectionMode = draft.startDate && !draft.endDate ? "end" : "start";
