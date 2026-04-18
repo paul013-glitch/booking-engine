@@ -1319,6 +1319,10 @@ function bookingCalendarRooms(roomFilter = draft.calendarRoomFilter) {
   return selectedRoom ? [selectedRoom] : visibleRooms;
 }
 
+function pricingBaselineRooms() {
+  return bookingVisibleRooms();
+}
+
 function getAddon(id) {
   return state.addons.find((item) => item.id === id);
 }
@@ -1932,7 +1936,7 @@ function calendarDatePrice(dateInput) {
   if (!dateInput) return 0;
   const stayNights = shouldAutoSelectCheckout(dateInput) ? stayMinimumNightsForDate(dateInput) : 1;
   const stayEndDate = addDays(dateInput, stayNights);
-  const totals = bookingCalendarRooms()
+  const totals = pricingBaselineRooms()
     .filter((room) => roomOpenForCheckin(room.id, dateInput) && roomAvailableSpots(room.id, dateInput, stayEndDate) > 0)
     .map((room) => dateKeysBetween(dateInput, stayEndDate).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0))
     .filter((value) => value > 0);
@@ -2339,8 +2343,8 @@ function stayBasePrice(startDate = draft.startDate, endDate = endDateForDraft())
   if (!startDate || !endDate) return 0;
   const dateKeys = dateKeysBetween(startDate, endDate);
   if (!dateKeys.length) return 0;
-  const roomTotals = bookingCalendarRooms()
-    .filter((room) => roomOpenForCheckin(room.id, startDate))
+  const roomTotals = pricingBaselineRooms()
+    .filter((room) => roomOpenForCheckin(room.id, startDate) && roomAvailableSpots(room.id, startDate, endDate) > 0)
     .map((room) => dateKeys.reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0))
     .filter((value) => value > 0);
   return roomTotals.length ? Math.min(...roomTotals) : 0;
