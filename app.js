@@ -3269,7 +3269,10 @@ function renderBookPage() {
         <div class="summary-item">
           <div>
             <strong>Date</strong>
-            <span>${draft.startDate ? `${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}` : ""}</span>
+            <span>
+              ${draft.startDate ? `${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}` : ""}
+              ${draft.startDate ? `<span class="summary-subline">${bookingNights()} night${bookingNights() === 1 ? "" : "s"}</span>` : ""}
+            </span>
           </div>
           <strong>${draft.startDate ? money(stayBasePrice()) : ""}</strong>
         </div>
@@ -3355,6 +3358,10 @@ function renderAdminPage() {
   const leadCount = document.getElementById("leadCount");
   const canEditBilling = currentIdentityIsPlatformOwner();
   let activeTab = adminUiState.activeTab || "bookings";
+  if (activeTab === "analytics") {
+    activeTab = "bookings";
+    adminUiState.activeTab = activeTab;
+  }
   if (activeTab === "billing" && !canEditBilling) {
     activeTab = "bookings";
     adminUiState.activeTab = activeTab;
