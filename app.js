@@ -745,7 +745,8 @@ function promoTotals() {
     (sum, addonId) => sum + (selectedFreeAddonIds().includes(addonId) ? Number(getAddon(addonId)?.price || 0) : 0),
     0,
   );
-  const subtotal = packageTotal + stayTotal + roomUpgradeTotal + baseAddonTotal - freeAddonDiscount;
+  const appliedStayTotal = additionalPriceDisplayMode() === "calendar" ? stayTotal : 0;
+  const subtotal = packageTotal + appliedStayTotal + roomUpgradeTotal + baseAddonTotal - freeAddonDiscount;
   const percentPromos = selectedPercentPromos();
   const totalAfterPercent = percentPromos.reduce((running, percent) => running - running * (percent / 100), subtotal);
   const roundedTotal = Math.max(0, Math.round(totalAfterPercent));
@@ -2354,6 +2355,12 @@ function roomExtraTotal(roomTotalPrice) {
   return Math.max(0, Number(roomTotalPrice) - stayBasePrice());
 }
 
+function formatExtraPrice(value) {
+  return `+${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(Math.max(0, Number(value) || 0))} \u20AC`;
+}
+
 function roomUpgradePrice() {
   return roomExtraTotal(roomPrice());
 }
@@ -2957,12 +2964,7 @@ function renderBookPage() {
           ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
           : 0;
       const roomDisplayedCost = roomExtraTotal(roomTotalPrice);
-      const roomPriceLabel = roomTotalPrice
-        ? `
-            <span class="room-price-total">${money(roomTotalPrice)}</span>
-            <span class="room-price-extra">${roomDisplayedCost > 0 ? formatSurcharge(roomDisplayedCost) : "Included"}</span>
-          `
-        : "";
+      const roomPriceLabel = roomTotalPrice ? formatExtraPrice(roomDisplayedCost) : "";
       return `
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
@@ -2975,7 +2977,7 @@ function renderBookPage() {
                 : ""
             }
             <div class="option-meta room-card-price">
-              ${roomPriceLabel}
+              <span>${roomPriceLabel}</span>
             </div>
             <div class="tiny">${room.capacity} guests per room</div>
           </div>
@@ -3317,11 +3319,7 @@ function renderBookPage() {
           </div>
           <strong>${
             selectedRoomAllocationRows().length
-              ? selectedRoomDisplayedPrice() > 0
-                ? formatSurcharge(selectedRoomDisplayedPrice())
-                : selectedRoomDisplayedPrice() === 0 && selectedRoomAllocationRows().length
-                  ? "Included"
-                  : ""
+              ? formatExtraPrice(selectedRoomDisplayedPrice())
               : ""
           }</strong>
         </div>
