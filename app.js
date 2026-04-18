@@ -1940,7 +1940,7 @@ function calendarDatePrice(dateInput) {
   const totals = pricingBaselineRooms()
     .filter((room) => roomOpenForCheckin(room.id, dateInput) && roomAvailableSpots(room.id, dateInput, stayEndDate) > 0)
     .map((room) => dateKeysBetween(dateInput, stayEndDate).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0))
-    .filter((value) => value > 0);
+    .filter((value) => Number.isFinite(value) && value >= 0);
 
   return totals.length ? Math.min(...totals) : 0;
 }
@@ -2347,7 +2347,7 @@ function stayBasePrice(startDate = draft.startDate, endDate = endDateForDraft())
   const roomTotals = pricingBaselineRooms()
     .filter((room) => roomOpenForCheckin(room.id, startDate) && roomAvailableSpots(room.id, startDate, endDate) > 0)
     .map((room) => dateKeys.reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0))
-    .filter((value) => value > 0);
+    .filter((value) => Number.isFinite(value) && value >= 0);
   return roomTotals.length ? Math.min(...roomTotals) : 0;
 }
 
