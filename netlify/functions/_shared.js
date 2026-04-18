@@ -25,12 +25,13 @@ const seedCamp = {
     availabilityLowThreshold: 5,
     availabilityMidThreshold: 15,
     availabilityCountVisibilityThreshold: null,
-    showAvailabilityColors: true,
-    showAvailability: true,
-    showPricePerNight: false,
-    filterByRoomInCalendar: true,
-    packageMode: "individual_guests",
-    packagesEnabled: true,
+      showAvailabilityColors: true,
+      showAvailability: true,
+      showPricePerNight: false,
+      additionalPriceDisplay: "rooms",
+      filterByRoomInCalendar: true,
+      packageMode: "individual_guests",
+      packagesEnabled: true,
   },
   showBookingIntents: true,
   theme: {
@@ -355,6 +356,7 @@ function normalizeWorkspace(data = {}) {
       typeof data?.camp?.bookingRules?.showPricePerNight === "boolean"
         ? data.camp.bookingRules.showPricePerNight
         : base.camp.bookingRules.showPricePerNight,
+    additionalPriceDisplay: data?.camp?.bookingRules?.additionalPriceDisplay === "calendar" ? "calendar" : "rooms",
     filterByRoomInCalendar:
       typeof data?.camp?.bookingRules?.filterByRoomInCalendar === "boolean"
         ? data.camp.bookingRules.filterByRoomInCalendar

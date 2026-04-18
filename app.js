@@ -232,6 +232,7 @@ const seedState = {
       showAvailabilityColors: true,
       showAvailability: true,
       showPricePerNight: false,
+      additionalPriceDisplay: "rooms",
       filterByRoomInCalendar: true,
       packageMode: "individual_guests",
       packagesEnabled: true,
@@ -1182,7 +1183,13 @@ function showAvailabilityCounts(bookingRules = bookingRulesConfig()) {
 }
 
 function showPricePerNightInCalendar(bookingRules = bookingRulesConfig()) {
-  return bookingRules?.showPricePerNight === true;
+  return bookingRules?.additionalPriceDisplay === "calendar" || bookingRules?.showPricePerNight === true;
+}
+
+function additionalPriceDisplayMode(bookingRules = bookingRulesConfig()) {
+  if (bookingRules?.additionalPriceDisplay === "calendar") return "calendar";
+  if (bookingRules?.additionalPriceDisplay === "rooms") return "rooms";
+  return isFullUnitMode(bookingRules) ? "calendar" : "rooms";
 }
 
 function effectivePackageId() {
@@ -1242,6 +1249,10 @@ function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = se
 }
 
 function firstBookableMonth() {
+  const bounds = availabilityCalendarBounds();
+  if (bounds.hasBounds) {
+    return bounds.firstMonth;
+  }
   return startOfMonth(parseDateValue(firstBookableStartDate()) || new Date());
 }
 
@@ -2932,6 +2943,15 @@ function renderBookPage() {
           ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
           : 0;
       const roomUpgradeCost = Math.max(0, roomTotalPrice - stayBasePrice());
+      const additionalPriceMode = additionalPriceDisplayMode();
+      const roomPriceLabel =
+        additionalPriceMode === "rooms"
+          ? roomUpgradeCost > 0
+            ? formatSurcharge(roomUpgradeCost)
+            : roomTotalPrice
+              ? "Included"
+              : ""
+          : "";
       return `
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
@@ -2944,7 +2964,7 @@ function renderBookPage() {
                 : ""
             }
             <div class="option-meta">
-              <span>${roomUpgradeCost > 0 ? formatSurcharge(roomUpgradeCost) : roomTotalPrice ? "Included" : ""}</span>
+              <span>${roomPriceLabel}</span>
             </div>
             <div class="tiny">${room.capacity} guests per room</div>
           </div>
@@ -3504,6 +3524,10 @@ function renderAdminPage() {
     campForm.elements.showAvailabilityColors.checked = showAvailabilityColors(state.camp.bookingRules);
     campForm.elements.showAvailability.checked = showAvailabilityCounts(state.camp.bookingRules);
     campForm.elements.showPricePerNight.checked = showPricePerNightInCalendar(state.camp.bookingRules);
+    const additionalPriceDisplay = campForm.elements.namedItem("additionalPriceDisplay");
+    if (additionalPriceDisplay instanceof HTMLSelectElement) {
+      additionalPriceDisplay.value = state.camp.bookingRules?.additionalPriceDisplay === "calendar" ? "calendar" : "rooms";
+    }
     const filterByRoomInCalendar = campForm.elements.namedItem("filterByRoomInCalendar");
     if (filterByRoomInCalendar instanceof HTMLInputElement) {
       filterByRoomInCalendar.checked = bookingCalendarFilterEnabled(state.camp.bookingRules);
@@ -6272,6 +6296,11 @@ function initAdminInteractions() {
         showAvailabilityColors: !!campForm.elements.showAvailabilityColors.checked,
         showAvailability: !!campForm.elements.showAvailability.checked,
         showPricePerNight: !!campForm.elements.showPricePerNight.checked,
+        additionalPriceDisplay:
+          campForm.elements.namedItem("additionalPriceDisplay") instanceof HTMLSelectElement &&
+          campForm.elements.namedItem("additionalPriceDisplay").value === "calendar"
+            ? "calendar"
+            : "rooms",
         filterByRoomInCalendar: !!campForm.elements.filterByRoomInCalendar.checked,
         packageMode: campForm.elements.packageMode.value === "full_unit" ? "full_unit" : "individual_guests",
         packagesEnabled: !!campForm.elements.packagesEnabled.checked,
