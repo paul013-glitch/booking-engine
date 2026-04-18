@@ -1170,6 +1170,12 @@ select {
   gap: 12px;
 }
 
+.admin-form-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0 2px;
+}
+
 .checkbox-field {
   display: flex !important;
   align-items: center;

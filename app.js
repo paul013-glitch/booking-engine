@@ -3346,7 +3346,6 @@ function renderAdminPage() {
   let bookingDetailSaveStatus = document.getElementById("bookingDetailSaveStatus");
   const leadTableBody = document.getElementById("leadTableBody");
   const campForm = document.getElementById("campForm");
-  const analyticsForm = document.getElementById("analyticsForm");
   const packageForm = document.getElementById("packageForm");
   const roomForm = document.getElementById("roomForm");
   const addonForm = document.getElementById("addonForm");
@@ -3384,6 +3383,8 @@ function renderAdminPage() {
   if (campForm && shouldHydrateBookingEngineForm) {
     campForm.elements.campName.value = state.camp.name;
     campForm.elements.logoUrl.value = state.camp.logoUrl.startsWith("data:") ? "" : state.camp.logoUrl;
+    campForm.elements.ga4Id.value = state.camp.analytics?.ga4Id || "";
+    campForm.elements.pixelId.value = state.camp.analytics?.pixelId || "";
     campForm.elements.bg.value = state.camp.theme?.bg || seedState.camp.theme.bg;
     campForm.elements.panel.value = state.camp.theme?.panel || seedState.camp.theme.panel;
     campForm.elements.panelSoft.value = state.camp.theme?.panelSoft || seedState.camp.theme.panelSoft;
@@ -3413,11 +3414,6 @@ function renderAdminPage() {
       bookingEngineNotice.innerHTML = bookingEngineNoticeMarkup();
     }
     setBookingEngineSaveLoading(adminUiState.bookingEngineSaving);
-  }
-
-  if (analyticsForm) {
-    analyticsForm.elements.ga4Id.value = state.camp.analytics?.ga4Id || "";
-    analyticsForm.elements.pixelId.value = state.camp.analytics?.pixelId || "";
   }
 
   if (bookingUrlInput) {
@@ -3852,6 +3848,9 @@ function renderAdminPage() {
               <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="-1">Up</button>
               <button type="button" class="button button-secondary" data-move-room="${room.id}" data-move-direction="1">Down</button>
               <button type="button" class="button button-secondary" data-edit-room="${room.id}">Edit</button>
+              <button type="button" class="button button-secondary" data-toggle-room-enabled="${room.id}">
+                ${room.enabled === false ? "Enable" : "Disable"}
+              </button>
             </div>
           </div>
         `;
@@ -5727,7 +5726,6 @@ function readFileAsDataUrl(file) {
 
 function initAdminInteractions() {
   const campForm = document.getElementById("campForm");
-  const analyticsForm = document.getElementById("analyticsForm");
   const topbarLogout = document.getElementById("topbarLogout");
   const packageForm = document.getElementById("packageForm");
   const roomForm = document.getElementById("roomForm");
@@ -6014,6 +6012,8 @@ function initAdminInteractions() {
   const liveBrandingFields = new Set([
     "campName",
     "logoUrl",
+    "ga4Id",
+    "pixelId",
     "bg",
     "panel",
     "panelSoft",
@@ -6044,6 +6044,11 @@ function initAdminInteractions() {
     };
 
     state.camp.name = campForm.elements.campName.value.trim() || state.camp.name;
+    state.camp.analytics = {
+      ...(state.camp.analytics || {}),
+      ga4Id: campForm.elements.ga4Id.value.trim(),
+      pixelId: campForm.elements.pixelId.value.trim(),
+    };
     if (campForm.elements.logoUrl.value.trim()) {
       state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
     }
@@ -6158,17 +6163,6 @@ function initAdminInteractions() {
         embedCodeInput.value = embedScriptSnippet();
       }
     }
-  });
-
-  analyticsForm?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    state.camp.analytics = {
-      ga4Id: analyticsForm.elements.ga4Id.value.trim(),
-      pixelId: analyticsForm.elements.pixelId.value.trim(),
-    };
-    saveState();
-    applyTheme(state.camp.theme);
-    renderAdminPage();
   });
 
   packageForm?.addEventListener("submit", async (event) => {
@@ -6416,6 +6410,7 @@ function initAdminInteractions() {
     const editAddonButton = event.target?.closest?.("[data-edit-addon]");
     const movePackageButton = event.target?.closest?.("[data-move-package]");
     const moveRoomButton = event.target?.closest?.("[data-move-room]");
+    const toggleRoomEnabledButton = event.target?.closest?.("[data-toggle-room-enabled]");
     const moveAddonButton = event.target?.closest?.("[data-move-addon]");
     const editPromoButton = event.target?.closest?.("[data-edit-promo]");
     const movePromoButton = event.target?.closest?.("[data-move-promo]");
@@ -6436,6 +6431,16 @@ function initAdminInteractions() {
         saveState();
         renderAdminPage();
       }
+      return;
+    }
+
+    if (toggleRoomEnabledButton) {
+      const item = state.rooms.find((entry) => entry.id === toggleRoomEnabledButton.dataset.toggleRoomEnabled);
+      if (!item) return;
+      item.enabled = item.enabled === false;
+      ensureAvailabilityCoverage(state);
+      saveState();
+      renderAdminPage();
       return;
     }
 
