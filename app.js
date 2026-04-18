@@ -739,14 +739,13 @@ function promoFreeAddonValue(addonId) {
 function promoTotals() {
   const packageTotal = packagePrice();
   const stayTotal = stayBasePrice();
-  const appliedStayTotal = additionalPriceDisplayMode() === "calendar" ? stayTotal : 0;
   const roomUpgradeTotal = roomUpgradePrice();
   const baseAddonTotal = draft.addonIds.reduce((sum, addonId) => sum + Number(getAddon(addonId)?.price || 0), 0);
   const freeAddonDiscount = draft.addonIds.reduce(
     (sum, addonId) => sum + (selectedFreeAddonIds().includes(addonId) ? Number(getAddon(addonId)?.price || 0) : 0),
     0,
   );
-  const subtotal = packageTotal + appliedStayTotal + roomUpgradeTotal + baseAddonTotal - freeAddonDiscount;
+  const subtotal = packageTotal + stayTotal + roomUpgradeTotal + baseAddonTotal - freeAddonDiscount;
   const percentPromos = selectedPercentPromos();
   const totalAfterPercent = percentPromos.reduce((running, percent) => running - running * (percent / 100), subtotal);
   const roundedTotal = Math.max(0, Math.round(totalAfterPercent));
