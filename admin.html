@@ -473,7 +473,8 @@
                 Packages enabled
               </label>
             </div>
-            <button class="button button-primary" type="submit">Save booking engine</button>
+            <div id="bookingEngineNotice"></div>
+            <button class="button button-primary" type="submit" id="bookingEngineSaveButton">Save booking engine</button>
           </form>
         </section>
 
@@ -593,6 +594,10 @@
                 <label>
                   Learn more URL
                   <input name="learnMoreUrl" type="url" placeholder="https://..." />
+                </label>
+                <label class="checkbox-field checkbox-field-inline">
+                  <input name="enabled" type="checkbox" checked />
+                  Show this room in the booking engine
                 </label>
                 <label>
                   Or upload image

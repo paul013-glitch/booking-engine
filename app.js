@@ -9,6 +9,7 @@ const authState = {
 };
 
 let bookInteractionsInitialized = false;
+let embeddedErrorInteractionsInitialized = false;
 
 function bookingEmbedRuntime() {
   return typeof window !== "undefined" ? window.__SURFCAMP_BOOKING_EMBED__ || null : null;
@@ -28,6 +29,21 @@ function bookingRootNode() {
 
 function bookingHostElement() {
   return bookingEmbedRuntime()?.hostElement || null;
+}
+
+function fallbackCampContactName() {
+  const slug = requestedCampSlug();
+  const stateSlug = String(state?.camp?.slug || "").trim();
+  const stateName = String(state?.camp?.name || "").trim();
+  if (stateName && stateSlug && slug && stateSlug === slug) return stateName;
+  if (slug) {
+    return slug
+      .split("-")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+  return "the surf camp host";
 }
 
 function getBookElement(id) {
@@ -147,6 +163,10 @@ const adminUiState = {
   packageSaving: false,
   packageNotice: "",
   packageNoticeType: "info",
+  bookingEngineFormDirty: false,
+  bookingEngineSaving: false,
+  bookingEngineNotice: "",
+  bookingEngineNoticeType: "info",
   loadingVisible: true,
   loadingTitle: "Loading admin panel",
   loadingDetail: "Checking access and preparing the workspace.",
@@ -264,6 +284,7 @@ const seedState = {
       pricePerNight: 95,
       totalUnits: 4,
       capacity: 2,
+      enabled: true,
       learnMoreUrl: "",
       imageUrl:
         "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
@@ -275,6 +296,7 @@ const seedState = {
       pricePerNight: 75,
       totalUnits: 4,
       capacity: 4,
+      enabled: true,
       learnMoreUrl: "",
       imageUrl:
         "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80",
@@ -507,7 +529,10 @@ function normalizeWorkspaceData(data = {}) {
       )
     : normalizeOrderedCollection(structuredClone(seedState.packages));
   const normalizedRooms = Array.isArray(data.rooms)
-    ? normalizeOrderedCollection(data.rooms)
+    ? normalizeOrderedCollection(data.rooms).map((room) => ({
+        ...room,
+        enabled: room?.enabled !== false,
+      }))
     : normalizeOrderedCollection(structuredClone(seedState.rooms));
   const normalizedBookingRules = {
     ...seedState.camp.bookingRules,
@@ -1094,7 +1119,7 @@ function trackAnalyticsEvent(eventName, params = {}) {
 }
 
 function isArrivalAllowed(dateInput, bookingRules = seedState.camp.bookingRules) {
-  return orderedItems(state.rooms).some((room) => roomOpenForCheckin(room.id, dateInput));
+  return bookingVisibleRooms().some((room) => roomOpenForCheckin(room.id, dateInput));
 }
 
 function availabilityThresholds(bookingRules = state?.camp?.bookingRules || seedState.camp.bookingRules) {
@@ -1257,6 +1282,10 @@ function getPackage(id) {
 
 function getRoom(id) {
   return state.rooms.find((item) => item.id === id) || null;
+}
+
+function bookingVisibleRooms() {
+  return orderedItems(state.rooms).filter((room) => room.enabled !== false);
 }
 
 function getAddon(id) {
@@ -1793,7 +1822,7 @@ function availabilityDateKeysForRoom(roomId) {
 }
 
 function availabilityCalendarBounds() {
-  const keys = Array.from(new Set(state.rooms.flatMap((room) => availabilityDateKeysForRoom(room.id)))).sort(
+  const keys = Array.from(new Set(bookingVisibleRooms().flatMap((room) => availabilityDateKeysForRoom(room.id)))).sort(
     (a, b) => new Date(a) - new Date(b),
   );
 
@@ -1821,7 +1850,7 @@ function availabilityCalendarBounds() {
 
 function availabilityHasCoverageForDate(dateInput) {
   const dayKey = localDateKey(dateInput);
-  return state.rooms.some((room) => !!state.camp.availability?.[room.id]?.days?.[dayKey]);
+  return bookingVisibleRooms().some((room) => !!state.camp.availability?.[room.id]?.days?.[dayKey]);
 }
 
 function roomAvailabilityRow(roomId, dateInput) {
@@ -1844,7 +1873,7 @@ function roomOpenForCheckin(roomId, dateInput) {
 }
 
 function stayMinimumNightsForDate(dateInput) {
-  const openRows = orderedItems(state.rooms)
+  const openRows = bookingVisibleRooms()
     .map((room) => roomAvailabilityRow(room.id, dateInput))
     .filter((row) => row && row.openForCheckin !== false);
   if (!openRows.length) return defaultAvailabilityMinStay(state.packages);
@@ -1872,7 +1901,7 @@ function calendarDatePrice(dateInput) {
   if (!dateInput) return 0;
   const stayNights = shouldAutoSelectCheckout(dateInput) ? stayMinimumNightsForDate(dateInput) : 1;
   const stayEndDate = addDays(dateInput, stayNights);
-  const totals = orderedItems(state.rooms)
+  const totals = bookingVisibleRooms()
     .filter((room) => roomOpenForCheckin(room.id, dateInput) && roomAvailableSpots(room.id, dateInput, stayEndDate) > 0)
     .map((room) => dateKeysBetween(dateInput, stayEndDate).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0))
     .filter((value) => value > 0);
@@ -1896,7 +1925,7 @@ function campSpotsLeftForDate(startDate, nights = previewStayNights()) {
   if (!dateKeys.length) return 0;
 
   const dayTotals = dateKeys.map((dateKey) =>
-    orderedItems(state.rooms).reduce((sum, room) => {
+    bookingVisibleRooms().reduce((sum, room) => {
       const row = roomAvailabilityRow(room.id, dateKey);
       if (!row) return sum;
       const booked = bookedUnitsForDate(room.id, dateKey);
@@ -1915,7 +1944,7 @@ function roomConfiguredUnits(roomId, startDate) {
 
 function campConfiguredSpotsForDate(startDate, nights = previewStayNights()) {
   if (!startDate) return 0;
-  return orderedItems(state.rooms).reduce(
+  return bookingVisibleRooms().reduce(
     (sum, room) => sum + roomConfiguredUnits(room.id, startDate),
     0,
   );
@@ -1969,6 +1998,7 @@ function availabilityBandClass(spots) {
 }
 
 function roomAvailableSpots(roomId, startDate = draft.startDate, endDate = endDateForDraft()) {
+  if (getRoom(roomId)?.enabled === false) return 0;
   return availableUnits(roomId, startDate, endDate);
 }
 
@@ -2074,7 +2104,7 @@ function roomAllocationQuantity(roomId, allocations = draft.roomAllocations) {
 }
 
 function selectedRoomAllocationRows() {
-  return orderedItems(state.rooms)
+  return bookingVisibleRooms()
     .map((room) => ({
       ...room,
       quantity: roomAllocationQuantity(room.id),
@@ -2096,7 +2126,7 @@ function normalizeRoomAllocations() {
 
   const nextAllocations = {};
   let remaining = guestLimit;
-  for (const room of orderedItems(state.rooms)) {
+  for (const room of bookingVisibleRooms()) {
     const current = roomAllocationQuantity(room.id);
     const maxForRoom = Math.min(roomAvailableSpots(room.id, draft.startDate, endDateForDraft()), remaining);
     const next = Math.max(0, Math.min(current, maxForRoom));
@@ -2248,7 +2278,7 @@ function roomAvailabilitySnapshot(roomId, startDate = draft.startDate, endDate =
 }
 
 function firstAvailableRoom(startDate = draft.startDate, endDate = endDateForDraft()) {
-  return state.rooms.find((room) => availableUnits(room.id, startDate, endDate) > 0)?.id || null;
+  return bookingVisibleRooms().find((room) => availableUnits(room.id, startDate, endDate) > 0)?.id || null;
 }
 
 function firstRoomForParty(
@@ -2256,7 +2286,7 @@ function firstRoomForParty(
   endDate = endDateForDraft(),
   guestCount = selectedPackagePeopleCount(),
 ) {
-  return state.rooms.find((room) => roomCanFitParty(room.id, startDate, endDate, guestCount))?.id || null;
+  return bookingVisibleRooms().find((room) => roomCanFitParty(room.id, startDate, endDate, guestCount))?.id || null;
 }
 
 function ensureRoomSelection() {
@@ -2686,9 +2716,17 @@ function bookShellMarkup() {
 function renderEmbeddedBookError(message) {
   const host = bookingHostElement();
   if (!host) return;
+  const contactName = fallbackCampContactName();
   host.innerHTML = `
     <section class="panel wizard-panel">
-      <div class="notice">${escapeHtml(message)}</div>
+      <div class="notice">
+        <strong>We couldn’t load the booking engine right now.</strong>
+        <div style="margin-top: 8px;">${escapeHtml(message)}</div>
+        <div style="margin-top: 8px;">Please refresh and, if it keeps happening, contact ${escapeHtml(contactName)}.</div>
+        <div style="margin-top: 14px;">
+          <button type="button" class="button button-secondary" data-embedded-refresh>Refresh booking engine</button>
+        </div>
+      </div>
     </section>
   `;
 }
@@ -2727,7 +2765,7 @@ function renderBookPage() {
   const maxUnlockedStep = Math.max(0, Math.min(draft.currentStep, stepFlow.length - 1));
   const currentStepKey = currentBookingStepKey();
   const orderedPackages = orderedItems(state.packages);
-  const orderedRooms = orderedItems(state.rooms);
+  const orderedRooms = bookingVisibleRooms();
   const orderedAddons = orderedItems(state.addons);
   const addonGuestLimit = selectedPackagePeopleCount();
   const allocatedRoomGuests = selectedRoomAllocationPeopleCount();
@@ -3341,7 +3379,9 @@ function renderAdminPage() {
     adminUiState.availabilityRoomId = state.rooms[0]?.id || "shared-double";
   }
 
-  if (campForm) {
+  const shouldHydrateBookingEngineForm = !adminUiState.bookingEngineFormDirty && !adminUiState.bookingEngineSaving;
+
+  if (campForm && shouldHydrateBookingEngineForm) {
     campForm.elements.campName.value = state.camp.name;
     campForm.elements.logoUrl.value = state.camp.logoUrl.startsWith("data:") ? "" : state.camp.logoUrl;
     campForm.elements.bg.value = state.camp.theme?.bg || seedState.camp.theme.bg;
@@ -3365,6 +3405,14 @@ function renderAdminPage() {
     campForm.elements.showPricePerNight.checked = showPricePerNightInCalendar(state.camp.bookingRules);
     campForm.elements.packageMode.value = bookingPackageMode(state.camp.bookingRules);
     campForm.elements.packagesEnabled.checked = packagesEnabled(state.camp.bookingRules);
+  }
+
+  if (campForm) {
+    const bookingEngineNotice = document.getElementById("bookingEngineNotice");
+    if (bookingEngineNotice) {
+      bookingEngineNotice.innerHTML = bookingEngineNoticeMarkup();
+    }
+    setBookingEngineSaveLoading(adminUiState.bookingEngineSaving);
   }
 
   if (analyticsForm) {
@@ -3796,6 +3844,7 @@ function renderAdminPage() {
             </div>
             <div class="stack-item-top">
               <strong>${room.name}</strong>
+              <span class="pill">${room.enabled !== false ? "Enabled" : "Disabled"}</span>
             </div>
             <div class="tiny">${money(room.pricePerNight)} per night &middot; ${room.capacity} guests per room &middot; ${room.totalUnits} sellable spots</div>
             ${room.learnMoreUrl ? `<div class="tiny"><a class="learn-more-link" href="${escapeHtml(room.learnMoreUrl)}" target="_blank" rel="noopener noreferrer">Learn more</a></div>` : ""}
@@ -3956,6 +4005,7 @@ function renderAdminPage() {
       roomForm.elements.pricePerNight.value = editing.pricePerNight || 0;
       roomForm.elements.imageUrl.value = editing.imageUrl?.startsWith("data:") ? "" : editing.imageUrl || "";
       roomForm.elements.learnMoreUrl.value = editing.learnMoreUrl || "";
+      roomForm.elements.enabled.checked = editing.enabled !== false;
     }
   }
 
@@ -4423,10 +4473,16 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
 
 async function refreshAdminWorkspace({ silent = false } = {}) {
   if (!window.netlifyIdentity?.currentUser || !window.netlifyIdentity.currentUser()) return;
-  if (adminUiState.availabilityBulkDirty) {
+  if (adminUiState.availabilityBulkDirty || adminUiState.bookingEngineFormDirty) {
     if (!silent) {
-      adminUiState.availabilityNotice = "Finish or save the bulk edit before refreshing.";
-      adminUiState.availabilityNoticeType = "warning";
+      if (adminUiState.availabilityBulkDirty) {
+        adminUiState.availabilityNotice = "Finish or save the bulk edit before refreshing.";
+        adminUiState.availabilityNoticeType = "warning";
+      }
+      if (adminUiState.bookingEngineFormDirty) {
+        adminUiState.bookingEngineNotice = "Finish or save the booking engine changes before refreshing.";
+        adminUiState.bookingEngineNoticeType = "warning";
+      }
       renderAdminPage();
     }
     return;
@@ -5142,10 +5198,31 @@ function setPackageSaveLoading(isLoading) {
     : "Save package";
 }
 
+function setBookingEngineSaveLoading(isLoading) {
+  const button = document.getElementById("bookingEngineSaveButton");
+  if (!button) return;
+  button.disabled = isLoading;
+  button.classList.toggle("is-loading", isLoading);
+  button.innerHTML = isLoading
+    ? `<span class="button-spinner" aria-hidden="true"></span><span>Saving...</span>`
+    : "Save booking engine";
+}
+
 function packageNoticeMarkup() {
   if (!adminUiState.packageNotice) return "";
   const tone = adminUiState.packageNoticeType === "success" ? "success" : adminUiState.packageNoticeType === "error" ? "error" : "warning";
   return `<div class="notice ${tone}">${escapeHtml(adminUiState.packageNotice)}</div>`;
+}
+
+function bookingEngineNoticeMarkup() {
+  if (!adminUiState.bookingEngineNotice) return "";
+  const tone =
+    adminUiState.bookingEngineNoticeType === "success"
+      ? "success"
+      : adminUiState.bookingEngineNoticeType === "error"
+        ? "error"
+        : "warning";
+  return `<div class="notice ${tone}">${escapeHtml(adminUiState.bookingEngineNotice)}</div>`;
 }
 
 async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", currentStatus = "") {
@@ -5987,6 +6064,9 @@ function initAdminInteractions() {
   campForm?.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    adminUiState.bookingEngineFormDirty = true;
+    adminUiState.bookingEngineNotice = "";
+    adminUiState.bookingEngineNoticeType = "info";
     if (!liveBrandingFields.has(target.name)) return;
     syncBrandingPreview();
   });
@@ -5994,72 +6074,89 @@ function initAdminInteractions() {
   campForm?.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    adminUiState.bookingEngineFormDirty = true;
+    adminUiState.bookingEngineNotice = "";
+    adminUiState.bookingEngineNoticeType = "info";
     if (!liveBrandingFields.has(target.name)) return;
     syncBrandingPreview();
   });
 
   campForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    state.camp.name = campForm.elements.campName.value.trim() || state.camp.name;
-
-    const lowThreshold = Math.max(
-      1,
-      Number(campForm.elements.availabilityLowThreshold.value || seedState.camp.bookingRules.availabilityLowThreshold),
-    );
-    const midThreshold = Math.max(
-      lowThreshold,
-      Number(campForm.elements.availabilityMidThreshold.value || seedState.camp.bookingRules.availabilityMidThreshold),
-    );
-    state.camp.bookingRules = {
-      ...(state.camp.bookingRules || {}),
-      availabilityLowThreshold: lowThreshold,
-      availabilityMidThreshold: midThreshold,
-      availabilityCountVisibilityThreshold:
-        campForm.elements.availabilityCountVisibilityThreshold.value === ""
-          ? null
-          : Math.max(0, Number(campForm.elements.availabilityCountVisibilityThreshold.value)),
-      showAvailabilityColors: !!campForm.elements.showAvailabilityColors.checked,
-      showAvailability: !!campForm.elements.showAvailability.checked,
-      showPricePerNight: !!campForm.elements.showPricePerNight.checked,
-      packageMode: campForm.elements.packageMode.value === "full_unit" ? "full_unit" : "individual_guests",
-      packagesEnabled: !!campForm.elements.packagesEnabled.checked,
-    };
-
-    const logoFile = campForm.elements.logoFile.files?.[0];
-    if (logoFile) {
-      state.camp.logoUrl = await readFileAsDataUrl(logoFile);
-    } else if (campForm.elements.logoUrl.value.trim()) {
-      state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
-    }
-
-    state.camp.theme = {
-      ...(state.camp.theme || {}),
-      bg: campForm.elements.bg.value,
-      panel: campForm.elements.panel.value,
-      panelSoft: campForm.elements.panelSoft.value,
-      border: campForm.elements.border.value,
-      text: campForm.elements.text.value,
-      muted: campForm.elements.muted.value,
-      accent: campForm.elements.accent.value,
-      accentSoft: campForm.elements.accentSoft.value,
-      titleFont: campForm.elements.titleFont.value,
-      bodyFont: campForm.elements.bodyFont.value,
-    };
-    normalizePackageSelections();
-    normalizeCurrentBookStep();
-    normalizeAddonSelections();
-    normalizeRoomAllocations();
-    saveState();
-    applyTheme(state.camp.theme);
+    adminUiState.bookingEngineSaving = true;
+    adminUiState.bookingEngineNotice = "Saving booking engine...";
+    adminUiState.bookingEngineNoticeType = "info";
     renderAdminPage();
-    if (bookingUrlInput) {
-      bookingUrlInput.value = bookingUrl();
-    }
-    if (embedUrlInput) {
-      embedUrlInput.value = embedScriptUrl();
-    }
-    if (embedCodeInput) {
-      embedCodeInput.value = embedScriptSnippet();
+    try {
+      state.camp.name = campForm.elements.campName.value.trim() || state.camp.name;
+
+      const lowThreshold = Math.max(
+        1,
+        Number(campForm.elements.availabilityLowThreshold.value || seedState.camp.bookingRules.availabilityLowThreshold),
+      );
+      const midThreshold = Math.max(
+        lowThreshold,
+        Number(campForm.elements.availabilityMidThreshold.value || seedState.camp.bookingRules.availabilityMidThreshold),
+      );
+      state.camp.bookingRules = {
+        ...(state.camp.bookingRules || {}),
+        availabilityLowThreshold: lowThreshold,
+        availabilityMidThreshold: midThreshold,
+        availabilityCountVisibilityThreshold:
+          campForm.elements.availabilityCountVisibilityThreshold.value === ""
+            ? null
+            : Math.max(0, Number(campForm.elements.availabilityCountVisibilityThreshold.value)),
+        showAvailabilityColors: !!campForm.elements.showAvailabilityColors.checked,
+        showAvailability: !!campForm.elements.showAvailability.checked,
+        showPricePerNight: !!campForm.elements.showPricePerNight.checked,
+        packageMode: campForm.elements.packageMode.value === "full_unit" ? "full_unit" : "individual_guests",
+        packagesEnabled: !!campForm.elements.packagesEnabled.checked,
+      };
+
+      const logoFile = campForm.elements.logoFile.files?.[0];
+      if (logoFile) {
+        state.camp.logoUrl = await readFileAsDataUrl(logoFile);
+      } else if (campForm.elements.logoUrl.value.trim()) {
+        state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
+      }
+
+      state.camp.theme = {
+        ...(state.camp.theme || {}),
+        bg: campForm.elements.bg.value,
+        panel: campForm.elements.panel.value,
+        panelSoft: campForm.elements.panelSoft.value,
+        border: campForm.elements.border.value,
+        text: campForm.elements.text.value,
+        muted: campForm.elements.muted.value,
+        accent: campForm.elements.accent.value,
+        accentSoft: campForm.elements.accentSoft.value,
+        titleFont: campForm.elements.titleFont.value,
+        bodyFont: campForm.elements.bodyFont.value,
+      };
+      normalizePackageSelections();
+      normalizeCurrentBookStep();
+      normalizeAddonSelections();
+      normalizeRoomAllocations();
+      saveState();
+      applyTheme(state.camp.theme);
+      adminUiState.bookingEngineFormDirty = false;
+      adminUiState.bookingEngineNotice = "Booking engine saved.";
+      adminUiState.bookingEngineNoticeType = "success";
+    } catch (error) {
+      adminUiState.bookingEngineNotice = error instanceof Error ? error.message : "Could not save booking engine.";
+      adminUiState.bookingEngineNoticeType = "error";
+    } finally {
+      adminUiState.bookingEngineSaving = false;
+      renderAdminPage();
+      if (bookingUrlInput) {
+        bookingUrlInput.value = bookingUrl();
+      }
+      if (embedUrlInput) {
+        embedUrlInput.value = embedScriptUrl();
+      }
+      if (embedCodeInput) {
+        embedCodeInput.value = embedScriptSnippet();
+      }
     }
   });
 
@@ -6145,6 +6242,7 @@ function initAdminInteractions() {
       totalUnits: Number(roomForm.elements.totalUnits.value),
       capacity: Number(roomForm.elements.capacity.value),
       pricePerNight: Number(roomForm.elements.pricePerNight.value),
+      enabled: !!roomForm.elements.enabled.checked,
       imageUrl,
       learnMoreUrl: roomForm.elements.learnMoreUrl.value.trim(),
       order: existing?.order ?? nextOrderValue(state.rooms),
@@ -6398,10 +6496,11 @@ function initAdminInteractions() {
     roomForm.elements.name.value = item.name || "";
     roomForm.elements.description.value = item.description || "";
     roomForm.elements.totalUnits.value = item.totalUnits || 1;
-    roomForm.elements.capacity.value = item.capacity || 1;
-    roomForm.elements.pricePerNight.value = item.pricePerNight || 0;
-    roomForm.elements.imageUrl.value = item.imageUrl?.startsWith("data:") ? "" : item.imageUrl || "";
-    roomForm.elements.learnMoreUrl.value = item.learnMoreUrl || "";
+      roomForm.elements.capacity.value = item.capacity || 1;
+      roomForm.elements.pricePerNight.value = item.pricePerNight || 0;
+      roomForm.elements.imageUrl.value = item.imageUrl?.startsWith("data:") ? "" : item.imageUrl || "";
+      roomForm.elements.learnMoreUrl.value = item.learnMoreUrl || "";
+      roomForm.elements.enabled.checked = item.enabled !== false;
     renderAdminPage();
     return;
   }
@@ -6446,6 +6545,24 @@ function initAdminInteractions() {
       customerFieldForm.elements.required.checked = !!item.required;
       renderAdminPage();
     }
+  });
+}
+
+function initEmbeddedErrorInteractions() {
+  if (embeddedErrorInteractionsInitialized || typeof document === "undefined") return;
+  embeddedErrorInteractionsInitialized = true;
+
+  document.addEventListener("click", (event) => {
+    const retryButton = event.target?.closest?.("[data-embedded-refresh]");
+    if (!retryButton) return;
+    event.preventDefault();
+    if (!isEmbeddedBooking()) {
+      window.location.reload();
+      return;
+    }
+    retryButton.disabled = true;
+    retryButton.textContent = "Refreshing...";
+    void loadPublicWorkspace();
   });
 }
 
@@ -6584,6 +6701,7 @@ function init() {
     };
   }
 
+  initEmbeddedErrorInteractions();
   initBookSurface();
 
   if (document.getElementById("adminWorkspace")) {

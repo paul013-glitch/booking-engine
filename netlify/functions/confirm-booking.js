@@ -69,6 +69,11 @@ function roomAvailabilityRow(workspace, roomId, dateKey) {
   return workspace.camp?.availability?.[roomId]?.days?.[localDateKey(dateKey)] || null;
 }
 
+function roomEnabled(workspace, roomId) {
+  const room = (workspace.rooms || []).find((item) => item.id === roomId);
+  return room?.enabled !== false;
+}
+
 function roomOpenForCheckin(workspace, roomId, dateKey) {
   const row = roomAvailabilityRow(workspace, roomId, dateKey);
   if (!row) return false;
@@ -393,6 +398,9 @@ exports.handler = async (event) => {
     }
 
     for (const [roomId, guestCount] of roomAllocations) {
+      if (!roomEnabled(normalized, roomId)) {
+        return response(409, { error: `Room type ${roomId} is not available for booking.` });
+      }
       if (!roomOpenForCheckin(normalized, roomId, booking.startDate)) {
         return response(409, { error: `Room type ${roomId} is closed for check-in on this date.` });
       }
