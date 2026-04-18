@@ -2523,6 +2523,7 @@ function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
   const autoSelectedStay = draft.startDate && draft.endDate && draft.dateSelectionMode === "start" && shouldAutoSelectCheckout(draft.startDate);
   const roomFilterEnabled = bookingCalendarFilterEnabled();
   const roomFilterRooms = bookingVisibleRooms();
+  const showRoomFilter = roomFilterEnabled && roomFilterRooms.length > 1;
   const currentRoomFilter =
     roomFilterEnabled && (draft.calendarRoomFilter === "all" || roomFilterRooms.some((room) => room.id === draft.calendarRoomFilter))
       ? draft.calendarRoomFilter
@@ -2554,12 +2555,16 @@ function renderDateSelector(stepNumber = bookingStepIndex("date") + 1) {
 
       <div class="calendar-footer">
         <div class="calendar-note">
-          ${draft.startDate
-            ? `Selected stay: ${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}`
-            : "Availability colors reflect remaining sellable spots."}
+          ${
+            draft.startDate
+              ? `Selected stay: ${formatDate(draft.startDate)} to ${formatDate(endDateForDraft())}`
+              : showAvailabilityColors()
+                ? "Availability colors reflect remaining sellable spots."
+                : ""
+          }
         </div>
         ${
-          roomFilterEnabled
+          showRoomFilter
             ? `
         <label class="calendar-filter-row">
           <span>Room filter</span>
@@ -3495,7 +3500,10 @@ function renderAdminPage() {
     campForm.elements.showAvailabilityColors.checked = showAvailabilityColors(state.camp.bookingRules);
     campForm.elements.showAvailability.checked = showAvailabilityCounts(state.camp.bookingRules);
     campForm.elements.showPricePerNight.checked = showPricePerNightInCalendar(state.camp.bookingRules);
-    campForm.elements.filterByRoomInCalendar.checked = bookingCalendarFilterEnabled(state.camp.bookingRules);
+    const filterByRoomInCalendar = campForm.elements.namedItem("filterByRoomInCalendar");
+    if (filterByRoomInCalendar instanceof HTMLInputElement) {
+      filterByRoomInCalendar.checked = bookingCalendarFilterEnabled(state.camp.bookingRules);
+    }
     campForm.elements.packageMode.value = bookingPackageMode(state.camp.bookingRules);
     campForm.elements.packagesEnabled.checked = packagesEnabled(state.camp.bookingRules);
     adminUiState.bookingEngineLogoPreviewUrl = "";
