@@ -2953,15 +2953,7 @@ function renderBookPage() {
           ? dateKeysBetween(draft.startDate, endDateForDraft()).reduce((sum, dateKey) => sum + roomNightRate(room.id, dateKey), 0)
           : 0;
       const roomDisplayedCost = roomDisplayedPrice(roomTotalPrice);
-      const additionalPriceMode = additionalPriceDisplayMode();
-      const roomPriceLabel =
-        additionalPriceMode === "rooms"
-          ? roomDisplayedCost > 0
-            ? formatSurcharge(roomDisplayedCost)
-            : roomTotalPrice
-              ? "Included"
-              : ""
-          : "";
+      const roomPriceLabel = roomDisplayedCost > 0 ? formatSurcharge(roomDisplayedCost) : roomTotalPrice ? "Included" : "";
       return `
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
@@ -5660,7 +5652,6 @@ function initBookInteractions() {
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
         draft.hoverEndDate = "";
         draft.roomAllocations = {};
-        draft.calendarMonthOffset = calendarOffsetForDate(nextDate);
       } else if (isSelectableCheckoutDate(nextDate, draft.startDate)) {
         draft.endDate = nextDate;
         draft.dateSelectionMode = "start";
@@ -5672,7 +5663,6 @@ function initBookInteractions() {
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
         draft.hoverEndDate = "";
         draft.roomAllocations = {};
-        draft.calendarMonthOffset = calendarOffsetForDate(nextDate);
       }
         state.bookingConfirmation = null;
         trackAnalyticsEvent("search", {
@@ -5797,7 +5787,6 @@ function initBookInteractions() {
 
     if (target.id === "startDate") {
       draft.startDate = target.value;
-      draft.calendarMonthOffset = draft.startDate ? calendarOffsetForDate(draft.startDate) : 0;
       state.bookingConfirmation = null;
       trackAnalyticsEvent("search", {
         camp: bookingSlug(),
