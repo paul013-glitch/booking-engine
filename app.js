@@ -3295,7 +3295,7 @@ function renderBookPage() {
               ${draft.startDate ? `<span class="summary-subline">${bookingNights()} night${bookingNights() === 1 ? "" : "s"}</span>` : ""}
             </span>
           </div>
-          <strong>${draft.startDate ? money(stayBasePrice()) : ""}</strong>
+          <strong>${draft.startDate && additionalPriceDisplayMode() === "calendar" ? money(stayBasePrice()) : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
