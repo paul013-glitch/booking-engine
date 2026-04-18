@@ -2351,11 +2351,11 @@ function roomUpgradePrice() {
 }
 
 function roomDisplayedPrice(roomTotalPrice) {
-  return additionalPriceDisplayMode() === "rooms" ? roomTotalPrice : Math.max(0, roomTotalPrice - stayBasePrice());
+  return Math.max(0, roomTotalPrice - stayBasePrice());
 }
 
 function selectedRoomDisplayedPrice() {
-  return additionalPriceDisplayMode() === "rooms" ? roomPrice() : roomUpgradePrice();
+  return roomUpgradePrice();
 }
 
 function packagePrice() {
@@ -3295,7 +3295,7 @@ function renderBookPage() {
               ${draft.startDate ? `<span class="summary-subline">${bookingNights()} night${bookingNights() === 1 ? "" : "s"}</span>` : ""}
             </span>
           </div>
-          <strong>${draft.startDate && additionalPriceDisplayMode() === "calendar" ? money(stayBasePrice()) : ""}</strong>
+          <strong>${draft.startDate ? money(stayBasePrice()) : ""}</strong>
         </div>
         <div class="summary-item">
           <div>
@@ -5648,12 +5648,14 @@ function initBookInteractions() {
 
     if (target.dataset.selectDate) {
       const nextDate = target.dataset.selectDate;
+      const selectedMonthOffset = monthOffsetBetween(new Date(), nextDate);
       if (!draft.startDate || draft.dateSelectionMode !== "end") {
         draft.startDate = nextDate;
         draft.endDate = addDays(nextDate, stayMinimumNightsForDate(nextDate));
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
         draft.hoverEndDate = "";
         draft.roomAllocations = {};
+        draft.calendarMonthOffset = selectedMonthOffset;
       } else if (isSelectableCheckoutDate(nextDate, draft.startDate)) {
         draft.endDate = nextDate;
         draft.dateSelectionMode = "start";
@@ -5665,6 +5667,7 @@ function initBookInteractions() {
         draft.dateSelectionMode = shouldAutoSelectCheckout(nextDate) ? "start" : "end";
         draft.hoverEndDate = "";
         draft.roomAllocations = {};
+        draft.calendarMonthOffset = selectedMonthOffset;
       }
         state.bookingConfirmation = null;
         trackAnalyticsEvent("search", {
