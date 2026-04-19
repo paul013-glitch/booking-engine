@@ -2,7 +2,6 @@ const {
   createDefaultWorkspace,
   getUserFromContext,
   getWorkspaceForIdentity,
-  getWorkspaceForOwner,
   saveWorkspace,
   response,
 } = require("./_shared");
@@ -15,14 +14,14 @@ exports.handler = async (_event, context) => {
     }
 
     const ownerId = user.sub || user.email;
-    const existing = await getWorkspaceForOwner(ownerId);
-    if (existing) {
-      return response(200, existing);
-    }
-
-    const identityMatch = await getWorkspaceForIdentity({ ownerId, email: user.email });
-    if (identityMatch) {
-      return response(200, identityMatch);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const identityMatch = await getWorkspaceForIdentity({ ownerId, email: user.email });
+      if (identityMatch) {
+        return response(200, identityMatch);
+      }
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
     }
 
     const created = await saveWorkspace(

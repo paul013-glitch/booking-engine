@@ -174,6 +174,7 @@ const adminUiState = {
   loadingTitle: "Loading admin panel",
   loadingDetail: "Checking access and preparing the workspace.",
   loadingEmail: "",
+  loadingWorkspace: "",
   masterWorkspaces: [],
   masterWorkspaceFilter: "",
   masterWorkspaceView: "active",
@@ -184,6 +185,7 @@ const adminUiState = {
   masterLoadingTitle: "Loading master portal",
   masterLoadingDetail: "Checking owner access and preparing the tenant list.",
   masterLoadingEmail: "",
+  masterLoadingWorkspace: "",
   tenantWorkspaceId: "",
 };
 
@@ -4521,6 +4523,10 @@ function currentIdentityIsPlatformOwner() {
   return currentIdentityRoles().includes("platform-owner");
 }
 
+function currentWorkspaceDisplayName() {
+  return String(authState.workspace?.camp?.name || "").trim();
+}
+
 function requestedTenantWorkspaceId() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -4528,6 +4534,20 @@ function requestedTenantWorkspaceId() {
   } catch {
     return "";
   }
+}
+
+async function fetchWorkspaceWithRetry(workspaceUrl, headers = {}, attempts = 2) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await apiJson(workspaceUrl, { headers });
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+    }
+  }
+  throw lastError;
 }
 
 async function loadPublicWorkspace() {
@@ -4569,6 +4589,7 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
   const user = window.netlifyIdentity.currentUser();
   if (!user) return;
   const email = String(user.email || "").trim();
+  const workspaceName = currentWorkspaceDisplayName();
   console.log("[admin] loadAdminWorkspace:start", { email, showLoading });
 
   authState.user = user;
@@ -4576,7 +4597,7 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
   const loadSequence = (authState.workspaceLoadSequence || 0) + 1;
   authState.workspaceLoadSequence = loadSequence;
   if (showLoading) {
-    setAdminLoadingState(true, "Loading workspace", "Loading bookings, availability, business data, and settings.", email);
+    setAdminLoadingState(true, "Loading workspace", "Loading bookings, availability, business data, and settings.", email, workspaceName);
   }
   try {
     authState.token = await user.jwt();
@@ -4585,11 +4606,13 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
       tenantWorkspaceId && currentIdentityIsPlatformOwner()
         ? `master-workspace?workspaceId=${encodeURIComponent(tenantWorkspaceId)}`
         : "me-workspace";
-    const workspace = await apiJson(workspaceUrl, {
-      headers: {
+    const workspace = await fetchWorkspaceWithRetry(
+      workspaceUrl,
+      {
         Authorization: `Bearer ${authState.token}`,
       },
-    });
+      2,
+    );
 
     if (authState.workspaceLoadSequence !== loadSequence) return;
     if (workspace) {
@@ -4607,15 +4630,16 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
     if (authStatus) {
       authStatus.textContent = error instanceof Error ? error.message : "Could not load your workspace.";
     }
-    console.log("[admin] loadAdminWorkspace:error", {
-      email,
-      error: error instanceof Error ? error.message : String(error),
-    });
+      console.log("[admin] loadAdminWorkspace:error", {
+        email,
+        error: error instanceof Error ? error.message : String(error),
+      });
     setAdminLoadingState(
       true,
       "Could not load workspace",
       error instanceof Error ? error.message : "Could not load your workspace.",
       email,
+      workspaceName,
     );
   }
 }
@@ -4639,7 +4663,13 @@ async function refreshAdminWorkspace({ silent = false } = {}) {
 
   try {
     if (!silent) {
-      setAdminLoadingState(true, "Refreshing workspace", "Updating bookings, availability, and business data.");
+      setAdminLoadingState(
+        true,
+        "Refreshing workspace",
+        "Updating bookings, availability, and business data.",
+        currentIdentityEmail(),
+        currentWorkspaceDisplayName(),
+      );
     }
     await loadAdminWorkspace({ showLoading: !silent });
   } catch (error) {
@@ -4692,6 +4722,7 @@ function updateAdminAuthUI(user) {
   const signedIn = !!user;
   const workspaceReady = signedIn && !!authState.workspace && authState.workspaceLoaded !== false;
   const email = String(user?.email || "").trim();
+  const workspaceName = currentWorkspaceDisplayName();
   console.log("[admin] updateAdminAuthUI", { signedIn, email, workspaceLoaded: authState.workspaceLoaded, workspaceReady });
   adminWorkspace.hidden = !workspaceReady;
   if (adminLoading) {
@@ -4701,9 +4732,9 @@ function updateAdminAuthUI(user) {
   renderTopbarActions(user, workspaceReady);
 
   if (!signedIn) {
-    setAdminLoadingState(true, "Login required", "Sign in to load bookings, availability, and settings.", "");
+    setAdminLoadingState(true, "Login required", "Sign in to load bookings, availability, and settings.", "", "");
   } else if (!workspaceReady) {
-    setAdminLoadingState(true, "Loading workspace", "Loading bookings, availability, business data, and settings.", email);
+    setAdminLoadingState(true, "Loading workspace", "Loading bookings, availability, business data, and settings.", email, workspaceName);
   } else {
     setAdminLoadingState(false);
   }
@@ -4721,11 +4752,12 @@ function updateAdminAuthUI(user) {
   }
 }
 
-function setAdminLoadingState(visible, title = "Loading admin panel", detail = "", email = "") {
+function setAdminLoadingState(visible, title = "Loading admin panel", detail = "", email = "", workspaceName = "") {
   adminUiState.loadingVisible = !!visible;
   adminUiState.loadingTitle = title || "Loading admin panel";
   adminUiState.loadingDetail = detail || "";
   adminUiState.loadingEmail = email || "";
+  adminUiState.loadingWorkspace = workspaceName || "";
   renderAdminLoadingState();
 }
 
@@ -4743,22 +4775,30 @@ function renderAdminLoadingState() {
     email.hidden = !adminUiState.loadingEmail;
     email.textContent = adminUiState.loadingEmail ? `Signed in as ${adminUiState.loadingEmail}` : "";
   }
+  const workspace = document.getElementById("adminLoadingWorkspace");
+  if (workspace) {
+    workspace.hidden = !adminUiState.loadingWorkspace;
+    workspace.textContent = adminUiState.loadingWorkspace ? `Workspace: ${adminUiState.loadingWorkspace}` : "";
+  }
   console.log("[admin] renderAdminLoadingState", {
     visible: adminUiState.loadingVisible,
     title: adminUiState.loadingTitle,
     email: adminUiState.loadingEmail,
+    workspace: adminUiState.loadingWorkspace,
   });
 }
 
-function setMasterLoadingState(visible, title = "Loading master portal", detail = "", email = "") {
+function setMasterLoadingState(visible, title = "Loading master portal", detail = "", email = "", workspaceName = "") {
   adminUiState.masterLoadingVisible = !!visible;
   adminUiState.masterLoadingTitle = title || "Loading master portal";
   adminUiState.masterLoadingDetail = detail || "";
   adminUiState.masterLoadingEmail = email || "";
+  adminUiState.masterLoadingWorkspace = workspaceName || "";
   const loading = document.getElementById("masterLoading");
   const titleNode = document.getElementById("masterLoadingTitle");
   const detailNode = document.getElementById("masterLoadingDetail");
   const emailNode = document.getElementById("masterLoadingEmail");
+  const workspaceNode = document.getElementById("masterLoadingWorkspace");
   if (!loading) return;
   loading.hidden = !adminUiState.masterLoadingVisible;
   loading.setAttribute("aria-busy", adminUiState.masterLoadingVisible ? "true" : "false");
@@ -4768,10 +4808,15 @@ function setMasterLoadingState(visible, title = "Loading master portal", detail 
     emailNode.hidden = !adminUiState.masterLoadingEmail;
     emailNode.textContent = adminUiState.masterLoadingEmail ? `Signed in as ${adminUiState.masterLoadingEmail}` : "";
   }
+  if (workspaceNode) {
+    workspaceNode.hidden = !adminUiState.masterLoadingWorkspace;
+    workspaceNode.textContent = adminUiState.masterLoadingWorkspace ? `Workspace: ${adminUiState.masterLoadingWorkspace}` : "";
+  }
   console.log("[master] setMasterLoadingState", {
     visible: adminUiState.masterLoadingVisible,
     title: adminUiState.masterLoadingTitle,
     email: adminUiState.masterLoadingEmail,
+    workspace: adminUiState.masterLoadingWorkspace,
     detail: adminUiState.masterLoadingDetail,
   });
 }
@@ -4809,6 +4854,7 @@ function updateMasterAuthUI(user) {
   const signedIn = !!user;
   const workspaceReady = signedIn && adminUiState.masterWorkspaceReady && !adminUiState.masterWorkspaceLoading;
   const email = String(user?.email || "").trim();
+  const workspaceName = currentWorkspaceDisplayName();
   console.log("[master] updateMasterAuthUI", {
     signedIn,
     email,
@@ -4824,11 +4870,11 @@ function updateMasterAuthUI(user) {
   if (!signedIn) {
     setMasterLoadingState(true, "Login required", "Log in with the SaaS owner account to see all tenants.", "");
   } else if (adminUiState.masterWorkspaceError) {
-    setMasterLoadingState(true, "Owner access required", adminUiState.masterWorkspaceError, email);
+    setMasterLoadingState(true, "Owner access required", adminUiState.masterWorkspaceError, email, workspaceName);
   } else if (!workspaceReady) {
-    setMasterLoadingState(true, "Loading master portal", "Loading all tenant accounts and booking links.", email);
+    setMasterLoadingState(true, "Loading master portal", "Loading all tenant accounts and booking links.", email, workspaceName);
   } else {
-    setMasterLoadingState(false, "Loading master portal", "Loading all tenant accounts and booking links.", email);
+    setMasterLoadingState(false, "Loading master portal", "Loading all tenant accounts and booking links.", email, workspaceName);
   }
   renderMasterTopbarActions(user, workspaceReady);
   if (authStatus) {
@@ -4866,12 +4912,13 @@ function masterWorkspaceFilteredRows() {
 async function loadMasterWorkspaces({ showLoading = true } = {}) {
   if (!window.netlifyIdentity?.currentUser) return;
   const email = currentIdentityEmail();
+  const workspaceName = currentWorkspaceDisplayName();
   console.log("[master] loadMasterWorkspaces:start", { email, showLoading });
   adminUiState.masterWorkspaceLoading = true;
   adminUiState.masterWorkspaceReady = false;
   adminUiState.masterWorkspaceError = "";
   if (showLoading) {
-    setMasterLoadingState(true, "Loading master portal", "Loading all tenant accounts and booking links.", email);
+    setMasterLoadingState(true, "Loading master portal", "Loading all tenant accounts and booking links.", email, workspaceName);
   }
   try {
     const token = await window.netlifyIdentity.currentUser().jwt();
@@ -4894,7 +4941,7 @@ async function loadMasterWorkspaces({ showLoading = true } = {}) {
     const message = adminUiState.masterWorkspaceError === "Forbidden"
       ? "This portal is reserved for the SaaS owner account."
       : adminUiState.masterWorkspaceError;
-    setMasterLoadingState(true, "Owner access required", message, email);
+    setMasterLoadingState(true, "Owner access required", message, email, workspaceName);
     console.log("[master] loadMasterWorkspaces:error", { email, error: adminUiState.masterWorkspaceError });
   }
 }
