@@ -439,8 +439,8 @@ function stores() {
     }
   }
 
-  const siteID = blobContext?.siteID || (!runningOnNetlify ? process.env.SITE_ID : "");
-  const token = blobContext?.token || (!runningOnNetlify ? process.env.NETLIFY_BLOBS_TOKEN : "");
+  const siteID = blobContext?.siteID || process.env.SITE_ID || "";
+  const token = blobContext?.token || process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_AUTH_TOKEN || "";
   const storeOptions =
     siteID && token
       ? {
