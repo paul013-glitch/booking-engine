@@ -425,7 +425,7 @@ function normalizeWorkspace(data = {}) {
 }
 
 function stores() {
-  const rawContext = process.env.NETLIFY_BLOBS_CONTEXT || globalThis.netlifyBlobsContext;
+  const rawContext = globalThis.netlifyBlobsContext || process.env.NETLIFY_BLOBS_CONTEXT;
   let blobContext = null;
 
   if (rawContext) {
@@ -437,8 +437,10 @@ function stores() {
     }
   }
 
-  const siteID = blobContext?.siteID || process.env.SITE_ID;
-  const token = blobContext?.token || process.env.NETLIFY_BLOBS_TOKEN;
+  const runningOnNetlify =
+    process.env.NETLIFY === "true" || !!process.env.DEPLOY_ID || !!process.env.CONTEXT || !!globalThis.netlifyBlobsContext;
+  const siteID = blobContext?.siteID || (!runningOnNetlify ? process.env.SITE_ID : "");
+  const token = blobContext?.token || (!runningOnNetlify ? process.env.NETLIFY_BLOBS_TOKEN : "");
   const storeOptions =
     siteID && token
       ? {
