@@ -146,6 +146,21 @@ function seedBilling(now = new Date()) {
   };
 }
 
+function seedStripeConnection() {
+  return {
+    accountId: "",
+    status: "not_connected",
+    chargesEnabled: false,
+    payoutsEnabled: false,
+    detailsSubmitted: false,
+    country: "",
+    defaultCurrency: "",
+    livemode: false,
+    connectedAt: "",
+    lastSyncAt: "",
+  };
+}
+
 function startOfWeek(dateInput) {
   const date = new Date(dateInput);
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
@@ -371,6 +386,18 @@ function normalizeWorkspace(data = {}) {
     ...base.camp.billing,
     ...((data.camp && data.camp.billing) || {}),
   };
+  const stripe = {
+    ...seedStripeConnection(),
+    ...((data.camp && data.camp.stripe) || {}),
+  };
+  stripe.accountId = String(stripe.accountId || "").startsWith("acct_") ? String(stripe.accountId) : "";
+  stripe.status = stripe.accountId
+    ? stripe.chargesEnabled
+      ? "connected"
+      : stripe.detailsSubmitted
+        ? "pending"
+        : stripe.status || "pending"
+    : "not_connected";
   const availability = migrateAvailabilityDays((data.camp && data.camp.availability) || {}, rooms, bookingRules, packages);
 
   return {
@@ -388,6 +415,7 @@ function normalizeWorkspace(data = {}) {
         ...((data.camp && data.camp.theme) || {}),
       },
       billing,
+      stripe,
       bookingRules,
       availability,
       customerFields: Array.isArray(data?.camp?.customerFields) ? data.camp.customerFields : base.camp.customerFields,

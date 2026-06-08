@@ -170,6 +170,9 @@ const adminUiState = {
   bookingEngineNotice: "",
   bookingEngineNoticeType: "info",
   bookingEngineLogoPreviewUrl: "",
+  stripeConnectNotice: "",
+  stripeConnectNoticeType: "info",
+  stripeConnectLoading: false,
   loadingVisible: true,
   loadingTitle: "Loading admin panel",
   loadingDetail: "Checking access and preparing the workspace.",
@@ -222,6 +225,18 @@ const seedState = {
     analytics: {
       ga4Id: "",
       pixelId: "",
+    },
+    stripe: {
+      accountId: "",
+      status: "not_connected",
+      chargesEnabled: false,
+      payoutsEnabled: false,
+      detailsSubmitted: false,
+      country: "",
+      defaultCurrency: "",
+      livemode: false,
+      connectedAt: "",
+      lastSyncAt: "",
     },
     billing: createDefaultBilling(),
     customerFields: [],
@@ -578,6 +593,24 @@ function normalizeWorkspaceData(data = {}) {
     normalizedBookingRules,
     normalizedPackages,
   );
+  const normalizedStripe = {
+    ...(seedState.camp.stripe || {}),
+    ...((data.camp && data.camp.stripe) || {}),
+  };
+  normalizedStripe.accountId = String(normalizedStripe.accountId || "").startsWith("acct_")
+    ? String(normalizedStripe.accountId)
+    : "";
+  normalizedStripe.chargesEnabled = !!normalizedStripe.chargesEnabled;
+  normalizedStripe.payoutsEnabled = !!normalizedStripe.payoutsEnabled;
+  normalizedStripe.detailsSubmitted = !!normalizedStripe.detailsSubmitted;
+  normalizedStripe.livemode = !!normalizedStripe.livemode;
+  normalizedStripe.status = normalizedStripe.accountId
+    ? normalizedStripe.chargesEnabled
+      ? "connected"
+      : normalizedStripe.detailsSubmitted
+        ? "pending"
+        : normalizedStripe.status || "pending"
+    : "not_connected";
 
   return {
     ...structuredClone(seedState),
@@ -601,6 +634,7 @@ function normalizeWorkspaceData(data = {}) {
         ...seedState.camp.analytics,
         ...((data.camp && data.camp.analytics) || {}),
       },
+      stripe: normalizedStripe,
       customerFields: Array.isArray(data?.camp?.customerFields)
         ? data.camp.customerFields.map(normalizeCustomerField)
         : structuredClone(seedState.camp.customerFields || []),
@@ -3218,7 +3252,7 @@ function renderBookPage() {
                 <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
               </label>
               <div class="notice">
-                Your reservation is held for 15 minutes while you complete the Stripe test payment.
+                Your reservation is held for 15 minutes while you complete the secure Stripe payment.
               </div>
             `
         }
@@ -3260,7 +3294,7 @@ function renderBookPage() {
             ? {
                 id: "bookButton",
                 disabled: summaryButtonLoading,
-                label: summaryButtonLoading ? "Opening Stripe..." : "Pay deposit >",
+                label: summaryButtonLoading ? "Opening Stripe..." : "Pay securely >",
               }
             : {
                 id: null,
@@ -3569,6 +3603,7 @@ function renderAdminPage() {
       bookingEngineNotice.innerHTML = bookingEngineNoticeMarkup();
     }
     setBookingEngineSaveLoading(adminUiState.bookingEngineSaving);
+    renderStripeConnectPanel();
   }
 
   if (bookingUrlInput) {
@@ -4629,6 +4664,9 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
       renderAdminPage();
       setAdminLoadingState(false);
       updateAdminAuthUI(user);
+      if (stripeReturnMode()) {
+        void refreshStripeConnectStatus({ fromReturn: true });
+      }
       console.log("[admin] loadAdminWorkspace:success", { email, workspaceId: workspace.id });
     }
   } catch (error) {
@@ -5446,6 +5484,79 @@ function bookingEngineNoticeMarkup() {
   return `<div class="notice ${tone}">${escapeHtml(adminUiState.bookingEngineNotice)}</div>`;
 }
 
+function stripeConnection() {
+  return state?.camp?.stripe || seedState.camp.stripe || {};
+}
+
+function stripeConnectionStatusLabel(stripe = stripeConnection()) {
+  if (!stripe.accountId) return "Not connected";
+  if (stripe.chargesEnabled) return "Connected";
+  if (stripe.detailsSubmitted) return "Pending Stripe review";
+  return "Setup incomplete";
+}
+
+function stripeConnectionDetail(stripe = stripeConnection()) {
+  if (!stripe.accountId) {
+    return "Connect this workspace to the host's own Stripe account before guests can pay online.";
+  }
+  const parts = [
+    stripe.accountId,
+    stripe.livemode ? "live mode" : "test mode",
+    stripe.defaultCurrency ? String(stripe.defaultCurrency).toUpperCase() : "",
+  ].filter(Boolean);
+  const accountLine = parts.join(" · ");
+  if (stripe.chargesEnabled) {
+    return `Ready to accept payments. ${accountLine}`;
+  }
+  if (stripe.detailsSubmitted) {
+    return `Stripe has the onboarding details and is reviewing this account. ${accountLine}`;
+  }
+  return `Finish Stripe onboarding to enable guest payments. ${accountLine}`;
+}
+
+function stripeConnectNoticeMarkup() {
+  if (!adminUiState.stripeConnectNotice) return "";
+  const tone =
+    adminUiState.stripeConnectNoticeType === "success"
+      ? "success"
+      : adminUiState.stripeConnectNoticeType === "error"
+        ? "error"
+        : "warning";
+  return `<div class="notice ${tone}">${escapeHtml(adminUiState.stripeConnectNotice)}</div>`;
+}
+
+function setStripeConnectLoading(isLoading) {
+  const connectButton = document.getElementById("connectStripeButton");
+  const refreshButton = document.getElementById("refreshStripeStatusButton");
+  const stripe = stripeConnection();
+  const connectLabel = stripe.accountId && !stripe.chargesEnabled ? "Continue Stripe setup" : stripe.accountId ? "Update Stripe" : "Connect Stripe";
+  if (connectButton) {
+    connectButton.disabled = isLoading || !authState.workspaceLoaded;
+    connectButton.classList.toggle("is-loading", isLoading);
+    connectButton.innerHTML = isLoading
+      ? `<span class="button-spinner" aria-hidden="true"></span><span>Opening Stripe...</span>`
+      : connectLabel;
+  }
+  if (refreshButton) {
+    refreshButton.disabled = isLoading || !stripe.accountId || !authState.workspaceLoaded;
+  }
+}
+
+function renderStripeConnectPanel() {
+  const panel = document.getElementById("stripeConnectPanel");
+  if (!panel) return;
+  const stripe = stripeConnection();
+  const status = document.getElementById("stripeConnectStatus");
+  const detail = document.getElementById("stripeConnectDetail");
+  const notice = document.getElementById("stripeConnectNotice");
+  panel.classList.toggle("is-connected", !!stripe.accountId && !!stripe.chargesEnabled);
+  panel.classList.toggle("is-pending", !!stripe.accountId && !stripe.chargesEnabled);
+  if (status) status.textContent = stripeConnectionStatusLabel(stripe);
+  if (detail) detail.textContent = stripeConnectionDetail(stripe);
+  if (notice) notice.innerHTML = stripeConnectNoticeMarkup();
+  setStripeConnectLoading(adminUiState.stripeConnectLoading);
+}
+
 async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", currentStatus = "") {
   if (!bookingId || !targetStatus) return;
   const normalizedStatus = ["confirmed", "held", "cancelled"].includes(targetStatus) ? targetStatus : "confirmed";
@@ -5957,6 +6068,103 @@ function readFileAsDataUrl(file) {
   });
 }
 
+function stripeReturnMode() {
+  try {
+    return new URLSearchParams(window.location.search).get("stripe") || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function clearStripeReturnMode() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("stripe")) return;
+    url.searchParams.delete("stripe");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch (error) {
+    // This only cleans up the convenience refresh flag after returning from Stripe.
+  }
+}
+
+async function startStripeConnect() {
+  if (adminUiState.stripeConnectLoading) return;
+  if (!authState.workspace?.id || !authState.token) {
+    adminUiState.stripeConnectNotice = "Load the workspace first, then connect Stripe.";
+    adminUiState.stripeConnectNoticeType = "error";
+    renderStripeConnectPanel();
+    return;
+  }
+
+  adminUiState.stripeConnectLoading = true;
+  adminUiState.stripeConnectNotice = "Opening secure Stripe onboarding...";
+  adminUiState.stripeConnectNoticeType = "info";
+  renderStripeConnectPanel();
+
+  try {
+    const origin = window.location.origin;
+    const result = await apiJson("stripe-connect-start", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authState.token}` },
+      body: JSON.stringify({
+        workspaceId: authState.workspace.id,
+        siteUrl: origin,
+        returnUrl: `${origin}/admin.html?stripe=connected`,
+        refreshUrl: `${origin}/admin.html?stripe=refresh`,
+      }),
+    });
+    if (result?.workspace) {
+      hydrateStateFromWorkspace(result.workspace);
+      authState.workspace = result.workspace;
+    }
+    if (!result?.onboardingUrl) {
+      throw new Error("Stripe did not return an onboarding URL.");
+    }
+    window.location.assign(result.onboardingUrl);
+  } catch (error) {
+    adminUiState.stripeConnectNotice = error instanceof Error ? error.message : "Could not start Stripe onboarding.";
+    adminUiState.stripeConnectNoticeType = "error";
+    adminUiState.stripeConnectLoading = false;
+    renderAdminPage();
+  }
+}
+
+async function refreshStripeConnectStatus({ fromReturn = false } = {}) {
+  if (adminUiState.stripeConnectLoading) return;
+  if (!authState.workspace?.id || !authState.token) return;
+
+  adminUiState.stripeConnectLoading = true;
+  adminUiState.stripeConnectNotice = fromReturn ? "Checking Stripe onboarding status..." : "Refreshing Stripe status...";
+  adminUiState.stripeConnectNoticeType = "info";
+  renderStripeConnectPanel();
+
+  try {
+    const result = await apiJson("stripe-connect-status", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authState.token}` },
+      body: JSON.stringify({ workspaceId: authState.workspace.id }),
+    });
+    if (result?.workspace) {
+      hydrateStateFromWorkspace(result.workspace);
+      authState.workspace = result.workspace;
+    }
+    const stripe = result?.stripe || stripeConnection();
+    adminUiState.stripeConnectNotice = stripe.chargesEnabled
+      ? "Stripe is connected and ready for guest payments."
+      : stripe.accountId
+        ? "Stripe setup is saved, but onboarding is not fully complete yet."
+        : "Stripe is not connected yet.";
+    adminUiState.stripeConnectNoticeType = stripe.chargesEnabled ? "success" : "info";
+    clearStripeReturnMode();
+  } catch (error) {
+    adminUiState.stripeConnectNotice = error instanceof Error ? error.message : "Could not refresh Stripe status.";
+    adminUiState.stripeConnectNoticeType = "error";
+  } finally {
+    adminUiState.stripeConnectLoading = false;
+    renderAdminPage();
+  }
+}
+
 function initAdminInteractions() {
   const campForm = document.getElementById("campForm");
   const topbarLogout = document.getElementById("topbarLogout");
@@ -5969,6 +6177,8 @@ function initAdminInteractions() {
   const copyEmbedUrlButton = document.getElementById("copyEmbedUrl");
   const embedCodeInput = document.getElementById("embedCode");
   const copyEmbedCodeButton = document.getElementById("copyEmbedCode");
+  const connectStripeButton = document.getElementById("connectStripeButton");
+  const refreshStripeStatusButton = document.getElementById("refreshStripeStatusButton");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
   const availabilityBulkStart = document.getElementById("availabilityBulkStart");
   const availabilityBulkEnd = document.getElementById("availabilityBulkEnd");
@@ -5996,6 +6206,12 @@ function initAdminInteractions() {
   if (embedCodeInput) {
     embedCodeInput.value = embedScriptSnippet();
   }
+  connectStripeButton?.addEventListener("click", () => {
+    void startStripeConnect();
+  });
+  refreshStripeStatusButton?.addEventListener("click", () => {
+    void refreshStripeConnectStatus();
+  });
 
   document.addEventListener("click", (event) => {
     const bookingRow = event.target?.closest?.("[data-booking-open]");

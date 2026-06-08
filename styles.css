@@ -1237,6 +1237,53 @@ select {
   margin: 6px 0 2px;
 }
 
+.payment-connect-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel-soft);
+}
+
+.payment-connect-panel.is-connected {
+  border-color: color-mix(in srgb, #8db27d 45%, var(--border));
+  background: color-mix(in srgb, #8db27d 10%, var(--panel));
+}
+
+.payment-connect-panel.is-pending {
+  border-color: color-mix(in srgb, #c79541 45%, var(--border));
+}
+
+.payment-connect-panel strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.payment-connect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .payment-connect-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .payment-connect-actions {
+    justify-content: stretch;
+  }
+
+  .payment-connect-actions .button {
+    flex: 1 1 160px;
+  }
+}
+
 .checkbox-field {
   display: flex !important;
   align-items: center;

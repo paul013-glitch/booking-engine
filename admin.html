@@ -491,6 +491,20 @@
               </label>
             </div>
             <div class="admin-form-divider"></div>
+            <h3>Payments</h3>
+            <div id="stripeConnectPanel" class="payment-connect-panel">
+              <div>
+                <span class="tiny">Stripe Connect</span>
+                <strong id="stripeConnectStatus">Not connected</strong>
+                <p id="stripeConnectDetail" class="helper">Connect Stripe to accept secure guest payments for this workspace.</p>
+              </div>
+              <div class="payment-connect-actions">
+                <button class="button button-primary" type="button" id="connectStripeButton">Connect Stripe</button>
+                <button class="button button-secondary" type="button" id="refreshStripeStatusButton">Refresh status</button>
+              </div>
+            </div>
+            <div id="stripeConnectNotice"></div>
+            <div class="admin-form-divider"></div>
             <h3>Analytics</h3>
             <div class="two-col">
               <label>

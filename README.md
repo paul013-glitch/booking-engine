@@ -37,9 +37,23 @@ If the workspace API shows a Blobs configuration error, add these site environme
 
 The functions will read `NETLIFY_BLOBS_CONTEXT` first, then fall back to `SITE_ID` plus a token.
 
+## Stripe Connect setup
+
+Tenant Stripe secrets are never stored in workspaces. The platform uses Stripe Connect and stores only each
+workspace's connected `acct_...` id plus onboarding status.
+
+Set these Netlify environment variables:
+
+- `STRIPE_SECRET_KEY` for the platform Stripe account
+- `STRIPE_WEBHOOK_SECRET` for `/.netlify/functions/stripe-webhook`
+- optional `STRIPE_PAYMENT_PERCENT` from `1` to `100`; defaults to `100`
+
+In Stripe, configure the webhook endpoint to receive Connect events for `checkout.session.completed`.
+Camp owners connect their own Stripe account from Admin > Booking Engine > Payments.
+
 ## Next real backend steps
 
-1. Add Stripe Checkout and webhook confirmation
+1. Add refund handling and clearer failed-payment recovery
 2. Expand confirmation email delivery with your preferred provider settings
 3. Add inventory locking for holds and cancellations
 4. Split the workspace API into finer admin endpoints when the app grows

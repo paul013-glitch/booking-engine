@@ -91,6 +91,7 @@ exports.handler = async (event) => {
         stripePaymentIntentId: session.payment_intent || booking.stripePaymentIntentId || "",
         stripePaymentAmount: Number(session.amount_total || 0) / 100,
         stripePaymentCurrency: String(session.currency || "eur").toUpperCase(),
+        stripeAccountId: stripeEvent.account || booking.stripeAccountId || "",
         notes: booking.notes || "Paid via Stripe checkout.",
       };
       return confirmedBooking;

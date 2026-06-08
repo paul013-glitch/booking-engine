@@ -10,7 +10,6 @@ const crypto = require("crypto");
 
 const HOLD_MINUTES = 15;
 const STRIPE_SESSION_MINUTES = 31;
-const TEST_PAYMENT_DIVISOR = 100;
 
 function localDateKey(dateInput) {
   const date = new Date(dateInput);
@@ -139,13 +138,20 @@ function guestGenderList(booking = {}) {
 
 function stripeAmountCents(realTotalEuros) {
   const realTotal = Math.max(0, Number(realTotalEuros || 0));
-  return Math.max(50, Math.round((realTotal * 100) / TEST_PAYMENT_DIVISOR));
+  const percent = Number.isFinite(Number(process.env.STRIPE_PAYMENT_PERCENT))
+    ? Math.max(1, Math.min(100, Number(process.env.STRIPE_PAYMENT_PERCENT)))
+    : 100;
+  return Math.max(50, Math.round(realTotal * 100 * (percent / 100)));
 }
 
 async function createStripeCheckoutSession({ workspace, bookingRecord, successUrl, cancelUrl }) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
     throw new Error("Stripe is not configured. Add STRIPE_SECRET_KEY in Netlify environment variables.");
+  }
+  const stripeAccountId = workspace.camp?.stripe?.accountId || "";
+  if (!stripeAccountId || !workspace.camp?.stripe?.chargesEnabled) {
+    throw new Error("Stripe is not connected for this booking engine yet.");
   }
 
   const amount = stripeAmountCents(bookingRecord.total);
@@ -158,8 +164,8 @@ async function createStripeCheckoutSession({ workspace, bookingRecord, successUr
   params.append("line_items[0][quantity]", "1");
   params.append("line_items[0][price_data][currency]", "eur");
   params.append("line_items[0][price_data][unit_amount]", String(amount));
-  params.append("line_items[0][price_data][product_data][name]", `Test deposit for ${workspace.camp?.name || "booking"}`);
-  params.append("line_items[0][price_data][product_data][description]", `Reservation ${bookingRecord.reservationCode}. Test charge is 100x less than the real total.`);
+  params.append("line_items[0][price_data][product_data][name]", `Booking at ${workspace.camp?.name || "camp"}`);
+  params.append("line_items[0][price_data][product_data][description]", `Reservation ${bookingRecord.reservationCode}.`);
   params.append("metadata[workspaceId]", workspace.id);
   params.append("metadata[workspaceSlug]", workspace.camp?.slug || "");
   params.append("metadata[bookingId]", bookingRecord.id);
@@ -173,6 +179,7 @@ async function createStripeCheckoutSession({ workspace, bookingRecord, successUr
     headers: {
       Authorization: `Bearer ${secretKey}`,
       "Content-Type": "application/x-www-form-urlencoded",
+      "Stripe-Account": stripeAccountId,
     },
     body: params.toString(),
   });
@@ -275,6 +282,7 @@ exports.handler = async (event) => {
     bookingRecord.stripeCheckoutSessionId = session.id;
     bookingRecord.stripePaymentAmount = stripeAmountCents(bookingRecord.total) / 100;
     bookingRecord.stripePaymentCurrency = "EUR";
+    bookingRecord.stripeAccountId = normalized.camp?.stripe?.accountId || "";
 
     const intentRecord = {
       ...bookingRecord,

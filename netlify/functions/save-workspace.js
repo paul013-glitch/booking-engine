@@ -32,9 +32,15 @@ exports.handler = async (event, context) => {
       return response(403, { error: "Forbidden" });
     }
 
+    const incomingWorkspace = payload.workspace || {};
     const workspace = normalizeWorkspace({
       ...(existing || {}),
-      ...(payload.workspace || {}),
+      ...incomingWorkspace,
+      camp: {
+        ...((existing || {}).camp || {}),
+        ...(incomingWorkspace.camp || {}),
+        stripe: existing?.camp?.stripe || {},
+      },
       ownerId: existing?.ownerId || ownerId,
       ownerEmail: existing?.ownerEmail || user.email,
       id: payload.workspaceId || existing?.id || `workspace-${Date.now()}`,
