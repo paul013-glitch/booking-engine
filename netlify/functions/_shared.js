@@ -438,13 +438,22 @@ function stores() {
   }
 
   const siteID = blobContext?.siteID || process.env.SITE_ID;
-  const token = blobContext?.token || process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_AUTH_TOKEN;
-  const storeOptions = siteID && token ? { siteID, token, apiURL: blobContext?.apiURL, edgeURL: blobContext?.edgeURL } : undefined;
+  const token = blobContext?.token || process.env.NETLIFY_BLOBS_TOKEN;
+  const storeOptions =
+    siteID && token
+      ? {
+          siteID,
+          token,
+          ...(blobContext?.apiURL ? { apiURL: blobContext.apiURL } : {}),
+          ...(blobContext?.edgeURL ? { edgeURL: blobContext.edgeURL } : {}),
+        }
+      : {};
+  const store = (name) => getStore({ name, ...storeOptions });
 
   return {
-    workspaces: storeOptions ? getStore(WORKSPACES_STORE, storeOptions) : getStore(WORKSPACES_STORE),
-    slugs: storeOptions ? getStore(SLUGS_STORE, storeOptions) : getStore(SLUGS_STORE),
-    owners: storeOptions ? getStore(OWNERS_STORE, storeOptions) : getStore(OWNERS_STORE),
+    workspaces: store(WORKSPACES_STORE),
+    slugs: store(SLUGS_STORE),
+    owners: store(OWNERS_STORE),
   };
 }
 

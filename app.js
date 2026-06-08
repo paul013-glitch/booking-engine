@@ -4870,7 +4870,9 @@ function updateMasterAuthUI(user) {
   if (!signedIn) {
     setMasterLoadingState(true, "Login required", "Log in with the SaaS owner account to see all tenants.", "");
   } else if (adminUiState.masterWorkspaceError) {
-    setMasterLoadingState(true, "Owner access required", adminUiState.masterWorkspaceError, email, workspaceName);
+    const errorTitle =
+      adminUiState.masterWorkspaceError === "Forbidden" ? "Owner access required" : "Could not load master portal";
+    setMasterLoadingState(true, errorTitle, adminUiState.masterWorkspaceError, email, workspaceName);
   } else if (!workspaceReady) {
     setMasterLoadingState(true, "Loading master portal", "Loading all tenant accounts and booking links.", email, workspaceName);
   } else {
@@ -4880,10 +4882,14 @@ function updateMasterAuthUI(user) {
   if (authStatus) {
     authStatus.textContent = !signedIn
       ? "Loading access state..."
-      : adminUiState.masterWorkspaceError
-        ? email
-          ? `Owner access required for ${email}.`
-          : "Owner access required."
+        : adminUiState.masterWorkspaceError
+          ? adminUiState.masterWorkspaceError === "Forbidden"
+            ? email
+              ? `Owner access required for ${email}.`
+              : "Owner access required."
+            : email
+              ? `Signed in as ${email}`
+              : "Could not load master portal."
         : email
           ? `Signed in as ${email}`
           : "";
@@ -4941,7 +4947,13 @@ async function loadMasterWorkspaces({ showLoading = true } = {}) {
     const message = adminUiState.masterWorkspaceError === "Forbidden"
       ? "This portal is reserved for the SaaS owner account."
       : adminUiState.masterWorkspaceError;
-    setMasterLoadingState(true, "Owner access required", message, email, workspaceName);
+    setMasterLoadingState(
+      true,
+      adminUiState.masterWorkspaceError === "Forbidden" ? "Owner access required" : "Could not load master portal",
+      message,
+      email,
+      workspaceName,
+    );
     console.log("[master] loadMasterWorkspaces:error", { email, error: adminUiState.masterWorkspaceError });
   }
 }
