@@ -1014,6 +1014,13 @@ function confirmationUrl(reservationCode = "", guestEmail = "") {
   }
 }
 
+function bookingSiteUrl() {
+  const embedSiteUrl = String(bookingEmbedRuntime()?.siteUrl || "").replace(/\/$/, "");
+  if (embedSiteUrl) return embedSiteUrl;
+  if (window.location.protocol === "file:") return "";
+  return window.location.origin;
+}
+
 function requestedCampSlug() {
   const embedSlug = String(
     bookingEmbedRuntime()?.slug || bookingEmbedRuntime()?.camp || bookingEmbedRuntime()?.workspaceSlug || "",
@@ -1693,7 +1700,7 @@ function businessWeeklyRows() {
 
 function bookingCountsTowardBusiness(booking) {
   if (!booking) return false;
-  return booking.status === "confirmed" || booking.status === "held";
+  return booking.status === "confirmed" || (booking.status === "held" && isHoldActive(booking));
 }
 
 function billingState() {
@@ -3211,7 +3218,7 @@ function renderBookPage() {
                 <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
               </label>
               <div class="notice">
-                Demo mode: this confirms the booking immediately and would hand off to Stripe in production.
+                Your reservation is held for 15 minutes while you complete the Stripe test payment.
               </div>
             `
         }
@@ -3253,7 +3260,7 @@ function renderBookPage() {
             ? {
                 id: "bookButton",
                 disabled: summaryButtonLoading,
-                label: summaryButtonLoading ? "Submitting..." : "Pay deposit 50% >",
+                label: summaryButtonLoading ? "Opening Stripe..." : "Pay deposit >",
               }
             : {
                 id: null,
@@ -5594,30 +5601,34 @@ async function confirmBookingReservation() {
   draft.notes = notes;
 
   try {
-    const result = await apiJson("confirm-booking", {
+    const siteUrl = bookingSiteUrl();
+    const result = await apiJson("start-stripe-checkout", {
       method: "POST",
       body: JSON.stringify({
         workspaceSlug: bookingSlug(),
         booking: bookingPayload,
+        siteUrl,
+        successUrlBase: siteUrl ? `${siteUrl}/confirmation.html` : confirmationUrl("", ""),
+        cancelUrl: window.location.href,
       }),
     });
 
-    const confirmedBooking =
+    const heldBooking =
       result?.workspace?.bookings?.find((item) => item.reservationCode === result?.reservationCode) ||
       result?.workspace?.bookings?.find((item) => item.id === result?.booking?.id) ||
       result?.booking ||
       null;
 
-    if (!result?.workspace || !confirmedBooking) {
-      throw new Error("The booking could not be verified after saving.");
+    if (!result?.workspace || !heldBooking || !result?.checkoutUrl) {
+      throw new Error("The booking hold could not be verified after saving.");
     }
 
     hydrateStateFromWorkspace(result.workspace);
-    upsertCheckoutLead("confirmed");
+    upsertCheckoutLead("held");
     state.bookingConfirmation = {
-      bookingId: confirmedBooking.id || result.booking.id,
-      emailStatus: result?.email?.status || "skipped",
-      confirmedAt: now.toISOString(),
+      bookingId: heldBooking.id || result.booking.id,
+      emailStatus: "pending",
+      confirmedAt: "",
       guestEmail,
       guestName,
       guestGender: guestGenders[0] || "",
@@ -5625,7 +5636,8 @@ async function confirmBookingReservation() {
       customerDetails: customerDetailsPayload(),
       promoCodes: [...(draft.promoCodes || [])],
       promoSummary: promoBookingSummary(),
-      reservationCode: result?.reservationCode || confirmedBooking.reservationCode || "",
+      reservationCode: result?.reservationCode || heldBooking.reservationCode || "",
+      holdExpiresAt: result.holdExpiresAt || heldBooking.holdExpiresAt || "",
     };
     draft.bookingConfirmation = state.bookingConfirmation;
     syncDraftToState();
@@ -5636,18 +5648,7 @@ async function confirmBookingReservation() {
       room: bookingRoomAllocationSummary({ roomAllocations: bookingPayload.roomAllocations }),
       total: totalPrice(),
     });
-    alert(
-      result?.email?.status === "sent"
-        ? "Booking confirmed and confirmation email sent."
-        : "Booking confirmed. Confirmation email will be sent when email delivery is configured.",
-    );
-    if (isEmbeddedBooking()) {
-      draft.currentStep = 4;
-      renderBookPage();
-      scrollBookPageToTop();
-    } else {
-      window.location.assign(confirmationUrl(state.bookingConfirmation.reservationCode, guestEmail));
-    }
+    window.location.assign(result.checkoutUrl);
   } catch (error) {
     setBookingDetailNotice?.("", "info");
     alert(

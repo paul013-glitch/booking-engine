@@ -424,6 +424,48 @@ function normalizeWorkspace(data = {}) {
   };
 }
 
+function expireExpiredHolds(workspace, nowInput = new Date()) {
+  const now = new Date(nowInput);
+  const nowIso = now.toISOString();
+  let changed = false;
+  const normalized = normalizeWorkspace(workspace);
+  const expiredBookingIds = new Set();
+  const expiredReservationCodes = new Set();
+
+  normalized.bookings = (normalized.bookings || []).map((booking) => {
+    if (booking.status !== "held" || !booking.holdExpiresAt || new Date(booking.holdExpiresAt) > now) {
+      return booking;
+    }
+    changed = true;
+    expiredBookingIds.add(booking.id);
+    if (booking.reservationCode) expiredReservationCodes.add(booking.reservationCode);
+    return {
+      ...booking,
+      status: "expired",
+      paymentStatus: booking.paymentStatus === "paid" ? "paid" : "expired",
+      expiredAt: booking.expiredAt || nowIso,
+    };
+  });
+
+  if (expiredBookingIds.size || expiredReservationCodes.size) {
+    normalized.bookingIntents = (normalized.bookingIntents || []).map((intent) => {
+      if (!expiredBookingIds.has(intent.bookingId || intent.id) && !expiredReservationCodes.has(intent.reservationCode)) {
+        return intent;
+      }
+      changed = true;
+      return {
+        ...intent,
+        stage: "expired",
+        status: "expired",
+        paymentStatus: intent.paymentStatus === "paid" ? "paid" : "expired",
+        updatedAt: nowIso,
+      };
+    });
+  }
+
+  return { workspace: normalized, changed };
+}
+
 function stores() {
   const runningOnNetlify =
     process.env.NETLIFY === "true" || !!process.env.DEPLOY_ID || !!process.env.CONTEXT || !!globalThis.netlifyBlobsContext;
@@ -676,6 +718,7 @@ module.exports = {
   getWorkspaceBySlug,
   getWorkspaceForOwner,
   getWorkspaceForIdentity,
+  expireExpiredHolds,
   listWorkspaces,
   normalizeWorkspace,
   deleteWorkspaceById,

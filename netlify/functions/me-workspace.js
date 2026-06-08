@@ -1,5 +1,6 @@
 const {
   createDefaultWorkspace,
+  expireExpiredHolds,
   getUserFromContext,
   getWorkspaceForIdentity,
   saveWorkspace,
@@ -17,7 +18,9 @@ exports.handler = async (_event, context) => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const identityMatch = await getWorkspaceForIdentity({ ownerId, email: user.email });
       if (identityMatch) {
-        return response(200, identityMatch);
+        const expired = expireExpiredHolds(identityMatch);
+        const nextWorkspace = expired.changed ? await saveWorkspace(expired.workspace) : expired.workspace;
+        return response(200, nextWorkspace);
       }
       if (attempt < 2) {
         await new Promise((resolve) => setTimeout(resolve, 250));
