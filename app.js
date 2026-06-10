@@ -246,6 +246,7 @@ const seedState = {
       availabilityLowThreshold: 5,
       availabilityMidThreshold: 15,
       availabilityCountVisibilityThreshold: null,
+      depositPercent: 100,
       showAvailabilityColors: true,
       showAvailability: true,
       showPricePerNight: false,
@@ -578,6 +579,9 @@ function normalizeWorkspaceData(data = {}) {
       data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
         ? null
         : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
+    depositPercent: Number.isFinite(Number(data?.camp?.bookingRules?.depositPercent))
+      ? Math.max(1, Math.min(100, Math.round(Number(data.camp.bookingRules.depositPercent))))
+      : seedState.camp.bookingRules.depositPercent,
     filterByRoomInCalendar:
       typeof data?.camp?.bookingRules?.filterByRoomInCalendar === "boolean"
         ? data.camp.bookingRules.filterByRoomInCalendar
@@ -1862,6 +1866,68 @@ function closeBookingDetail() {
 
 function currentBookingDetail() {
   return state.bookings.find((booking) => booking.id === adminUiState.bookingDetailId) || null;
+}
+
+function bookingAmountPaid(booking = {}) {
+  if (Number.isFinite(Number(booking.amountPaid))) return Math.max(0, Number(booking.amountPaid));
+  if (Number.isFinite(Number(booking.stripePaymentAmount))) return Math.max(0, Number(booking.stripePaymentAmount));
+  return 0;
+}
+
+function bookingAmountDue(booking = {}) {
+  if (Number.isFinite(Number(booking.amountDue))) return Math.max(0, Number(booking.amountDue));
+  return Math.max(0, Number(booking.total || 0) - bookingAmountPaid(booking));
+}
+
+function bookingPaymentLogRows(booking = {}) {
+  const log = Array.isArray(booking.paymentLog) ? booking.paymentLog : [];
+  if (log.length) return log;
+  if (Number(booking.stripePaymentAmount || 0) > 0) {
+    return [
+      {
+        type: "payment",
+        status: booking.paymentStatus || "paid",
+        amount: Number(booking.stripePaymentAmount || 0),
+        currency: booking.stripePaymentCurrency || "EUR",
+        at: booking.paidAt || booking.confirmedAt || booking.createdAt || "",
+        stripeCheckoutSessionId: booking.stripeCheckoutSessionId || "",
+        stripePaymentIntentId: booking.stripePaymentIntentId || "",
+        note: "Legacy Stripe payment record.",
+      },
+    ];
+  }
+  return [];
+}
+
+function renderBookingPaymentLog(booking = {}) {
+  const rows = bookingPaymentLogRows(booking);
+  if (!rows.length) {
+    return `<div class="tiny">No payment events recorded yet.</div>`;
+  }
+  return `
+    <div class="payment-logbook">
+      ${rows
+        .map((entry) => {
+          const label = String(entry.type || "payment").replaceAll("_", " ");
+          const status = entry.status || "";
+          const amount = money(entry.amount || 0);
+          const timestamp = entry.paidAt || entry.at || "";
+          const reference = entry.stripePaymentIntentId || entry.stripeCheckoutSessionId || "";
+          return `
+            <div class="payment-log-entry">
+              <div>
+                <strong>${escapeHtml(label)}</strong>
+                <span class="tiny">${escapeHtml(status)}${timestamp ? ` · ${escapeHtml(formatDateTime(timestamp))}` : ""}</span>
+                ${entry.note ? `<span class="tiny">${escapeHtml(entry.note)}</span>` : ""}
+                ${reference ? `<span class="tiny">Stripe ref: ${escapeHtml(reference)}</span>` : ""}
+              </div>
+              <strong>${amount}</strong>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
 }
 
 function setBookingDetailNotice(message, type = "info") {
@@ -3581,6 +3647,8 @@ function renderAdminPage() {
       state.camp.bookingRules?.availabilityMidThreshold ?? seedState.camp.bookingRules.availabilityMidThreshold;
     campForm.elements.availabilityCountVisibilityThreshold.value =
       state.camp.bookingRules?.availabilityCountVisibilityThreshold ?? "";
+    campForm.elements.depositPercent.value =
+      state.camp.bookingRules?.depositPercent ?? seedState.camp.bookingRules.depositPercent;
     campForm.elements.showAvailabilityColors.checked = showAvailabilityColors(state.camp.bookingRules);
     campForm.elements.showAvailability.checked = showAvailabilityCounts(state.camp.bookingRules);
     campForm.elements.showPricePerNight.checked = showPricePerNightInCalendar(state.camp.bookingRules);
@@ -3941,6 +4009,22 @@ function renderAdminPage() {
           <strong>${money(bookingDetail.total)}</strong>
         </div>
         <div class="booking-detail-meta">
+          <span class="tiny">Amount paid</span>
+          <strong>${money(bookingAmountPaid(bookingDetail))}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Amount due</span>
+          <strong>${money(bookingAmountDue(bookingDetail))}</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Deposit</span>
+          <strong>${escapeHtml(String(bookingDetail.depositPercent || state.camp.bookingRules?.depositPercent || 100))}%</strong>
+        </div>
+        <div class="booking-detail-meta">
+          <span class="tiny">Payment status</span>
+          <strong>${escapeHtml(bookingDetail.paymentStatus || "pending")}</strong>
+        </div>
+        <div class="booking-detail-meta">
           <span class="tiny">Booked</span>
           <strong>${escapeHtml(bookingTime.label)}</strong>
         </div>
@@ -3968,6 +4052,12 @@ function renderAdminPage() {
           )
           .join("")}
         <div><span class="tiny">Confirmation email</span><strong>${escapeHtml(bookingDetail.confirmationEmail?.status || "not sent")}</strong></div>
+      </div>
+      <div class="booking-detail-notes">
+        <div class="booking-detail-wide">
+          <span class="tiny">Payment logbook</span>
+          ${renderBookingPaymentLog(bookingDetail)}
+        </div>
       </div>
     `;
 
@@ -6575,10 +6665,15 @@ function initAdminInteractions() {
         lowThreshold,
         Number(campForm.elements.availabilityMidThreshold.value || seedState.camp.bookingRules.availabilityMidThreshold),
       );
+      const depositPercent = Math.max(
+        1,
+        Math.min(100, Math.round(Number(campForm.elements.depositPercent.value || seedState.camp.bookingRules.depositPercent))),
+      );
       state.camp.bookingRules = {
         ...(state.camp.bookingRules || {}),
         availabilityLowThreshold: lowThreshold,
         availabilityMidThreshold: midThreshold,
+        depositPercent,
         availabilityCountVisibilityThreshold:
           campForm.elements.availabilityCountVisibilityThreshold.value === ""
             ? null

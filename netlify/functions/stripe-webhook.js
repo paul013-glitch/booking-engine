@@ -45,6 +45,57 @@ function markBookingExpired(booking, now) {
   };
 }
 
+function paymentLogWithCompletedSession(booking = {}, session = {}, stripeEvent = {}, now = new Date().toISOString()) {
+  const currency = String(session.currency || booking.paymentCurrency || "eur").toUpperCase();
+  const amount = Number(session.amount_total || 0) / 100;
+  const existingLog = Array.isArray(booking.paymentLog) ? booking.paymentLog : [];
+  const sessionId = session.id || booking.stripeCheckoutSessionId || "";
+  let updatedExisting = false;
+  const nextLog = existingLog.map((entry) => {
+    if (entry.stripeCheckoutSessionId !== sessionId) return entry;
+    updatedExisting = true;
+    return {
+      ...entry,
+      type: entry.type === "checkout_session_created" ? "deposit_payment" : entry.type || "payment",
+      status: "succeeded",
+      amount: Number(entry.amount || amount),
+      currency: entry.currency || currency,
+      paidAt: entry.paidAt || now,
+      stripePaymentIntentId: session.payment_intent || entry.stripePaymentIntentId || "",
+      stripeAccountId: stripeEvent.account || entry.stripeAccountId || "",
+      note: entry.note || "Stripe checkout payment completed.",
+    };
+  });
+
+  if (!updatedExisting) {
+    nextLog.push({
+      id: `payment-log-${Date.now()}`,
+      type: "deposit_payment",
+      status: "succeeded",
+      amount,
+      currency,
+      at: now,
+      paidAt: now,
+      stripeCheckoutSessionId: sessionId,
+      stripePaymentIntentId: session.payment_intent || "",
+      stripeAccountId: stripeEvent.account || booking.stripeAccountId || "",
+      note: "Stripe checkout payment completed.",
+    });
+  }
+
+  return nextLog;
+}
+
+function paidTotalFromLog(paymentLog = []) {
+  return paymentLog.reduce((sum, entry) => {
+    const amount = Number(entry.amount || 0);
+    if (!Number.isFinite(amount)) return sum;
+    if (entry.status !== "succeeded") return sum;
+    if (entry.type === "refund" || entry.type === "credit") return sum - Math.abs(amount);
+    return sum + amount;
+  }, 0);
+}
+
 exports.handler = async (event) => {
   try {
     if (event.httpMethod !== "POST") {
@@ -80,10 +131,17 @@ exports.handler = async (event) => {
     workspace.bookings = (workspace.bookings || []).map((booking) => {
       const isTarget = booking.id === bookingId || booking.reservationCode === reservationCode;
       if (!isTarget) return markBookingExpired(booking, now);
+      const paymentLog = paymentLogWithCompletedSession(booking, session, stripeEvent, now);
+      const totalAmount = Number(booking.total || 0);
+      const amountPaid = Math.max(0, paidTotalFromLog(paymentLog));
+      const amountDue = Math.max(0, totalAmount - amountPaid);
       confirmedBooking = {
         ...booking,
         status: "confirmed",
-        paymentStatus: "paid",
+        paymentStatus: amountDue > 0 ? "deposit_paid" : "paid",
+        amountPaid,
+        amountDue,
+        paymentLog,
         paidAt: now,
         confirmedAt: now,
         holdExpiresAt: null,
@@ -109,7 +167,10 @@ exports.handler = async (event) => {
         ...intent,
         stage: "confirmed",
         status: "confirmed",
-        paymentStatus: "paid",
+        paymentStatus: confirmedBooking.paymentStatus,
+        amountPaid: confirmedBooking.amountPaid,
+        amountDue: confirmedBooking.amountDue,
+        paymentLog: confirmedBooking.paymentLog,
         paidAt: now,
         updatedAt: now,
       };

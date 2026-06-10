@@ -25,13 +25,14 @@ const seedCamp = {
     availabilityLowThreshold: 5,
     availabilityMidThreshold: 15,
     availabilityCountVisibilityThreshold: null,
-      showAvailabilityColors: true,
-      showAvailability: true,
-      showPricePerNight: false,
-      additionalPriceDisplay: "rooms",
-      filterByRoomInCalendar: true,
-      packageMode: "individual_guests",
-      packagesEnabled: true,
+    depositPercent: 100,
+    showAvailabilityColors: true,
+    showAvailability: true,
+    showPricePerNight: false,
+    additionalPriceDisplay: "rooms",
+    filterByRoomInCalendar: true,
+    packageMode: "individual_guests",
+    packagesEnabled: true,
   },
   showBookingIntents: true,
   theme: {
@@ -359,6 +360,9 @@ function normalizeWorkspace(data = {}) {
       data?.camp?.bookingRules?.availabilityCountVisibilityThreshold === undefined
         ? null
         : Math.max(0, Number(data.camp.bookingRules.availabilityCountVisibilityThreshold)),
+    depositPercent: Number.isFinite(Number(data?.camp?.bookingRules?.depositPercent))
+      ? Math.max(1, Math.min(100, Math.round(Number(data.camp.bookingRules.depositPercent))))
+      : base.camp.bookingRules.depositPercent,
     showAvailabilityColors:
       typeof data?.camp?.bookingRules?.showAvailabilityColors === "boolean"
         ? data.camp.bookingRules.showAvailabilityColors

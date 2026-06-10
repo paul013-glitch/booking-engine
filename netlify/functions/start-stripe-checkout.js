@@ -136,11 +136,18 @@ function guestGenderList(booking = {}) {
   return Array.from({ length: count }, (_, index) => String(values[index] || "").trim());
 }
 
-function stripeAmountCents(realTotalEuros) {
+function bookingDepositPercent(workspace = {}) {
+  const configured = Number(workspace.camp?.bookingRules?.depositPercent);
+  if (Number.isFinite(configured)) {
+    return Math.max(1, Math.min(100, Math.round(configured)));
+  }
+  const envFallback = Number(process.env.STRIPE_PAYMENT_PERCENT);
+  return Number.isFinite(envFallback) ? Math.max(1, Math.min(100, Math.round(envFallback))) : 100;
+}
+
+function stripeAmountCents(realTotalEuros, workspace = {}) {
   const realTotal = Math.max(0, Number(realTotalEuros || 0));
-  const percent = Number.isFinite(Number(process.env.STRIPE_PAYMENT_PERCENT))
-    ? Math.max(1, Math.min(100, Number(process.env.STRIPE_PAYMENT_PERCENT)))
-    : 100;
+  const percent = bookingDepositPercent(workspace);
   return Math.max(50, Math.round(realTotal * 100 * (percent / 100)));
 }
 
@@ -159,7 +166,7 @@ async function createStripeCheckoutSession({ workspace, bookingRecord, successUr
     throw new Error("Stripe is not connected for this booking engine yet.");
   }
 
-  const amount = stripeAmountCents(bookingRecord.total);
+  const amount = stripeAmountCents(bookingRecord.total, workspace);
   const params = new URLSearchParams();
   params.append("mode", "payment");
   params.append("success_url", successUrl);
@@ -256,6 +263,9 @@ exports.handler = async (event) => {
     const bookingId = `booking-${now.getTime()}`;
     const intentId = booking.id || `intent-${now.getTime()}`;
     const bookingDate = booking.createdAt || now.toISOString();
+    const depositPercent = bookingDepositPercent(normalized);
+    const depositAmount = stripeAmountCents(booking.total, normalized) / 100;
+    const totalAmount = Number(booking.total || 0);
 
     const bookingRecord = {
       ...booking,
@@ -264,6 +274,13 @@ exports.handler = async (event) => {
       reservationId: reservationCode,
       status: "held",
       paymentStatus: "pending",
+      amountPaid: 0,
+      amountDue: totalAmount,
+      total: totalAmount,
+      depositPercent,
+      depositAmount,
+      paymentCurrency: "EUR",
+      paymentLog: [],
       createdAt: bookingDate,
       bookingDateTime: bookingDate,
       bookingDay: formatDateParts(bookingDate).day,
@@ -289,10 +306,23 @@ exports.handler = async (event) => {
     const session = await createStripeCheckoutSession({ workspace: normalized, bookingRecord, successUrl, cancelUrl });
 
     bookingRecord.stripeCheckoutSessionId = session.id;
-    bookingRecord.stripePaymentAmount = stripeAmountCents(bookingRecord.total) / 100;
+    bookingRecord.stripePaymentAmount = depositAmount;
     bookingRecord.stripePaymentCurrency = "EUR";
     bookingRecord.stripeAccountId = stripeDirectModeEnabled() ? "" : normalized.camp?.stripe?.accountId || "";
     bookingRecord.stripeMode = stripeDirectModeEnabled() ? "direct" : "connect";
+    bookingRecord.paymentLog = [
+      {
+        id: `payment-log-${now.getTime()}`,
+        type: "checkout_session_created",
+        status: "pending",
+        amount: depositAmount,
+        currency: "EUR",
+        at: now.toISOString(),
+        stripeCheckoutSessionId: session.id,
+        stripeAccountId: bookingRecord.stripeAccountId,
+        note: `Deposit checkout created for ${depositPercent}% of reservation total.`,
+      },
+    ];
 
     const intentRecord = {
       ...bookingRecord,
@@ -313,6 +343,9 @@ exports.handler = async (event) => {
       checkoutUrl: session.url,
       stripeSessionId: session.id,
       holdExpiresAt,
+      paymentAmount: bookingRecord.stripePaymentAmount,
+      depositAmount: bookingRecord.depositAmount,
+      depositPercent: bookingRecord.depositPercent,
       testPaymentAmount: bookingRecord.stripePaymentAmount,
       realTotal: Number(bookingRecord.total || 0),
     });
