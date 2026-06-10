@@ -47,9 +47,13 @@ Set these Netlify environment variables:
 - `STRIPE_SECRET_KEY` for the platform Stripe account
 - `STRIPE_WEBHOOK_SECRET` for `/.netlify/functions/stripe-webhook`
 - optional `STRIPE_PAYMENT_PERCENT` from `1` to `100`; defaults to `100`
+- optional `STRIPE_DIRECT_MODE=true` to temporarily test with only `STRIPE_SECRET_KEY` and no connected tenant account
 
 In Stripe, configure the webhook endpoint to receive Connect events for `checkout.session.completed`.
 Camp owners connect their own Stripe account from Admin > Booking Engine > Payments.
+
+`STRIPE_DIRECT_MODE=true` is only for testing while Stripe Connect is not ready. Payments go into the
+Stripe account behind `STRIPE_SECRET_KEY`, so turn it off before running the SaaS with real tenants.
 
 ## Next real backend steps
 

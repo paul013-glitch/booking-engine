@@ -144,13 +144,18 @@ function stripeAmountCents(realTotalEuros) {
   return Math.max(50, Math.round(realTotal * 100 * (percent / 100)));
 }
 
+function stripeDirectModeEnabled() {
+  return String(process.env.STRIPE_DIRECT_MODE || "").toLowerCase() === "true";
+}
+
 async function createStripeCheckoutSession({ workspace, bookingRecord, successUrl, cancelUrl }) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
     throw new Error("Stripe is not configured. Add STRIPE_SECRET_KEY in Netlify environment variables.");
   }
   const stripeAccountId = workspace.camp?.stripe?.accountId || "";
-  if (!stripeAccountId || !workspace.camp?.stripe?.chargesEnabled) {
+  const directMode = stripeDirectModeEnabled();
+  if (!directMode && (!stripeAccountId || !workspace.camp?.stripe?.chargesEnabled)) {
     throw new Error("Stripe is not connected for this booking engine yet.");
   }
 
@@ -174,13 +179,17 @@ async function createStripeCheckoutSession({ workspace, bookingRecord, successUr
   params.append("payment_intent_data[metadata][bookingId]", bookingRecord.id);
   params.append("payment_intent_data[metadata][reservationCode]", bookingRecord.reservationCode);
 
+  const headers = {
+    Authorization: `Bearer ${secretKey}`,
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  if (!directMode) {
+    headers["Stripe-Account"] = stripeAccountId;
+  }
+
   const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${secretKey}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Stripe-Account": stripeAccountId,
-    },
+    headers,
     body: params.toString(),
   });
   const data = await stripeResponse.json().catch(() => ({}));
@@ -282,7 +291,8 @@ exports.handler = async (event) => {
     bookingRecord.stripeCheckoutSessionId = session.id;
     bookingRecord.stripePaymentAmount = stripeAmountCents(bookingRecord.total) / 100;
     bookingRecord.stripePaymentCurrency = "EUR";
-    bookingRecord.stripeAccountId = normalized.camp?.stripe?.accountId || "";
+    bookingRecord.stripeAccountId = stripeDirectModeEnabled() ? "" : normalized.camp?.stripe?.accountId || "";
+    bookingRecord.stripeMode = stripeDirectModeEnabled() ? "direct" : "connect";
 
     const intentRecord = {
       ...bookingRecord,
