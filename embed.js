@@ -13,6 +13,11 @@
     scriptUrl.searchParams.get("camp") ||
     window.bookingEngineConfig?.slug ||
     "";
+  const returnUrl =
+    currentScript.dataset.returnUrl ||
+    currentScript.dataset.successUrl ||
+    window.bookingEngineConfig?.returnUrl ||
+    window.location.href;
 
   const mount = document.createElement("div");
   mount.className = "booking-engine-embed-mount";
@@ -87,6 +92,8 @@
     hostElement: host,
     themeTarget: host,
     siteUrl: scriptUrl.origin,
+    returnUrl: String(returnUrl || window.location.href),
+    hostPageUrl: window.location.href,
     inlineConfirmation: true,
   };
 

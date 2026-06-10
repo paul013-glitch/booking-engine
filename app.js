@@ -115,6 +115,7 @@ const bookingUiState = {
   submitting: false,
   calendarReloading: false,
   calendarReloadTimer: null,
+  reconcilingEmbeddedReturn: false,
 };
 
 function createDefaultBilling(now = new Date()) {
@@ -1057,6 +1058,39 @@ function bookingSiteUrl() {
   if (embedSiteUrl) return embedSiteUrl;
   if (window.location.protocol === "file:") return "";
   return window.location.origin;
+}
+
+function cleanBookingReturnUrl(rawUrl = window.location.href) {
+  try {
+    const url = new URL(rawUrl, window.location.href);
+    ["reservation", "email", "workspace", "session_id", "embedded_return"].forEach((param) =>
+      url.searchParams.delete(param),
+    );
+    return url.toString();
+  } catch {
+    return rawUrl || window.location.href;
+  }
+}
+
+function embeddedSuccessUrlBase() {
+  const runtime = bookingEmbedRuntime();
+  if (!runtime) return "";
+  return cleanBookingReturnUrl(runtime.returnUrl || runtime.hostPageUrl || window.location.href);
+}
+
+function embeddedStripeReturnParams() {
+  if (!isEmbeddedBooking()) return null;
+  const params = new URLSearchParams(window.location.search);
+  const reservationCode = params.get("reservation") || "";
+  const workspaceId = params.get("workspace") || "";
+  const sessionId = params.get("session_id") || "";
+  if (!reservationCode || !workspaceId || !sessionId) return null;
+  return {
+    reservationCode,
+    workspaceId,
+    sessionId,
+    email: params.get("email") || "",
+  };
 }
 
 function requestedCampSlug() {
@@ -3185,18 +3219,35 @@ function renderBookPage() {
           state.bookingConfirmation
             ? `
               <div class="confirmation-card">
-                <p class="eyebrow">Booking confirmed</p>
+                <p class="eyebrow">${
+                  state.bookingConfirmation.paymentStatus === "checking" ? "Checking payment" : "Booking confirmed"
+                }</p>
                 <h3>Thanks, ${escapeHtml(state.bookingConfirmation.guestName || draft.guestName)}.</h3>
-                <p class="helper">Your reservation is saved and the confirmation email is ${
-                  state.bookingConfirmation.emailStatus === "sent" ? "on its way" : "ready when email delivery is configured"
-                }.</p>
+                <p class="helper">${
+                  state.bookingConfirmation.paymentStatus === "checking"
+                    ? "We are confirming the payment with Stripe."
+                    : state.bookingConfirmation.amountPaid
+                      ? `Payment confirmed. Paid ${money(state.bookingConfirmation.amountPaid)}. Remaining due ${money(
+                          state.bookingConfirmation.amountDue,
+                        )}.`
+                      : `Your reservation is saved and the confirmation email is ${
+                          state.bookingConfirmation.emailStatus === "sent"
+                            ? "on its way"
+                            : "ready when email delivery is configured"
+                        }.`
+                }</p>
+                ${
+                  state.bookingConfirmation.error
+                    ? `<p class="helper">${escapeHtml(state.bookingConfirmation.error)}</p>`
+                    : ""
+                }
                 <div class="summary-list" style="margin-top: 18px;">
                   <div class="summary-item">
                     <div>
                       <strong>Reservation ID</strong>
                       <span>${escapeHtml(state.bookingConfirmation.reservationCode || state.bookingConfirmation.bookingId || "")}</span>
                     </div>
-                    <strong>Confirmed</strong>
+                    <strong>${state.bookingConfirmation.paymentStatus === "checking" ? "Checking" : "Confirmed"}</strong>
                   </div>
                   <div class="summary-item">
                     <div>
@@ -4690,6 +4741,69 @@ async function fetchWorkspaceWithRetry(workspaceUrl, headers = {}, attempts = 2)
   throw lastError;
 }
 
+async function reconcileEmbeddedStripeReturn() {
+  const returnParams = embeddedStripeReturnParams();
+  if (!returnParams || bookingUiState.reconcilingEmbeddedReturn) return false;
+
+  bookingUiState.reconcilingEmbeddedReturn = true;
+  state.bookingConfirmation = {
+    reservationCode: returnParams.reservationCode,
+    guestEmail: returnParams.email,
+    guestName: draft.guestName || "",
+    emailStatus: "checking",
+    paymentStatus: "checking",
+  };
+  draft.bookingConfirmation = state.bookingConfirmation;
+
+  try {
+    const result = await apiJson("reconcile-stripe-checkout", {
+      method: "POST",
+      body: JSON.stringify(returnParams),
+    });
+    if (result?.workspace) {
+      hydrateStateFromWorkspace(result.workspace);
+    }
+
+    const booking = result?.booking || {};
+    state.bookingConfirmation = {
+      bookingId: booking.id || "",
+      emailStatus: booking.confirmationEmail?.status || "pending",
+      confirmedAt: booking.confirmedAt || "",
+      guestEmail: booking.guestEmail || returnParams.email,
+      guestName: booking.guestName || draft.guestName || "",
+      reservationCode: booking.reservationCode || returnParams.reservationCode,
+      paymentStatus: booking.paymentStatus || "deposit_paid",
+      amountPaid: bookingAmountPaid(booking),
+      amountDue: bookingAmountDue(booking),
+      total: booking.total || 0,
+    };
+    draft.bookingConfirmation = state.bookingConfirmation;
+    syncDraftToState();
+    saveState();
+
+    try {
+      window.history.replaceState({}, document.title, cleanBookingReturnUrl(window.location.href));
+    } catch {
+      // URL cleanup is cosmetic; the confirmed booking state above is the important part.
+    }
+  } catch (error) {
+    state.bookingConfirmation = {
+      reservationCode: returnParams.reservationCode,
+      guestEmail: returnParams.email,
+      guestName: draft.guestName || "",
+      emailStatus: "pending",
+      paymentStatus: "pending",
+      error: error instanceof Error ? error.message : "Payment confirmation is still processing.",
+    };
+    draft.bookingConfirmation = state.bookingConfirmation;
+    syncDraftToState();
+  } finally {
+    bookingUiState.reconcilingEmbeddedReturn = false;
+  }
+
+  return true;
+}
+
 async function loadPublicWorkspace() {
   if (window.location.protocol === "file:") {
     return;
@@ -4710,6 +4824,7 @@ async function loadPublicWorkspace() {
         initBookInteractions();
       }
       hydrateStateFromWorkspace(workspace);
+      await reconcileEmbeddedStripeReturn();
       renderBookPage();
     }
   } catch (error) {
@@ -5856,14 +5971,16 @@ async function confirmBookingReservation() {
 
   try {
     const siteUrl = bookingSiteUrl();
+    const embeddedReturnUrl = isEmbeddedBooking() ? embeddedSuccessUrlBase() : "";
     const result = await apiJson("start-stripe-checkout", {
       method: "POST",
       body: JSON.stringify({
         workspaceSlug: bookingSlug(),
         booking: bookingPayload,
         siteUrl,
-        successUrlBase: siteUrl ? `${siteUrl}/confirmation.html` : confirmationUrl("", ""),
-        cancelUrl: window.location.href,
+        successUrlBase: embeddedReturnUrl || (siteUrl ? `${siteUrl}/confirmation.html` : confirmationUrl("", "")),
+        cancelUrl: embeddedReturnUrl || window.location.href,
+        embeddedReturn: Boolean(embeddedReturnUrl),
       }),
     });
 

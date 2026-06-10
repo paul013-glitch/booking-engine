@@ -155,6 +155,15 @@ function stripeDirectModeEnabled() {
   return String(process.env.STRIPE_DIRECT_MODE || "").toLowerCase() === "true";
 }
 
+function appendCheckoutSuccessParams(successBase, successParams) {
+  const base = String(successBase || "");
+  const hashIndex = base.indexOf("#");
+  const pathAndQuery = hashIndex >= 0 ? base.slice(0, hashIndex) : base;
+  const hash = hashIndex >= 0 ? base.slice(hashIndex) : "";
+  const separator = pathAndQuery.includes("?") ? "&" : "?";
+  return `${pathAndQuery}${separator}${successParams.toString()}&session_id={CHECKOUT_SESSION_ID}${hash}`;
+}
+
 async function createStripeCheckoutSession({ workspace, bookingRecord, successUrl, cancelUrl }) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
@@ -306,7 +315,10 @@ exports.handler = async (event) => {
       email: bookingRecord.guestEmail || "",
       workspace: normalized.id,
     });
-    const successUrl = `${successBase}${successBase.includes("?") ? "&" : "?"}${successParams.toString()}&session_id={CHECKOUT_SESSION_ID}`;
+    if (payload.embeddedReturn) {
+      successParams.set("embedded_return", "1");
+    }
+    const successUrl = appendCheckoutSuccessParams(successBase, successParams);
     const cancelUrl = payload.cancelUrl || payload.siteUrl || successBase;
     const session = await createStripeCheckoutSession({ workspace: normalized, bookingRecord, successUrl, cancelUrl });
 
