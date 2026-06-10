@@ -1736,6 +1736,13 @@ select {
   min-width: 240px;
 }
 
+.booking-detail-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
 .booking-detail-meta,
 .booking-detail-notes > div {
   border: 1px solid var(--border);

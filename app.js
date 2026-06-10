@@ -3965,7 +3965,10 @@ function renderAdminPage() {
           Booking status
           <select id="bookingDetailStatus"></select>
         </label>
-        <button class="button button-primary" type="button" id="bookingDetailSaveStatus">Save status</button>
+        <div class="booking-detail-status-actions">
+          <button class="button button-secondary" type="button" id="bookingDetailRefreshPayment">Refresh payment</button>
+          <button class="button button-primary" type="button" id="bookingDetailSaveStatus">Save status</button>
+        </div>
       </div>
       <div class="booking-detail-grid">
         <div class="booking-detail-meta">
@@ -4063,6 +4066,7 @@ function renderAdminPage() {
 
     bookingDetailStatus = bookingDetailContent.querySelector("#bookingDetailStatus");
     bookingDetailSaveStatus = bookingDetailContent.querySelector("#bookingDetailSaveStatus");
+    const bookingDetailRefreshPayment = bookingDetailContent.querySelector("#bookingDetailRefreshPayment");
     bookingDetailStatus.innerHTML = bookingStatusOptions()
       .map(
         (option) =>
@@ -4072,6 +4076,10 @@ function renderAdminPage() {
 
     if (bookingDetailSaveStatus) {
       bookingDetailSaveStatus.dataset.bookingId = bookingDetail.id;
+    }
+    if (bookingDetailRefreshPayment) {
+      bookingDetailRefreshPayment.dataset.bookingId = bookingDetail.id;
+      bookingDetailRefreshPayment.disabled = !bookingDetail.stripeCheckoutSessionId;
     }
     if (bookingDetailStatus) {
       bookingDetailStatus.value = bookingDetail.status || "confirmed";
@@ -5537,6 +5545,16 @@ function setBookingDetailSaveLoading(isLoading) {
     : "Save status";
 }
 
+function setBookingPaymentRefreshLoading(isLoading) {
+  const button = document.getElementById("bookingDetailRefreshPayment");
+  if (!button) return;
+  button.disabled = isLoading;
+  button.classList.toggle("is-loading", isLoading);
+  button.innerHTML = isLoading
+    ? `<span class="button-spinner" aria-hidden="true"></span><span>Checking...</span>`
+    : "Refresh payment";
+}
+
 function setPackageSaveLoading(isLoading) {
   const button = document.getElementById("packageSaveButton");
   if (!button) return;
@@ -5685,6 +5703,41 @@ async function saveBookingStatus(bookingId, targetStatus, reservationCode = "", 
     alert(error instanceof Error ? error.message : "Could not update reservation.");
   } finally {
     setBookingDetailSaveLoading(false);
+  }
+}
+
+async function refreshBookingPayment(bookingId) {
+  const booking = state.bookings.find((item) => item.id === bookingId);
+  if (!booking || !authState.workspace?.id) return;
+  if (!booking.stripeCheckoutSessionId) {
+    setBookingDetailNotice("This reservation does not have a Stripe checkout session to refresh.", "error");
+    renderAdminPage();
+    return;
+  }
+
+  setBookingPaymentRefreshLoading(true);
+  try {
+    const result = await apiJson("reconcile-stripe-checkout", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: authState.workspace.id,
+        reservationCode: booking.reservationCode || booking.reservationId || "",
+        sessionId: booking.stripeCheckoutSessionId || "",
+      }),
+    });
+    if (result?.workspace) {
+      hydrateStateFromWorkspace(result.workspace);
+      authState.workspace = result.workspace;
+      adminUiState.bookingDetailId = result.booking?.id || bookingId;
+      setBookingDetailNotice("Payment status refreshed from Stripe.", "success");
+      renderAdminPage();
+      updateAdminAuthUI(authState.user);
+    }
+  } catch (error) {
+    setBookingDetailNotice(error instanceof Error ? error.message : "Could not refresh payment status.", "error");
+    renderAdminPage();
+  } finally {
+    setBookingPaymentRefreshLoading(false);
   }
 }
 
@@ -6318,6 +6371,14 @@ function initAdminInteractions() {
       const booking = state.bookings.find((item) => item.id === bookingId);
       if (!booking) return;
       void saveBookingStatus(bookingId, bookingDetailStatus.value, booking.reservationCode || "", booking.status || "");
+      return;
+    }
+
+    const bookingDetailRefreshPayment = event.target?.closest?.("#bookingDetailRefreshPayment");
+    if (bookingDetailRefreshPayment) {
+      const bookingId = bookingDetailRefreshPayment.dataset.bookingId;
+      if (!bookingId) return;
+      void refreshBookingPayment(bookingId);
       return;
     }
 

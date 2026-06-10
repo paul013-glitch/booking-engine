@@ -301,7 +301,12 @@ exports.handler = async (event) => {
     };
 
     const successBase = payload.successUrlBase || `${payload.siteUrl || ""}/confirmation.html`;
-    const successUrl = `${successBase}${successBase.includes("?") ? "&" : "?"}reservation=${encodeURIComponent(reservationCode)}&email=${encodeURIComponent(bookingRecord.guestEmail || "")}`;
+    const successParams = new URLSearchParams({
+      reservation: reservationCode,
+      email: bookingRecord.guestEmail || "",
+      workspace: normalized.id,
+    });
+    const successUrl = `${successBase}${successBase.includes("?") ? "&" : "?"}${successParams.toString()}&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = payload.cancelUrl || payload.siteUrl || successBase;
     const session = await createStripeCheckoutSession({ workspace: normalized, bookingRecord, successUrl, cancelUrl });
 

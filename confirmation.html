@@ -26,8 +26,9 @@
               <strong>Reservation number</strong>
               <span id="reservationCode">Loading...</span>
             </div>
-            <strong id="confirmationEmail">Saved</strong>
+            <strong id="confirmationStatus">Confirming...</strong>
           </div>
+          <p id="confirmationDetail" class="helper" style="margin-top: 14px;">Checking payment status with Stripe.</p>
         </div>
         <div class="booking-actions" style="justify-content: space-between; margin-top: 20px;">
           <a class="button button-secondary" href="./index.html">Back home</a>
@@ -40,13 +41,50 @@
         const params = new URLSearchParams(window.location.search);
         const reservation = params.get("reservation") || "Pending";
         const email = params.get("email") || "";
+        const workspace = params.get("workspace") || "";
+        const sessionId = params.get("session_id") || "";
         const reservationCode = document.getElementById("reservationCode");
-        const confirmationEmail = document.getElementById("confirmationEmail");
+        const confirmationStatus = document.getElementById("confirmationStatus");
+        const confirmationDetail = document.getElementById("confirmationDetail");
 
         if (reservationCode) reservationCode.textContent = reservation;
-        if (confirmationEmail) {
-          confirmationEmail.textContent = email ? `Sent to ${email}` : "Saved";
+
+        function setStatus(title, detail) {
+          if (confirmationStatus) confirmationStatus.textContent = title;
+          if (confirmationDetail) confirmationDetail.textContent = detail;
         }
+
+        if (!sessionId || !workspace) {
+          setStatus("Saved", email ? `Reservation saved for ${email}. Payment confirmation may still be processing.` : "Reservation saved.");
+          return;
+        }
+
+        fetch("/.netlify/functions/reconcile-stripe-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId: workspace,
+            sessionId,
+            reservationCode: reservation,
+          }),
+        })
+          .then(async (response) => {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || `Payment check failed (${response.status})`);
+            const booking = data.booking || {};
+            const amountPaid = Number(booking.amountPaid || 0);
+            const amountDue = Number(booking.amountDue || 0);
+            setStatus(
+              booking.paymentStatus === "paid" ? "Paid" : "Deposit paid",
+              `Payment confirmed. Paid €${amountPaid.toLocaleString("en-US", { maximumFractionDigits: 0 })}. Remaining due €${amountDue.toLocaleString("en-US", { maximumFractionDigits: 0 })}.`,
+            );
+          })
+          .catch((error) => {
+            setStatus(
+              "Payment processing",
+              `${error instanceof Error ? error.message : "Stripe is still processing the payment."} Your reservation number is saved. If this does not update, contact the host with reservation ${reservation}.`,
+            );
+          });
       })();
     </script>
   </body>
