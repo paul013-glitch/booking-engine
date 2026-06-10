@@ -2999,6 +2999,88 @@ function ensureEmbeddedBookShell() {
   host.innerHTML = bookShellMarkup();
 }
 
+function paymentStatusLabel(status = "") {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "paid") return "Paid";
+  if (normalized === "deposit_paid") return "Deposit paid";
+  if (normalized === "pending") return "Pending";
+  if (normalized === "checking") return "Checking";
+  return normalized ? normalized.replace(/_/g, " ") : "Confirmed";
+}
+
+function renderBookingConfirmationCard(confirmation = {}, { standalone = false } = {}) {
+  const reservationCode = confirmation.reservationCode || confirmation.bookingId || "";
+  const guestName = confirmation.guestName || draft.guestName || "there";
+  const dateText =
+    confirmation.startDate && confirmation.endDate
+      ? `${formatDate(confirmation.startDate)} to ${formatDate(confirmation.endDate)}`
+      : confirmation.startDate
+        ? formatDate(confirmation.startDate)
+        : "";
+  const nightsText = confirmation.nights ? `${confirmation.nights} night${confirmation.nights === 1 ? "" : "s"}` : "";
+  const amountPaid = Math.max(0, Number(confirmation.amountPaid || 0));
+  const amountDue = Math.max(0, Number(confirmation.amountDue || 0));
+  const total = Math.max(0, Number(confirmation.total || amountPaid + amountDue || 0));
+  const checking = confirmation.paymentStatus === "checking";
+  const helperText = checking
+    ? "We are confirming the payment with Stripe."
+    : amountPaid
+      ? `Payment confirmed. Paid ${money(amountPaid)}. Remaining due ${money(amountDue)}.`
+      : `Your reservation is saved and the confirmation email is ${
+          confirmation.emailStatus === "sent" ? "on its way" : "ready when email delivery is configured"
+        }.`;
+
+  return `
+    <div class="confirmation-card${standalone ? " confirmation-card-standalone" : ""}">
+      <p class="eyebrow">${checking ? "Checking payment" : "Booking confirmed"}</p>
+      <h3>Thanks, ${escapeHtml(guestName)}.</h3>
+      <p class="helper">${helperText}</p>
+      ${confirmation.error ? `<p class="helper">${escapeHtml(confirmation.error)}</p>` : ""}
+      <div class="summary-list" style="margin-top: 18px;">
+        <div class="summary-item">
+          <div>
+            <strong>Reservation number</strong>
+            <span>${escapeHtml(reservationCode)}</span>
+          </div>
+          <strong>${checking ? "Checking" : "Confirmed"}</strong>
+        </div>
+        ${
+          dateText
+            ? `<div class="summary-item">
+                <div>
+                  <strong>Dates booked</strong>
+                  <span>${escapeHtml(dateText)}</span>
+                </div>
+                <strong>${escapeHtml(nightsText)}</strong>
+              </div>`
+            : ""
+        }
+        <div class="summary-item">
+          <div>
+            <strong>Payment status</strong>
+            <span>${escapeHtml(paymentStatusLabel(confirmation.paymentStatus))}</span>
+          </div>
+          <strong>${money(amountPaid)}</strong>
+        </div>
+        <div class="summary-item">
+          <div>
+            <strong>Total</strong>
+            <span>${money(total)}</span>
+          </div>
+          <strong>Balance due ${money(amountDue)}</strong>
+        </div>
+        <div class="summary-item">
+          <div>
+            <strong>Guest</strong>
+            <span>${escapeHtml(confirmation.guestEmail || draft.guestEmail)}</span>
+          </div>
+          <strong>${escapeHtml(confirmation.emailStatus || "skipped")}</strong>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderBookPage() {
   const logo = getBookElement("campLogo");
   const name = getBookElement("campName");
@@ -3014,6 +3096,14 @@ function renderBookPage() {
   applyTheme(state.camp.theme);
 
   ensureRoomSelection();
+
+  if (state.bookingConfirmation?.returnComplete) {
+    stepper.innerHTML = "";
+    wizard.innerHTML = renderBookingConfirmationCard(state.bookingConfirmation, { standalone: true });
+    summary.innerHTML = "";
+    summaryActionsShell.innerHTML = "";
+    return;
+  }
 
   const stepFlow = bookingStepFlow();
   const stepLabels = {
@@ -3217,48 +3307,7 @@ function renderBookPage() {
         </div>
         ${
           state.bookingConfirmation
-            ? `
-              <div class="confirmation-card">
-                <p class="eyebrow">${
-                  state.bookingConfirmation.paymentStatus === "checking" ? "Checking payment" : "Booking confirmed"
-                }</p>
-                <h3>Thanks, ${escapeHtml(state.bookingConfirmation.guestName || draft.guestName)}.</h3>
-                <p class="helper">${
-                  state.bookingConfirmation.paymentStatus === "checking"
-                    ? "We are confirming the payment with Stripe."
-                    : state.bookingConfirmation.amountPaid
-                      ? `Payment confirmed. Paid ${money(state.bookingConfirmation.amountPaid)}. Remaining due ${money(
-                          state.bookingConfirmation.amountDue,
-                        )}.`
-                      : `Your reservation is saved and the confirmation email is ${
-                          state.bookingConfirmation.emailStatus === "sent"
-                            ? "on its way"
-                            : "ready when email delivery is configured"
-                        }.`
-                }</p>
-                ${
-                  state.bookingConfirmation.error
-                    ? `<p class="helper">${escapeHtml(state.bookingConfirmation.error)}</p>`
-                    : ""
-                }
-                <div class="summary-list" style="margin-top: 18px;">
-                  <div class="summary-item">
-                    <div>
-                      <strong>Reservation ID</strong>
-                      <span>${escapeHtml(state.bookingConfirmation.reservationCode || state.bookingConfirmation.bookingId || "")}</span>
-                    </div>
-                    <strong>${state.bookingConfirmation.paymentStatus === "checking" ? "Checking" : "Confirmed"}</strong>
-                  </div>
-                  <div class="summary-item">
-                    <div>
-                      <strong>Guest</strong>
-                      <span>${escapeHtml(state.bookingConfirmation.guestEmail || draft.guestEmail)}</span>
-                    </div>
-                    <strong>${escapeHtml(state.bookingConfirmation.emailStatus || "skipped")}</strong>
-                  </div>
-                </div>
-              </div>
-            `
+            ? renderBookingConfirmationCard(state.bookingConfirmation)
             : `
               <div class="input-row">
                 <label class="field" id="fieldGuestName">
@@ -4752,8 +4801,10 @@ async function reconcileEmbeddedStripeReturn() {
     guestName: draft.guestName || "",
     emailStatus: "checking",
     paymentStatus: "checking",
+    returnComplete: true,
   };
   draft.bookingConfirmation = state.bookingConfirmation;
+  draft.currentStep = bookingStepIndex("book");
 
   try {
     const result = await apiJson("reconcile-stripe-checkout", {
@@ -4765,6 +4816,7 @@ async function reconcileEmbeddedStripeReturn() {
     }
 
     const booking = result?.booking || {};
+    const nights = booking.startDate && booking.endDate ? nightsBetween(booking.startDate, booking.endDate) : 0;
     state.bookingConfirmation = {
       bookingId: booking.id || "",
       emailStatus: booking.confirmationEmail?.status || "pending",
@@ -4776,9 +4828,19 @@ async function reconcileEmbeddedStripeReturn() {
       amountPaid: bookingAmountPaid(booking),
       amountDue: bookingAmountDue(booking),
       total: booking.total || 0,
+      startDate: booking.startDate || "",
+      endDate: booking.endDate || "",
+      nights,
+      returnComplete: true,
     };
+    draft.startDate = booking.startDate || draft.startDate;
+    draft.endDate = booking.endDate || draft.endDate;
+    draft.guestName = booking.guestName || draft.guestName;
+    draft.guestEmail = booking.guestEmail || draft.guestEmail || returnParams.email;
+    draft.currentStep = bookingStepIndex("book");
     draft.bookingConfirmation = state.bookingConfirmation;
     syncDraftToState();
+    state.bookingConfirmation = draft.bookingConfirmation;
     saveState();
 
     try {
@@ -4794,9 +4856,12 @@ async function reconcileEmbeddedStripeReturn() {
       emailStatus: "pending",
       paymentStatus: "pending",
       error: error instanceof Error ? error.message : "Payment confirmation is still processing.",
+      returnComplete: true,
     };
+    draft.currentStep = bookingStepIndex("book");
     draft.bookingConfirmation = state.bookingConfirmation;
     syncDraftToState();
+    state.bookingConfirmation = draft.bookingConfirmation;
   } finally {
     bookingUiState.reconcilingEmbeddedReturn = false;
   }
