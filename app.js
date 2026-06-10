@@ -255,6 +255,7 @@ const seedState = {
       filterByRoomInCalendar: true,
       packageMode: "individual_guests",
       packagesEnabled: true,
+      confirmationUrl: "",
     },
   },
   currentStep: 0,
@@ -587,6 +588,7 @@ function normalizeWorkspaceData(data = {}) {
       typeof data?.camp?.bookingRules?.filterByRoomInCalendar === "boolean"
         ? data.camp.bookingRules.filterByRoomInCalendar
         : seedState.camp.bookingRules.filterByRoomInCalendar,
+    confirmationUrl: String(data?.camp?.bookingRules?.confirmationUrl || "").trim(),
   };
   const isPersistedSnapshot = data?.__persistedSnapshot === true;
   const normalizedAvailability = migrateAvailabilityDays(
@@ -1036,6 +1038,18 @@ function embedScriptSnippet() {
   return `<script src="${embedScriptUrl()}" data-slug="${bookingSlug()}"></script>`;
 }
 
+function confirmationEmbedScriptUrl() {
+  try {
+    return new URL("/confirm-embed.js", bookingSiteUrl() || window.location.origin).toString();
+  } catch {
+    return "/confirm-embed.js";
+  }
+}
+
+function confirmationEmbedScriptSnippet() {
+  return `<script src="${confirmationEmbedScriptUrl()}" data-slug="${bookingSlug()}"></script>`;
+}
+
 function confirmationUrl(reservationCode = "", guestEmail = "") {
   const params = new URLSearchParams();
   if (reservationCode) params.set("reservation", reservationCode);
@@ -1075,7 +1089,8 @@ function cleanBookingReturnUrl(rawUrl = window.location.href) {
 function embeddedSuccessUrlBase() {
   const runtime = bookingEmbedRuntime();
   if (!runtime) return "";
-  return cleanBookingReturnUrl(runtime.returnUrl || runtime.hostPageUrl || window.location.href);
+  const configuredConfirmationUrl = String(state?.camp?.bookingRules?.confirmationUrl || "").trim();
+  return cleanBookingReturnUrl(configuredConfirmationUrl || runtime.returnUrl || runtime.hostPageUrl || window.location.href);
 }
 
 function embeddedStripeReturnParams() {
@@ -3729,6 +3744,7 @@ function renderAdminPage() {
   if (campForm && shouldHydrateBookingEngineForm) {
     campForm.elements.campName.value = state.camp.name;
     campForm.elements.logoUrl.value = state.camp.logoUrl.startsWith("data:") ? "" : state.camp.logoUrl;
+    campForm.elements.confirmationUrl.value = state.camp.bookingRules?.confirmationUrl || "";
     campForm.elements.ga4Id.value = state.camp.analytics?.ga4Id || "";
     campForm.elements.pixelId.value = state.camp.analytics?.pixelId || "";
     campForm.elements.bg.value = state.camp.theme?.bg || seedState.camp.theme.bg;
@@ -6502,6 +6518,8 @@ function initAdminInteractions() {
   const copyEmbedUrlButton = document.getElementById("copyEmbedUrl");
   const embedCodeInput = document.getElementById("embedCode");
   const copyEmbedCodeButton = document.getElementById("copyEmbedCode");
+  const confirmationEmbedCodeInput = document.getElementById("confirmationEmbedCode");
+  const copyConfirmationEmbedCodeButton = document.getElementById("copyConfirmationEmbedCode");
   const connectStripeButton = document.getElementById("connectStripeButton");
   const refreshStripeStatusButton = document.getElementById("refreshStripeStatusButton");
   const availabilityRoomSelect = document.getElementById("availabilityRoomSelect");
@@ -6530,6 +6548,9 @@ function initAdminInteractions() {
   }
   if (embedCodeInput) {
     embedCodeInput.value = embedScriptSnippet();
+  }
+  if (confirmationEmbedCodeInput) {
+    confirmationEmbedCodeInput.value = confirmationEmbedScriptSnippet();
   }
   connectStripeButton?.addEventListener("click", () => {
     void startStripeConnect();
@@ -6790,10 +6811,19 @@ function initAdminInteractions() {
   copyEmbedCodeButton?.addEventListener("click", async () => {
     await copyValue(embedScriptSnippet(), copyEmbedCodeButton, "Copy code", "Copy this embed code");
   });
+  copyConfirmationEmbedCodeButton?.addEventListener("click", async () => {
+    await copyValue(
+      confirmationEmbedScriptSnippet(),
+      copyConfirmationEmbedCodeButton,
+      "Copy code",
+      "Copy confirmation code",
+    );
+  });
 
   const liveBrandingFields = new Set([
     "campName",
     "logoUrl",
+    "confirmationUrl",
     "ga4Id",
     "pixelId",
     "bg",
@@ -6831,6 +6861,10 @@ function initAdminInteractions() {
       ga4Id: campForm.elements.ga4Id.value.trim(),
       pixelId: campForm.elements.pixelId.value.trim(),
     };
+    state.camp.bookingRules = {
+      ...(state.camp.bookingRules || {}),
+      confirmationUrl: campForm.elements.confirmationUrl.value.trim(),
+    };
     if (campForm.elements.logoUrl.value.trim()) {
       state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
       adminUiState.bookingEngineLogoPreviewUrl = "";
@@ -6846,6 +6880,9 @@ function initAdminInteractions() {
     }
     if (embedCodeInput) {
       embedCodeInput.value = embedScriptSnippet();
+    }
+    if (confirmationEmbedCodeInput) {
+      confirmationEmbedCodeInput.value = confirmationEmbedScriptSnippet();
     }
     if (bookingEngineLogoPreview instanceof HTMLImageElement) {
       bookingEngineLogoPreview.src = adminUiState.bookingEngineLogoPreviewUrl || state.camp.logoUrl || logoSvg;
@@ -6932,6 +6969,7 @@ function initAdminInteractions() {
         filterByRoomInCalendar: !!campForm.elements.filterByRoomInCalendar.checked,
         packageMode: campForm.elements.packageMode.value === "full_unit" ? "full_unit" : "individual_guests",
         packagesEnabled: !!campForm.elements.packagesEnabled.checked,
+        confirmationUrl: campForm.elements.confirmationUrl.value.trim(),
       };
 
       const logoFile = campForm.elements.logoFile.files?.[0];
@@ -6979,6 +7017,9 @@ function initAdminInteractions() {
       }
       if (embedCodeInput) {
         embedCodeInput.value = embedScriptSnippet();
+      }
+      if (confirmationEmbedCodeInput) {
+        confirmationEmbedCodeInput.value = confirmationEmbedScriptSnippet();
       }
       if (bookingEngineLogoPreview instanceof HTMLImageElement) {
         bookingEngineLogoPreview.src = adminUiState.bookingEngineLogoPreviewUrl || state.camp.logoUrl || logoSvg;

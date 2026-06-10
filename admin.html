@@ -432,6 +432,19 @@
                 <button class="button button-secondary" type="button" id="copyEmbedCode">Copy code</button>
               </div>
             </label>
+            <label>
+              Confirmation URL
+              <input name="confirmationUrl" type="url" placeholder="https://www.example.com/confirmed.html" />
+              <span class="helper">For embedded checkout, Stripe returns guests to this page after payment.</span>
+            </label>
+            <label>
+              Confirmation embed code
+              <div class="copy-row copy-row-stack">
+                <textarea id="confirmationEmbedCode" rows="3" readonly></textarea>
+                <button class="button button-secondary" type="button" id="copyConfirmationEmbedCode">Copy code</button>
+              </div>
+              <span class="helper">Paste this on the confirmation URL page. It only shows the thank-you/payment confirmation screen.</span>
+            </label>
             <div class="threshold-grid">
               <label>
                 Red threshold
