@@ -588,7 +588,7 @@ function normalizeWorkspaceData(data = {}) {
       typeof data?.camp?.bookingRules?.filterByRoomInCalendar === "boolean"
         ? data.camp.bookingRules.filterByRoomInCalendar
         : seedState.camp.bookingRules.filterByRoomInCalendar,
-    confirmationUrl: String(data?.camp?.bookingRules?.confirmationUrl || "").trim(),
+    confirmationUrl: normalizeExternalUrl(data?.camp?.bookingRules?.confirmationUrl || ""),
   };
   const isPersistedSnapshot = data?.__persistedSnapshot === true;
   const normalizedAvailability = migrateAvailabilityDays(
@@ -1086,11 +1086,30 @@ function cleanBookingReturnUrl(rawUrl = window.location.href) {
   }
 }
 
+function normalizeExternalUrl(rawUrl = "", fallbackBase = window.location.href) {
+  const value = String(rawUrl || "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^\/\//.test(value)) return `${window.location.protocol}${value}`;
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:[/:?#]|$)/i.test(value)) {
+    return `https://${value}`;
+  }
+  try {
+    return new URL(value, fallbackBase).toString();
+  } catch {
+    return value;
+  }
+}
+
 function embeddedSuccessUrlBase() {
   const runtime = bookingEmbedRuntime();
   if (!runtime) return "";
   const configuredConfirmationUrl = String(state?.camp?.bookingRules?.confirmationUrl || "").trim();
-  return cleanBookingReturnUrl(configuredConfirmationUrl || runtime.returnUrl || runtime.hostPageUrl || window.location.href);
+  const returnUrl = normalizeExternalUrl(
+    configuredConfirmationUrl || runtime.returnUrl || runtime.hostPageUrl || window.location.href,
+    runtime.hostPageUrl || window.location.href,
+  );
+  return cleanBookingReturnUrl(returnUrl);
 }
 
 function embeddedStripeReturnParams() {
@@ -6863,7 +6882,7 @@ function initAdminInteractions() {
     };
     state.camp.bookingRules = {
       ...(state.camp.bookingRules || {}),
-      confirmationUrl: campForm.elements.confirmationUrl.value.trim(),
+      confirmationUrl: normalizeExternalUrl(campForm.elements.confirmationUrl.value),
     };
     if (campForm.elements.logoUrl.value.trim()) {
       state.camp.logoUrl = campForm.elements.logoUrl.value.trim();
@@ -6969,7 +6988,7 @@ function initAdminInteractions() {
         filterByRoomInCalendar: !!campForm.elements.filterByRoomInCalendar.checked,
         packageMode: campForm.elements.packageMode.value === "full_unit" ? "full_unit" : "individual_guests",
         packagesEnabled: !!campForm.elements.packagesEnabled.checked,
-        confirmationUrl: campForm.elements.confirmationUrl.value.trim(),
+        confirmationUrl: normalizeExternalUrl(campForm.elements.confirmationUrl.value),
       };
 
       const logoFile = campForm.elements.logoFile.files?.[0];
