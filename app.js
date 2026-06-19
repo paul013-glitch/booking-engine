@@ -767,6 +767,13 @@ function selectedPercentPromos() {
     .filter((value) => value > 0);
 }
 
+function selectedFixedPromos() {
+  return selectedPromos()
+    .filter((item) => item.promo.type === "fixed")
+    .map((item) => Math.max(0, Number(item.promo.amount ?? item.promo.euro ?? item.promo.value ?? 0)))
+    .filter((value) => value > 0);
+}
+
 function selectedPromoCodeLabel() {
   return selectedPromoCodes().join(", ");
 }
@@ -791,8 +798,10 @@ function promoTotals() {
   const appliedStayTotal = additionalPriceDisplayMode() === "calendar" ? stayTotal : 0;
   const subtotal = packageTotal + appliedStayTotal + roomTotal + baseAddonTotal - freeAddonDiscount;
   const percentPromos = selectedPercentPromos();
+  const fixedPromos = selectedFixedPromos();
   const totalAfterPercent = percentPromos.reduce((running, percent) => running - running * (percent / 100), subtotal);
-  const roundedTotal = Math.max(0, Math.round(totalAfterPercent));
+  const fixedDiscount = fixedPromos.reduce((sum, amount) => sum + amount, 0);
+  const roundedTotal = Math.max(0, Math.round(totalAfterPercent - fixedDiscount));
   return {
     packageTotal,
     stayTotal,
@@ -800,6 +809,8 @@ function promoTotals() {
     baseAddonTotal,
     freeAddonDiscount,
     percentPromos,
+    fixedPromos,
+    fixedDiscount,
     subtotal,
     total: roundedTotal,
     discountTotal: Math.max(0, subtotal - roundedTotal),
@@ -812,6 +823,7 @@ function promoBookingSummary() {
     codes: selectedPromoCodes(),
     freeAddonIds: selectedFreeAddonIds(),
     percentPromos: selectedPercentPromos(),
+    fixedPromos: selectedFixedPromos(),
     subtotal: totals.subtotal,
     discountTotal: totals.discountTotal,
     total: totals.total,
@@ -840,6 +852,38 @@ function applyPromoCodesFromInput(rawValue) {
   upsertCheckoutLead("checkout");
   saveState();
   updateBookPage();
+}
+
+function promoCodesFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return parsePromoCodes([
+      ...params.getAll("promo"),
+      ...params.getAll("promo_code"),
+      ...params.getAll("promos"),
+    ].join(","));
+  } catch {
+    return [];
+  }
+}
+
+function applyPromoCodesFromUrl() {
+  const codes = promoCodesFromUrl();
+  if (!codes.length) return;
+  const promos = orderedItems(state.promos);
+  const validCodes = codes.filter((code) => promos.some((item) => promoMatchesCode(item, code)));
+  const invalidCodes = codes.filter((code) => !validCodes.includes(code));
+  if (!validCodes.length && !invalidCodes.length) return;
+
+  draft.promoCodeInput = codes.join(", ");
+  draft.promoCodes = validCodes;
+  draft.promoError = invalidCodes.length
+    ? `Unknown promo code${invalidCodes.length > 1 ? "s" : ""}: ${invalidCodes.join(", ")}`
+    : "";
+  state.bookingConfirmation = null;
+  syncDraftToState();
+  upsertCheckoutLead("checkout");
+  saveState();
 }
 
 function applyTheme(theme = {}) {
@@ -2816,7 +2860,9 @@ function renderPromoEntry({ variant = "desktop" } = {}) {
                 const label =
                   item.promo.type === "percent"
                     ? `${item.code} · ${item.promo.percent}% off`
-                    : `${item.code} · free ${getAddon(item.promo.addonId)?.name || "add-on"}`;
+                    : item.promo.type === "fixed"
+                      ? `${item.code} · ${money(item.promo.amount)} off`
+                      : `${item.code} · free ${getAddon(item.promo.addonId)?.name || "add-on"}`;
                 return `<span class="promo-chip">${escapeHtml(label)}</span>`;
               })
               .join("")}</div>`
@@ -4342,29 +4388,33 @@ function renderAdminPage() {
     promoCount.textContent = `${orderedItems(state.promos).length} promos`;
   }
   if (promoList) {
-    promoList.innerHTML = orderedItems(state.promos)
+    const rows = orderedItems(state.promos)
       .map((item) => {
-        const targetAddon = getAddon(item.addonId);
-        const label =
-          item.type === "free-addon"
-            ? `Free ${targetAddon?.name || "add-on"}`
-            : `${Math.max(0, Number(item.percent) || 0)}% discount`;
+        const isFixed = item.type === "fixed";
+        const isPercent = item.type === "percent";
+        const amount = isFixed
+          ? Math.max(0, Number(item.amount ?? 0))
+          : isPercent
+            ? Math.max(0, Number(item.percent || 0))
+            : 0;
+        const typeLabel = isFixed ? "€" : isPercent ? "%" : "Free add-on";
         return `
-          <div class="stack-item">
-            <div class="stack-item-top">
-              <strong>${item.code}</strong>
-              <span class="pill">${label}</span>
-            </div>
-            <div class="tiny">${item.type === "free-addon" ? targetAddon?.name || "No add-on set" : "Applies to subtotal"}</div>
-            <div class="stack-item-actions">
-              <button type="button" class="button button-secondary" data-move-promo="${item.id}" data-move-direction="-1">Up</button>
-              <button type="button" class="button button-secondary" data-move-promo="${item.id}" data-move-direction="1">Down</button>
-              <button type="button" class="button button-secondary" data-edit-promo="${item.id}">Edit</button>
-            </div>
-          </div>
+          <tr>
+            <td><strong>${escapeHtml(item.code || "")}</strong></td>
+            <td>${item.type === "free-addon" ? escapeHtml(getAddon(item.addonId)?.name || "Add-on") : escapeHtml(amount)}</td>
+            <td>${escapeHtml(typeLabel)}</td>
+            <td>
+              <div class="table-actions">
+                <button type="button" class="button button-secondary" data-move-promo="${item.id}" data-move-direction="-1">Up</button>
+                <button type="button" class="button button-secondary" data-move-promo="${item.id}" data-move-direction="1">Down</button>
+                <button type="button" class="button button-secondary" data-edit-promo="${item.id}">Edit</button>
+              </div>
+            </td>
+          </tr>
         `;
       })
       .join("");
+    promoList.innerHTML = rows || `<tr><td colspan="4"><span class="tiny">No promo codes yet.</span></td></tr>`;
   }
 
   const customerFieldForm = document.getElementById("customerFieldForm");
@@ -4448,22 +4498,13 @@ function renderAdminPage() {
   }
 
   if (promoForm) {
-    const addonSelect = promoForm.elements.addonId;
-    if (addonSelect) {
-      addonSelect.innerHTML = `
-        <option value="">Select add-on</option>
-        ${orderedItems(state.addons)
-          .map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`)
-          .join("")}
-      `;
-    }
     const editId = promoForm.elements.id.value;
     const editing = state.promos.find((item) => item.id === editId);
     if (editing) {
       promoForm.elements.code.value = editing.code || "";
-      promoForm.elements.type.value = editing.type || "percent";
-      promoForm.elements.percent.value = editing.percent || "";
-      promoForm.elements.addonId.value = editing.addonId || "";
+      promoForm.elements.discountType.value = editing.type === "fixed" ? "fixed" : "percent";
+      promoForm.elements.amount.value =
+        editing.type === "fixed" ? Math.max(0, Number(editing.amount || 0)) : Math.max(0, Number(editing.percent || 0));
     }
   }
 
@@ -4924,6 +4965,7 @@ async function loadPublicWorkspace() {
         initBookInteractions();
       }
       hydrateStateFromWorkspace(workspace);
+      applyPromoCodesFromUrl();
       await reconcileEmbeddedStripeReturn();
       renderBookPage();
     }
@@ -7196,8 +7238,9 @@ function initAdminInteractions() {
     event.preventDefault();
     const id = promoForm.elements.id.value || `promo-${Date.now()}`;
     const existing = state.promos.find((item) => item.id === id);
-    const type = promoForm.elements.type.value;
+    const type = promoForm.elements.discountType.value === "fixed" ? "fixed" : "percent";
     const code = normalizePromoCode(promoForm.elements.code.value);
+    const amount = Math.max(0, Number(promoForm.elements.amount.value || 0));
     if (!code) {
       alert("Please enter a promo code.");
       return;
@@ -7207,27 +7250,28 @@ function initAdminInteractions() {
       alert("That promo code already exists.");
       return;
     }
-    if (type === "percent" && Math.max(0, Number(promoForm.elements.percent.value || 0)) <= 0) {
-      alert("Please enter a discount percentage.");
+    if (amount <= 0) {
+      alert("Please enter a discount amount.");
       return;
     }
-    if (type === "free-addon" && !promoForm.elements.addonId.value) {
-      alert("Please choose an add-on for the free add-on promo.");
+    if (type === "percent" && amount > 100) {
+      alert("Percent discounts cannot be more than 100%.");
       return;
     }
     const payload = {
       id,
       code,
       type,
-      percent: type === "percent" ? Math.max(0, Number(promoForm.elements.percent.value || 0)) : 0,
-      addonId: type === "free-addon" ? promoForm.elements.addonId.value : "",
+      percent: type === "percent" ? amount : 0,
+      amount: type === "fixed" ? amount : 0,
+      addonId: "",
       order: existing?.order ?? nextOrderValue(state.promos),
     };
 
     state.promos = orderedItems([...state.promos.filter((item) => item.id !== id), payload]);
     promoForm.reset();
     promoForm.elements.id.value = "";
-    promoForm.elements.type.value = "percent";
+    promoForm.elements.discountType.value = "percent";
     saveState();
     renderAdminPage();
   });
@@ -7411,9 +7455,9 @@ function initAdminInteractions() {
       adminUiState.configTab = "promos";
       promoForm.elements.id.value = item.id;
       promoForm.elements.code.value = item.code || "";
-      promoForm.elements.type.value = item.type || "percent";
-      promoForm.elements.percent.value = item.percent || "";
-      promoForm.elements.addonId.value = item.addonId || "";
+      promoForm.elements.discountType.value = item.type === "fixed" ? "fixed" : "percent";
+      promoForm.elements.amount.value =
+        item.type === "fixed" ? Math.max(0, Number(item.amount || 0)) : Math.max(0, Number(item.percent || 0));
       renderAdminPage();
     }
 

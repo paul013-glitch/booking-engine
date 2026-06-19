@@ -701,43 +701,56 @@
             </div>
 
           <div class="config-pane" data-config-pane="promos">
-            <div class="admin-grid">
-              <form class="admin-form" id="promoForm">
-                  <h3>Create / edit promo</h3>
-                  <input type="hidden" name="id" />
-                  <label>
-                    Promo code
-                    <input name="code" type="text" placeholder="WELCOME10" required />
-                  </label>
-                  <div class="two-col">
-                    <label>
-                      Type
-                      <select name="type" required>
-                        <option value="percent">Percent discount</option>
-                        <option value="free-addon">Free add-on</option>
-                      </select>
-                    </label>
-                    <label>
-                      Discount %
-                      <input name="percent" type="number" min="1" max="100" step="1" placeholder="10" />
-                    </label>
-                  </div>
-                  <label>
-                    Free add-on
-                    <select name="addonId">
-                      <option value="">Select add-on</option>
-                    </select>
-                  </label>
-                  <button class="button button-primary" type="submit">Save promo</button>
-                </form>
-                <article class="list-card">
-                  <div class="list-head">
-                    <h3>Promo codes</h3>
-                    <span class="pill" id="promoCount"></span>
-                  </div>
-                  <div id="promoList" class="stack"></div>
-              </article>
-            </div>
+            <article class="list-card">
+              <div class="list-head">
+                <div>
+                  <h3>Promo codes</h3>
+                  <p class="helper">Create discounts that guests can apply manually or through a URL like <strong>?promo=june2</strong>.</p>
+                </div>
+                <span class="pill" id="promoCount"></span>
+              </div>
+              <form id="promoForm">
+                <input type="hidden" name="id" />
+                <div class="table-shell">
+                  <table class="admin-table promo-table">
+                    <thead>
+                      <tr>
+                        <th>Promo code</th>
+                        <th>Amount</th>
+                        <th>% or €</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><input name="code" type="text" placeholder="JUNE2" required /></td>
+                        <td><input name="amount" type="number" min="0" step="1" placeholder="10" required /></td>
+                        <td>
+                          <select name="discountType" required>
+                            <option value="percent">%</option>
+                            <option value="fixed">€</option>
+                          </select>
+                        </td>
+                        <td><button class="button button-primary" type="submit">Save promo</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </form>
+              <div class="table-shell">
+                <table class="admin-table promo-table">
+                  <thead>
+                    <tr>
+                      <th>Promo code</th>
+                      <th>Amount</th>
+                      <th>% or €</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="promoList"></tbody>
+                </table>
+              </div>
+            </article>
           </div>
 
           <div class="config-pane" data-config-pane="customerFields">

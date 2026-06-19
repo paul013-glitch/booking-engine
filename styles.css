@@ -1632,6 +1632,10 @@ select {
   min-width: 760px;
 }
 
+.promo-table {
+  min-width: 620px;
+}
+
 .admin-table th,
 .admin-table td {
   padding: 12px 10px;
@@ -1642,6 +1646,12 @@ select {
 
 .admin-table tbody tr:hover {
   background: var(--panel-soft);
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .booking-row {
