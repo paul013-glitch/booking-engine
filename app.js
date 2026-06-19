@@ -205,6 +205,12 @@ const logoSvg =
     </svg>
   `);
 
+const depositRuleDefaults = [
+  { id: "advance", label: "Advance bookings", weeksInAdvance: 12, depositPercent: 25 },
+  { id: "regular", label: "Regular bookings", weeksInAdvance: 2, depositPercent: 50 },
+  { id: "last_minute", label: "Last minute", weeksInAdvance: 0, depositPercent: 100 },
+];
+
 const seedState = {
   camp: {
     name: "Amigos Surf Camp",
@@ -1577,12 +1583,6 @@ function orderedItems(items = []) {
     }))
     .sort((a, b) => a.order - b.order);
 }
-
-const depositRuleDefaults = [
-  { id: "advance", label: "Advance bookings", weeksInAdvance: 12, depositPercent: 25 },
-  { id: "regular", label: "Regular bookings", weeksInAdvance: 2, depositPercent: 50 },
-  { id: "last_minute", label: "Last minute", weeksInAdvance: 0, depositPercent: 100 },
-];
 
 function clampPercent(value, fallback = 100) {
   return Math.max(1, Math.min(100, Math.round(Number.isFinite(Number(value)) ? Number(value) : fallback)));
