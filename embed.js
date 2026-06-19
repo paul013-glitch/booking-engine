@@ -68,22 +68,16 @@
     }
 
     .book-loading-screen {
-      min-height: min(480px, 62vh);
+      min-height: min(420px, 56vh);
       display: grid;
       place-items: center;
     }
 
     .book-loading-card {
-      width: min(100%, 560px);
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 18px;
+      width: min(100%, 360px);
+      display: flex;
+      gap: 10px;
       align-items: center;
-      padding: 24px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-xl);
-      background: var(--panel);
-      box-shadow: none;
       color: var(--text);
       opacity: 0;
       animation: bookingEmbedLoadingFade 160ms ease forwards;
@@ -91,44 +85,29 @@
 
     .book-loading-orbit {
       position: relative;
-      width: 52px;
-      height: 52px;
+      width: 16px;
+      height: 16px;
       border-radius: 999px;
-      border: 1px solid rgba(138, 109, 73, 0.22);
-      background: var(--accent-soft);
+      flex: 0 0 auto;
     }
 
     .book-loading-orbit::before {
       content: "";
       position: absolute;
-      inset: 9px;
+      inset: 0;
       border-radius: inherit;
-      border: 3px solid rgba(138, 109, 73, 0.18);
+      border: 2px solid rgba(138, 109, 73, 0.16);
       border-top-color: var(--accent);
       animation: bookingEmbedLoadingSpin 800ms linear infinite;
     }
 
     .book-loading-orbit span {
-      position: absolute;
-      inset: 20px;
-      border-radius: inherit;
-      background: var(--accent);
-    }
-
-    .book-loading-copy strong {
-      display: block;
-      font-size: 1.35rem;
-      line-height: 1.15;
-    }
-
-    .book-loading-copy p {
-      margin: 6px 0 0;
-      color: var(--muted);
+      display: none;
     }
 
     .book-loading-progress {
-      height: 9px;
-      margin-top: 16px;
+      flex: 1 1 120px;
+      height: 6px;
       border-radius: 999px;
       overflow: hidden;
       background: rgba(138, 109, 73, 0.16);
@@ -144,10 +123,18 @@
     }
 
     .book-loading-percent {
-      font-size: 0.88rem;
+      font-size: 0.78rem;
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .book-loading-title {
+      color: var(--muted);
+      font-size: 0.92rem;
+      white-space: nowrap;
     }
 
     @keyframes bookingEmbedLoadingFade {
@@ -186,15 +173,11 @@
         <div class="book-loading-orbit" aria-hidden="true">
           <span></span>
         </div>
-        <div class="book-loading-copy">
-          <p class="eyebrow">Booking engine</p>
-          <strong id="bookLoadingTitle">Preparing your booking flow</strong>
-          <p id="bookLoadingDetail">Loading the booking engine.</p>
-          <div class="book-loading-progress" aria-hidden="true">
-            <span id="bookLoadingBar" style="width: 8%;"></span>
-          </div>
-          <p class="book-loading-percent"><span id="bookLoadingPercent">8</span>% complete</p>
+        <div class="book-loading-progress" aria-hidden="true">
+          <span id="bookLoadingBar" style="width: 8%;"></span>
         </div>
+        <span class="book-loading-percent"><span id="bookLoadingPercent">8</span>%</span>
+        <span id="bookLoadingTitle" class="book-loading-title">Loading availability</span>
       </div>
     </section>
   `;

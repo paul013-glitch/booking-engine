@@ -316,7 +316,7 @@ select {
 .book-loading-screen {
   max-width: 1320px;
   margin: 0 auto;
-  min-height: min(480px, 62vh);
+  min-height: min(420px, 56vh);
   display: grid;
   place-items: center;
 }
@@ -326,61 +326,37 @@ select {
 }
 
 .book-loading-card {
-  width: min(100%, 560px);
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 18px;
+  width: min(100%, 360px);
+  display: flex;
+  gap: 10px;
   align-items: center;
-  padding: 24px;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, #ffffff);
-  border-radius: var(--radius-xl);
-  background:
-    radial-gradient(circle at 10% 10%, color-mix(in srgb, var(--accent-soft) 44%, transparent), transparent 36%),
-    var(--panel);
-  box-shadow: 0 18px 50px rgba(63, 47, 28, 0.1);
 }
 
 .book-loading-orbit {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  background: color-mix(in srgb, var(--accent-soft) 36%, #ffffff);
+  flex: 0 0 auto;
 }
 
 .book-loading-orbit::before {
   content: "";
   position: absolute;
-  inset: 9px;
+  inset: 0;
   border-radius: inherit;
-  border: 3px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 2px solid color-mix(in srgb, var(--accent) 16%, transparent);
   border-top-color: var(--accent);
   animation: button-spin 0.8s linear infinite;
 }
 
 .book-loading-orbit span {
-  position: absolute;
-  inset: 20px;
-  border-radius: inherit;
-  background: var(--accent);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 48%, transparent);
-}
-
-.book-loading-copy strong {
-  display: block;
-  font-size: clamp(1.2rem, 3vw, 1.65rem);
-  line-height: 1.15;
-}
-
-.book-loading-copy p {
-  margin: 6px 0 0;
-  color: var(--muted);
+  display: none;
 }
 
 .book-loading-progress {
-  height: 9px;
-  margin-top: 16px;
+  flex: 1 1 120px;
+  height: 6px;
   border-radius: 999px;
   overflow: hidden;
   background: color-mix(in srgb, var(--border) 62%, #ffffff);
@@ -396,10 +372,18 @@ select {
 }
 
 .book-loading-percent {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.book-loading-title {
+  color: var(--muted);
+  font-size: 0.92rem;
+  white-space: nowrap;
 }
 
 .page-book.is-book-loading > .book-header,
@@ -1056,7 +1040,7 @@ select {
 
 .payment-provider-logo {
   display: block;
-  height: 22px;
+  height: 34px;
   width: auto;
 }
 
@@ -2349,9 +2333,12 @@ select {
   }
 
   .book-loading-card {
-    grid-template-columns: 1fr;
-    justify-items: start;
-    padding: 20px;
+    width: min(100%, 320px);
+    gap: 8px;
+  }
+
+  .book-loading-title {
+    font-size: 0.86rem;
   }
 
   .topbar,
