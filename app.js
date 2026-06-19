@@ -3211,9 +3211,7 @@ function renderBookPage() {
   const quantityLabel = bookingQuantityLabel();
   const addonRows = selectedAddonRows();
   const packageRows = selectedPackageRows();
-  const customerFields = customerFieldDefinitions();
   const countryChoices = countryOptions();
-  const sharedRoomMode = !isFullUnitMode();
   const packageStepNumber = bookingStepIndex("package") + 1;
   const dateStepNumber = bookingStepIndex("date") + 1;
   const roomStepNumber = bookingStepIndex("room") + 1;
@@ -3408,10 +3406,6 @@ function renderBookPage() {
                 </label>
               </div>
               <div class="input-row" style="margin-top: 14px;">
-                <label class="field" id="fieldGuestPhone">
-                  Phone
-                  <input id="guestPhone" type="tel" value="${escapeHtml(draft.guestPhone)}" />
-                </label>
                 <label class="field" id="fieldGuestCountry">
                   Country
                   <select id="guestCountry">
@@ -3429,81 +3423,15 @@ function renderBookPage() {
                     }
                   </select>
                 </label>
+                <label class="field" id="fieldGuestPhone">
+                  Phone
+                  <input id="guestPhone" type="tel" value="${escapeHtml(draft.guestPhone)}" />
+                </label>
               </div>
-              ${
-                sharedRoomMode
-                  ? `
-                    <div class="three-col dob-row" style="margin-top: 14px;">
-                      <div class="field" id="fieldGuestBirthDate" style="grid-column: 1 / -1;">
-                        Birth date
-                        <div class="three-col" style="margin-top: 8px;">
-                          <label class="field" id="fieldGuestBirthDay">
-                            <input
-                              id="guestBirthDay"
-                              type="number"
-                              min="1"
-                              max="31"
-                              step="1"
-                              placeholder="Day"
-                              value="${escapeHtml(draft.guestBirthDay)}"
-                            />
-                          </label>
-                          <label class="field" id="fieldGuestBirthMonth">
-                            <select id="guestBirthMonth">
-                              <option value="">Month</option>
-                              ${[
-                                "January",
-                                "February",
-                                "March",
-                                "April",
-                                "May",
-                                "June",
-                                "July",
-                                "August",
-                                "September",
-                                "October",
-                                "November",
-                                "December",
-                              ]
-                                .map(
-                                  (month, index) =>
-                                    `<option value="${String(index + 1)}" ${String(draft.guestBirthMonth) === String(index + 1) ? "selected" : ""}>${month}</option>`,
-                                )
-                                .join("")}
-                            </select>
-                          </label>
-                          <label class="field" id="fieldGuestBirthYear">
-                            <input
-                              id="guestBirthYear"
-                              type="number"
-                              min="1900"
-                              max="${new Date().getFullYear()}"
-                              step="1"
-                              placeholder="Year"
-                              value="${escapeHtml(draft.guestBirthYear)}"
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                    <div id="fieldGuestGenderGroup" style="margin-top: 14px;">
-                      ${renderGuestGenderControls()}
-                    </div>
-                  `
-                  : ""
-              }
-              ${
-                customerFields.length
-                  ? `
-                    <div class="customer-fields">
-                      ${customerFields.map((field) => renderCustomerFieldControl(field)).join("")}
-                    </div>
-                  `
-                  : ""
-              }
               <label class="field" id="fieldGuestNotes" style="margin-top: 14px;">
                 Notes
                 <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
+                <span class="helper">Bringing a friend? We'll group you together. Mixed gender tent an issue? Inform us. Your comfort is our priority!</span>
               </label>
               <div class="notice">
                 Your reservation is held for 15 minutes while you complete the secure Stripe payment.
@@ -6017,37 +5945,17 @@ async function confirmBookingReservation() {
   const guestPhone = getBookElement("guestPhone")?.value.trim();
   const guestEmail = getBookElement("guestEmail")?.value.trim();
   const guestCountry = getBookElement("guestCountry")?.value.trim();
-  const sharedRoomMode = !isFullUnitMode();
-  const guestBirthDay = sharedRoomMode ? getBookElement("guestBirthDay")?.value.trim() : "";
-  const guestBirthMonth = sharedRoomMode ? getBookElement("guestBirthMonth")?.value.trim() : "";
-  const guestBirthYear = sharedRoomMode ? getBookElement("guestBirthYear")?.value.trim() : "";
+  const guestBirthDay = "";
+  const guestBirthMonth = "";
+  const guestBirthYear = "";
   const notes = getBookElement("guestNotes")?.value.trim();
-  const guestGenders = normalizedGuestGenders(
-    sharedRoomMode
-      ? Array.from({ length: Math.max(1, selectedPackagePeopleCount()) }, (_, index) =>
-          bookingRootNode().querySelector(`[data-guest-gender-index="${index}"]`)?.value.trim() || "",
-        )
-      : [],
-  );
+  const guestGenders = [];
 
   const missingFields = [];
   if (!guestName) missingFields.push("fieldGuestName");
   if (!guestEmail) missingFields.push("fieldGuestEmail");
   if (!guestPhone) missingFields.push("fieldGuestPhone");
   if (!guestCountry) missingFields.push("fieldGuestCountry");
-  if (sharedRoomMode) {
-    if (!guestBirthDay) missingFields.push("fieldGuestBirthDay");
-    if (!guestBirthMonth) missingFields.push("fieldGuestBirthMonth");
-    if (!guestBirthYear) missingFields.push("fieldGuestBirthYear");
-    guestGenders.forEach((gender, index) => {
-      if (!gender) missingFields.push(`fieldGuestGender${index}`);
-    });
-  }
-  for (const field of customerFieldDefinitions()) {
-    if (field.required && !String(draft.customerFieldValues?.[field.key] || "").trim()) {
-      missingFields.push(customerFieldDomId(field));
-    }
-  }
   setBookingFieldErrors(missingFields);
 
   if (missingFields.length) {
