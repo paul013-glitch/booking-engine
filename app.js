@@ -1485,7 +1485,7 @@ function hasAvailabilityForDate(startDate) {
   );
 }
 
-function firstBookableStartDate(afterDate = nextDefaultDate(), bookingRules = seedState.camp.bookingRules) {
+function firstBookableStartDate(afterDate = localDateKey(new Date()), bookingRules = bookingRulesConfig()) {
   const cursor = parseDateValue(afterDate) || new Date();
   for (let i = 0; i < 365; i += 1) {
     const candidate = localDateKey(cursor);
