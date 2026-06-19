@@ -596,10 +596,10 @@ function stores() {
   };
 }
 
-function response(statusCode, body) {
+function response(statusCode, body, extraHeaders = {}) {
   return {
     statusCode,
-    headers: corsHeaders({ "Content-Type": "application/json" }),
+    headers: corsHeaders({ "Content-Type": "application/json", ...extraHeaders }),
     body: JSON.stringify(body),
   };
 }
@@ -791,6 +791,87 @@ function workspaceResponse(workspace) {
   return response(200, workspace);
 }
 
+function publicHoldIsActive(booking) {
+  return booking.status === "held" && (!booking.holdExpiresAt || new Date(booking.holdExpiresAt) > new Date());
+}
+
+function publicBookingBlocksInventory(booking) {
+  if (!booking) return false;
+  if (booking.status === "cancelled" || booking.status === "expired") return false;
+  if (booking.status === "held") return publicHoldIsActive(booking);
+  return booking.status === "confirmed";
+}
+
+function publicDateKeysBetween(startDate, endDate) {
+  const keys = [];
+  const cursor = new Date(startDate);
+  const endCursor = new Date(endDate);
+  if (!(cursor < endCursor)) return keys;
+  while (cursor < endCursor) {
+    keys.push(localDateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
+}
+
+function publicBookingRoomAllocations(booking = {}) {
+  if (booking.roomAllocations && typeof booking.roomAllocations === "object") {
+    return Object.entries(booking.roomAllocations)
+      .map(([roomId, guestCount]) => [roomId, Math.max(0, Number(guestCount) || 0)])
+      .filter(([, guestCount]) => guestCount > 0);
+  }
+  return booking.roomId ? [[booking.roomId, Math.max(1, Number(booking.packagePeople || 1))]] : [];
+}
+
+function publicInventorySummary(workspace = {}) {
+  return (workspace.bookings || []).filter(publicBookingBlocksInventory).reduce((summary, booking) => {
+    const dateKeys = publicDateKeysBetween(booking.startDate, booking.endDate);
+    if (!dateKeys.length) return summary;
+    publicBookingRoomAllocations(booking).forEach(([roomId, guestCount]) => {
+      if (!summary[roomId]) summary[roomId] = {};
+      dateKeys.forEach((dateKey) => {
+        summary[roomId][dateKey] = Math.max(0, Number(summary[roomId][dateKey] || 0)) + guestCount;
+      });
+    });
+    return summary;
+  }, {});
+}
+
+function publicWorkspacePayload(workspace = {}) {
+  return {
+    id: workspace.id || "",
+    camp: {
+      name: workspace.camp?.name || "",
+      slug: workspace.camp?.slug || "",
+      logoUrl: workspace.camp?.logoUrl || "",
+      showBookingIntents: false,
+      theme: workspace.camp?.theme || {},
+      analytics: workspace.camp?.analytics || {},
+      customerFields: Array.isArray(workspace.camp?.customerFields)
+        ? workspace.camp.customerFields.filter((field) => !field?.archivedAt)
+        : [],
+      bookingRules: workspace.camp?.bookingRules || {},
+      availability: workspace.camp?.availability || {},
+      inventorySummary: publicInventorySummary(workspace),
+      archivedAt: workspace.camp?.archivedAt || "",
+    },
+    packages: Array.isArray(workspace.packages) ? workspace.packages : [],
+    rooms: Array.isArray(workspace.rooms) ? workspace.rooms.filter((room) => room?.enabled !== false) : [],
+    addons: Array.isArray(workspace.addons) ? workspace.addons : [],
+    promos: Array.isArray(workspace.promos) ? workspace.promos : [],
+    bookings: [],
+    leads: [],
+    bookingIntents: [],
+    selectedAddonIds: [],
+    packageQuantities: {},
+    roomAllocations: {},
+    selectedPackageId: workspace.selectedPackageId || "",
+    selectedRoomId: workspace.selectedRoomId || "",
+    calendarRoomFilter: "all",
+    updatedAt: workspace.updatedAt || "",
+  };
+}
+
 function masterPortalEmails() {
   return String(process.env.MASTER_PORTAL_EMAILS || "")
     .split(",")
@@ -821,5 +902,6 @@ module.exports = {
   response,
   saveWorkspace,
   slugify,
+  publicWorkspacePayload,
   workspaceResponse,
 };

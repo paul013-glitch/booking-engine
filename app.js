@@ -2612,7 +2612,16 @@ function availableUnits(roomId, startDate, endDate) {
   return Math.max(0, Math.min(...availableByDate));
 }
 
+function inventorySummaryUnitsForDate(roomId, dateKey) {
+  const value = state.camp?.inventorySummary?.[roomId]?.[dateKey];
+  if (value === undefined || value === null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : null;
+}
+
 function bookedUnitsForDate(roomId, dateKey) {
+  const summarized = inventorySummaryUnitsForDate(roomId, dateKey);
+  if (summarized !== null) return summarized;
   const startDate = dateKey;
   const endDate = addDays(dateKey, 1);
   return state.bookings
@@ -4941,6 +4950,41 @@ function hydrateStateFromWorkspace(workspace) {
   saveState();
 }
 
+const PUBLIC_WORKSPACE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function publicWorkspaceCacheKey(slug = requestedCampSlug()) {
+  return slug ? `${STORAGE_KEY}:public-workspace-v2:${slug}` : "";
+}
+
+function readPublicWorkspaceCache(slug = requestedCampSlug()) {
+  const key = publicWorkspaceCacheKey(slug);
+  if (!key || typeof sessionStorage === "undefined") return null;
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(key) || "null");
+    if (!cached?.workspace || !cached.cachedAt) return null;
+    if (Date.now() - Number(cached.cachedAt) > PUBLIC_WORKSPACE_CACHE_TTL_MS) return null;
+    return cached.workspace;
+  } catch {
+    return null;
+  }
+}
+
+function writePublicWorkspaceCache(slug = requestedCampSlug(), workspace = null) {
+  const key = publicWorkspaceCacheKey(slug);
+  if (!key || !workspace || typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      key,
+      JSON.stringify({
+        cachedAt: Date.now(),
+        workspace,
+      }),
+    );
+  } catch {
+    // Cache is an optimization only; storage failures should never block booking.
+  }
+}
+
 function currentIdentityRoles() {
   const user = window.netlifyIdentity?.currentUser?.();
   return Array.isArray(user?.app_metadata?.roles) ? user.app_metadata.roles.map((role) => String(role).trim()) : [];
@@ -5066,6 +5110,7 @@ async function loadPublicWorkspace() {
     return;
   }
 
+  let renderedFromCache = false;
   try {
     const slug = requestedCampSlug();
     if (!slug) {
@@ -5074,18 +5119,31 @@ async function loadPublicWorkspace() {
       }
       return;
     }
+    if (isEmbeddedBooking()) {
+      ensureEmbeddedBookShell();
+      initBookInteractions();
+    }
+    const canRenderCache = !embeddedStripeReturnParams();
+    const cachedWorkspace = canRenderCache ? readPublicWorkspaceCache(slug) : null;
+    if (cachedWorkspace) {
+      hydrateStateFromWorkspace(cachedWorkspace);
+      applyPromoCodesFromUrl();
+      renderBookPage();
+      renderedFromCache = true;
+    }
     const workspace = await apiJson(`public-workspace?slug=${encodeURIComponent(slug)}`);
     if (workspace) {
-      if (isEmbeddedBooking()) {
-        ensureEmbeddedBookShell();
-        initBookInteractions();
-      }
+      writePublicWorkspaceCache(slug, workspace);
       hydrateStateFromWorkspace(workspace);
       applyPromoCodesFromUrl();
       await reconcileEmbeddedStripeReturn();
       renderBookPage();
     }
   } catch (error) {
+    if (renderedFromCache) {
+      console.warn("[book] fresh public workspace refresh failed; keeping cached booking engine", error);
+      return;
+    }
     if (isEmbeddedBooking()) {
       renderEmbeddedBookError(
         error instanceof Error ? error.message : "Could not load this booking engine right now.",

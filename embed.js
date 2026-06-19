@@ -109,6 +109,17 @@
   linkedStyles.rel = "stylesheet";
   linkedStyles.href = new URL("styles.css", scriptUrl).toString();
 
+  const preloadStyles = document.createElement("link");
+  preloadStyles.rel = "preload";
+  preloadStyles.as = "style";
+  preloadStyles.href = linkedStyles.href;
+
+  const preloadApp = document.createElement("link");
+  preloadApp.rel = "preload";
+  preloadApp.as = "script";
+  preloadApp.href = new URL("app.js", scriptUrl).toString();
+  document.head.append(preloadStyles, preloadApp);
+
   const host = document.createElement("div");
   host.className = "page-book booking-embed-root";
   host.innerHTML = `<div class="booking-embed-loading">Loading booking engine...</div>`;
@@ -144,7 +155,7 @@
   }
 
   const appScript = document.createElement("script");
-  appScript.src = new URL("app.js", scriptUrl).toString();
+  appScript.src = preloadApp.href;
   appScript.dataset.bookingEngineApp = "true";
   appScript.addEventListener(
     "load",

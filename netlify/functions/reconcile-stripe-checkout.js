@@ -1,6 +1,7 @@
 const {
   corsHeaders,
   getWorkspaceById,
+  publicWorkspacePayload,
   response,
   saveWorkspace,
 } = require("./_shared");
@@ -174,7 +175,7 @@ exports.handler = async (event) => {
 
     const saved = await saveWorkspace(workspace);
     return response(200, {
-      workspace: saved,
+      workspace: publicWorkspacePayload(saved),
       workspaceId: saved.id,
       reservationCode: confirmedBooking.reservationCode,
       booking: confirmedBooking,

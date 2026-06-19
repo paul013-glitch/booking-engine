@@ -3,6 +3,7 @@ const {
   expireExpiredHolds,
   getWorkspaceBySlug,
   normalizeWorkspace,
+  publicWorkspacePayload,
   response,
   saveWorkspace,
 } = require("./_shared");
@@ -434,7 +435,7 @@ exports.handler = async (event) => {
     const saved = await saveWorkspace(normalized);
 
     return response(200, {
-      workspace: saved,
+      workspace: publicWorkspacePayload(saved),
       booking: bookingRecord,
       reservationCode,
       checkoutUrl: session.url,
