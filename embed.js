@@ -69,18 +69,30 @@
 
     @media (max-width: 720px) {
       :host {
-        min-height: 200vh;
         overflow: visible;
       }
 
       .booking-embed-root {
-        min-height: 200vh;
         padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
         box-sizing: border-box;
         overflow: visible;
       }
 
+      .booking-embed-root .booking-shell {
+        min-height: 200vh;
+      }
+
+      .booking-embed-root #summaryActionsShell {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 2147483000;
+      }
+
       .booking-embed-root .summary-actions {
+        position: static;
+        margin-top: 0;
         z-index: 2147483000;
       }
     }
