@@ -248,6 +248,8 @@ const seedState = {
       availabilityMidThreshold: 15,
       availabilityCountVisibilityThreshold: null,
       depositPercent: 100,
+      lateDepositWeeks: 0,
+      lateDepositPercent: 100,
       showAvailabilityColors: true,
       showAvailability: true,
       showPricePerNight: false,
@@ -584,6 +586,12 @@ function normalizeWorkspaceData(data = {}) {
     depositPercent: Number.isFinite(Number(data?.camp?.bookingRules?.depositPercent))
       ? Math.max(1, Math.min(100, Math.round(Number(data.camp.bookingRules.depositPercent))))
       : seedState.camp.bookingRules.depositPercent,
+    lateDepositWeeks: Number.isFinite(Number(data?.camp?.bookingRules?.lateDepositWeeks))
+      ? Math.max(0, Math.round(Number(data.camp.bookingRules.lateDepositWeeks)))
+      : seedState.camp.bookingRules.lateDepositWeeks,
+    lateDepositPercent: Number.isFinite(Number(data?.camp?.bookingRules?.lateDepositPercent))
+      ? Math.max(1, Math.min(100, Math.round(Number(data.camp.bookingRules.lateDepositPercent))))
+      : seedState.camp.bookingRules.lateDepositPercent,
     filterByRoomInCalendar:
       typeof data?.camp?.bookingRules?.filterByRoomInCalendar === "boolean"
         ? data.camp.bookingRules.filterByRoomInCalendar
@@ -3830,6 +3838,10 @@ function renderAdminPage() {
       state.camp.bookingRules?.availabilityCountVisibilityThreshold ?? "";
     campForm.elements.depositPercent.value =
       state.camp.bookingRules?.depositPercent ?? seedState.camp.bookingRules.depositPercent;
+    campForm.elements.lateDepositWeeks.value =
+      state.camp.bookingRules?.lateDepositWeeks ?? seedState.camp.bookingRules.lateDepositWeeks;
+    campForm.elements.lateDepositPercent.value =
+      state.camp.bookingRules?.lateDepositPercent ?? seedState.camp.bookingRules.lateDepositPercent;
     campForm.elements.showAvailabilityColors.checked = showAvailabilityColors(state.camp.bookingRules);
     campForm.elements.showAvailability.checked = showAvailabilityCounts(state.camp.bookingRules);
     campForm.elements.showPricePerNight.checked = showPricePerNightInCalendar(state.camp.bookingRules);
@@ -7010,11 +7022,18 @@ function initAdminInteractions() {
         1,
         Math.min(100, Math.round(Number(campForm.elements.depositPercent.value || seedState.camp.bookingRules.depositPercent))),
       );
+      const lateDepositWeeks = Math.max(0, Math.round(Number(campForm.elements.lateDepositWeeks.value || 0)));
+      const lateDepositPercent = Math.max(
+        1,
+        Math.min(100, Math.round(Number(campForm.elements.lateDepositPercent.value || seedState.camp.bookingRules.lateDepositPercent))),
+      );
       state.camp.bookingRules = {
         ...(state.camp.bookingRules || {}),
         availabilityLowThreshold: lowThreshold,
         availabilityMidThreshold: midThreshold,
         depositPercent,
+        lateDepositWeeks,
+        lateDepositPercent,
         availabilityCountVisibilityThreshold:
           campForm.elements.availabilityCountVisibilityThreshold.value === ""
             ? null

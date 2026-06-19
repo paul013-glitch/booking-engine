@@ -136,18 +136,57 @@ function guestGenderList(booking = {}) {
   return Array.from({ length: count }, (_, index) => String(values[index] || "").trim());
 }
 
-function bookingDepositPercent(workspace = {}) {
-  const configured = Number(workspace.camp?.bookingRules?.depositPercent);
-  if (Number.isFinite(configured)) {
-    return Math.max(1, Math.min(100, Math.round(configured)));
-  }
-  const envFallback = Number(process.env.STRIPE_PAYMENT_PERCENT);
-  return Number.isFinite(envFallback) ? Math.max(1, Math.min(100, Math.round(envFallback))) : 100;
+function clampPercent(value, fallback = 100) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(1, Math.min(100, Math.round(numeric))) : fallback;
 }
 
-function stripeAmountCents(realTotalEuros, workspace = {}) {
+function parseDateOnly(value) {
+  if (!value) return null;
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysUntilDate(dateInput, now = new Date()) {
+  const target = parseDateOnly(dateInput);
+  if (!target) return null;
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
+}
+
+function bookingDepositRule(workspace = {}, booking = {}, now = new Date()) {
+  const rules = workspace.camp?.bookingRules || {};
+  const normalPercent = clampPercent(rules.depositPercent, null);
+  const envFallback = Number(process.env.STRIPE_PAYMENT_PERCENT);
+  const depositPercent =
+    normalPercent || (Number.isFinite(envFallback) ? clampPercent(envFallback, 100) : 100);
+  const lateWeeks = Math.max(0, Math.round(Number(rules.lateDepositWeeks || 0)));
+  const latePercent = clampPercent(rules.lateDepositPercent, 100);
+  const daysUntilCheckIn = daysUntilDate(booking.startDate, now);
+  const lateWindowDays = lateWeeks * 7;
+  const useLateRule =
+    lateWeeks > 0 &&
+    daysUntilCheckIn !== null &&
+    daysUntilCheckIn >= 0 &&
+    daysUntilCheckIn <= lateWindowDays;
+
+  return {
+    percent: useLateRule ? latePercent : depositPercent,
+    basePercent: depositPercent,
+    lateWeeks,
+    latePercent,
+    daysUntilCheckIn,
+    rule: useLateRule ? "late_booking" : "standard",
+  };
+}
+
+function bookingDepositPercent(workspace = {}, booking = {}, now = new Date()) {
+  return bookingDepositRule(workspace, booking, now).percent;
+}
+
+function stripeAmountCents(realTotalEuros, workspace = {}, booking = {}, now = new Date()) {
   const realTotal = Math.max(0, Number(realTotalEuros || 0));
-  const percent = bookingDepositPercent(workspace);
+  const percent = bookingDepositPercent(workspace, booking, now);
   return Math.max(50, Math.round(realTotal * 100 * (percent / 100)));
 }
 
@@ -175,7 +214,7 @@ async function createStripeCheckoutSession({ workspace, bookingRecord, successUr
     throw new Error("Stripe is not connected for this booking engine yet.");
   }
 
-  const amount = stripeAmountCents(bookingRecord.total, workspace);
+  const amount = Math.max(50, Math.round(Number(bookingRecord.depositAmount || 0) * 100));
   const params = new URLSearchParams();
   params.append("mode", "payment");
   params.append("success_url", successUrl);
@@ -272,8 +311,9 @@ exports.handler = async (event) => {
     const bookingId = `booking-${now.getTime()}`;
     const intentId = booking.id || `intent-${now.getTime()}`;
     const bookingDate = booking.createdAt || now.toISOString();
-    const depositPercent = bookingDepositPercent(normalized);
-    const depositAmount = stripeAmountCents(booking.total, normalized) / 100;
+    const depositRule = bookingDepositRule(normalized, booking, now);
+    const depositPercent = depositRule.percent;
+    const depositAmount = stripeAmountCents(booking.total, normalized, booking, now) / 100;
     const totalAmount = Number(booking.total || 0);
 
     const bookingRecord = {
@@ -288,6 +328,7 @@ exports.handler = async (event) => {
       total: totalAmount,
       depositPercent,
       depositAmount,
+      depositRule,
       paymentCurrency: "EUR",
       paymentLog: [],
       createdAt: bookingDate,
@@ -337,7 +378,10 @@ exports.handler = async (event) => {
         at: now.toISOString(),
         stripeCheckoutSessionId: session.id,
         stripeAccountId: bookingRecord.stripeAccountId,
-        note: `Deposit checkout created for ${depositPercent}% of reservation total.`,
+        note:
+          depositRule.rule === "late_booking"
+            ? `Late booking checkout created for ${depositPercent}% of reservation total (${depositRule.daysUntilCheckIn} days before check-in).`
+            : `Deposit checkout created for ${depositPercent}% of reservation total.`,
       },
     ];
 

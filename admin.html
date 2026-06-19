@@ -511,6 +511,16 @@
                 <input name="depositPercent" type="number" min="1" max="100" step="1" placeholder="100" />
                 <span class="helper">Percentage guests pay online to confirm a reservation.</span>
               </label>
+              <label>
+                Late booking window, weeks
+                <input name="lateDepositWeeks" type="number" min="0" step="1" placeholder="0" />
+                <span class="helper">If check-in is within this many weeks, use the late booking percentage. Set 0 to disable.</span>
+              </label>
+              <label>
+                Late booking percentage
+                <input name="lateDepositPercent" type="number" min="1" max="100" step="1" placeholder="100" />
+                <span class="helper">Example: 100 means bookings within the window pay the full amount.</span>
+              </label>
             </div>
             <div id="stripeConnectPanel" class="payment-connect-panel">
               <div>
