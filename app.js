@@ -250,6 +250,11 @@ const seedState = {
       depositPercent: 100,
       lateDepositWeeks: 0,
       lateDepositPercent: 100,
+      depositRules: [
+        { id: "advance", label: "Advance bookings", weeksInAdvance: 12, depositPercent: 25 },
+        { id: "regular", label: "Regular bookings", weeksInAdvance: 2, depositPercent: 50 },
+        { id: "last_minute", label: "Last minute", weeksInAdvance: 0, depositPercent: 100 },
+      ],
       showAvailabilityColors: true,
       showAvailability: true,
       showPricePerNight: false,
@@ -592,6 +597,10 @@ function normalizeWorkspaceData(data = {}) {
     lateDepositPercent: Number.isFinite(Number(data?.camp?.bookingRules?.lateDepositPercent))
       ? Math.max(1, Math.min(100, Math.round(Number(data.camp.bookingRules.lateDepositPercent))))
       : seedState.camp.bookingRules.lateDepositPercent,
+    depositRules: normalizeDepositRules(data?.camp?.bookingRules?.depositRules, {
+      ...seedState.camp.bookingRules,
+      ...((data.camp && data.camp.bookingRules) || {}),
+    }),
     filterByRoomInCalendar:
       typeof data?.camp?.bookingRules?.filterByRoomInCalendar === "boolean"
         ? data.camp.bookingRules.filterByRoomInCalendar
@@ -1569,6 +1578,56 @@ function orderedItems(items = []) {
     .sort((a, b) => a.order - b.order);
 }
 
+const depositRuleDefaults = [
+  { id: "advance", label: "Advance bookings", weeksInAdvance: 12, depositPercent: 25 },
+  { id: "regular", label: "Regular bookings", weeksInAdvance: 2, depositPercent: 50 },
+  { id: "last_minute", label: "Last minute", weeksInAdvance: 0, depositPercent: 100 },
+];
+
+function clampPercent(value, fallback = 100) {
+  return Math.max(1, Math.min(100, Math.round(Number.isFinite(Number(value)) ? Number(value) : fallback)));
+}
+
+function normalizeDepositRules(rawRules = [], legacyRules = {}) {
+  const source = Array.isArray(rawRules) && rawRules.length ? rawRules : [];
+  const byId = new Map(source.map((rule) => [String(rule.id || "").trim(), rule]));
+  const legacyDepositPercent = clampPercent(legacyRules.depositPercent, depositRuleDefaults[1].depositPercent);
+  const legacyLateWeeks = Math.max(0, Math.round(Number(legacyRules.lateDepositWeeks || 0)));
+  const legacyLatePercent = clampPercent(legacyRules.lateDepositPercent, depositRuleDefaults[2].depositPercent);
+  const merged = depositRuleDefaults.map((defaults) => {
+    const rule = byId.get(defaults.id) || {};
+    const fallbackPercent =
+      defaults.id === "regular"
+        ? legacyDepositPercent
+        : defaults.id === "last_minute"
+          ? legacyLatePercent
+          : defaults.depositPercent;
+    const fallbackWeeks =
+      defaults.id === "regular"
+        ? Math.max(defaults.weeksInAdvance, legacyLateWeeks + 1)
+        : defaults.id === "last_minute"
+          ? legacyLateWeeks
+          : defaults.weeksInAdvance;
+    return {
+      id: defaults.id,
+      label: defaults.label,
+      weeksInAdvance: Math.max(0, Math.round(Number.isFinite(Number(rule.weeksInAdvance)) ? Number(rule.weeksInAdvance) : fallbackWeeks)),
+      depositPercent: clampPercent(rule.depositPercent, fallbackPercent),
+    };
+  });
+  const advance = merged.find((rule) => rule.id === "advance");
+  const regular = merged.find((rule) => rule.id === "regular");
+  const lastMinute = merged.find((rule) => rule.id === "last_minute");
+  lastMinute.weeksInAdvance = Math.max(0, lastMinute.weeksInAdvance);
+  regular.weeksInAdvance = Math.max(lastMinute.weeksInAdvance + 1, regular.weeksInAdvance);
+  advance.weeksInAdvance = Math.max(regular.weeksInAdvance + 1, advance.weeksInAdvance);
+  return [advance, regular, lastMinute];
+}
+
+function depositRulesConfig(bookingRules = state?.camp?.bookingRules || seedState.camp.bookingRules) {
+  return normalizeDepositRules(bookingRules?.depositRules, bookingRules);
+}
+
 function nextOrderValue(items = []) {
   return orderedItems(items).reduce((max, item) => Math.max(max, item.order), -1) + 1;
 }
@@ -1629,12 +1688,17 @@ function normalizeCustomerField(field = {}, index = 0) {
     required: !!field.required,
     placeholder: String(field.placeholder || ""),
     options,
+    archivedAt: field.archivedAt || "",
     order: Number.isFinite(Number(field.order)) ? Number(field.order) : index,
   };
 }
 
 function customerFieldDefinitions() {
   return orderedItems(state.camp.customerFields || []).map(normalizeCustomerField);
+}
+
+function activeCustomerFieldDefinitions() {
+  return customerFieldDefinitions().filter((field) => !field.archivedAt);
 }
 
 function customerFieldDomId(field) {
@@ -2947,7 +3011,7 @@ function renderPromoEntry({ variant = "desktop" } = {}) {
 
 function customerDetailsPayload() {
   const customFields = {};
-  for (const field of customerFieldDefinitions()) {
+  for (const field of activeCustomerFieldDefinitions()) {
     customFields[field.key] = customerFieldValue(field.key);
   }
 
@@ -3301,6 +3365,7 @@ function renderBookPage() {
   const addonRows = selectedAddonRows();
   const packageRows = selectedPackageRows();
   const countryChoices = countryOptions();
+  const activeCustomerFields = activeCustomerFieldDefinitions();
   const packageStepNumber = bookingStepIndex("package") + 1;
   const dateStepNumber = bookingStepIndex("date") + 1;
   const roomStepNumber = bookingStepIndex("room") + 1;
@@ -3521,6 +3586,11 @@ function renderBookPage() {
                   <textarea id="guestNotes" rows="3">${escapeHtml(draft.notes)}</textarea>
                   <span class="helper">Bringing a friend? We'll group you together. Mixed gender tent an issue? Inform us. Your comfort is our priority!</span>
                 </label>
+                ${
+                  activeCustomerFields.length
+                    ? `<div class="customer-fields">${activeCustomerFields.map(renderCustomerFieldControl).join("")}</div>`
+                    : ""
+                }
               </div>
             `
         }
@@ -3587,7 +3657,7 @@ function renderBookPage() {
         : ""
     }
     <button class="button button-primary summary-button${summaryButtonLoading ? " is-loading" : ""}" type="button" ${summaryButton.id ? `id="${summaryButton.id}"` : ""} ${summaryButton.disabled ? 'disabled aria-busy="true" aria-disabled="true"' : 'aria-disabled="false"'}>${summaryButtonLoading ? `<span class="button-spinner" aria-hidden="true"></span><span>${summaryButton.label}</span>` : summaryButton.label}</button>
-    ${currentStepKey === "book" ? renderPaymentTrustBadges() : ""}
+    ${renderPaymentTrustBadges()}
   `;
   const summaryFooterByStep = {
     package: "Pick your package to continue.",
@@ -3861,12 +3931,14 @@ function renderAdminPage() {
       state.camp.bookingRules?.availabilityMidThreshold ?? seedState.camp.bookingRules.availabilityMidThreshold;
     campForm.elements.availabilityCountVisibilityThreshold.value =
       state.camp.bookingRules?.availabilityCountVisibilityThreshold ?? "";
-    campForm.elements.depositPercent.value =
-      state.camp.bookingRules?.depositPercent ?? seedState.camp.bookingRules.depositPercent;
-    campForm.elements.lateDepositWeeks.value =
-      state.camp.bookingRules?.lateDepositWeeks ?? seedState.camp.bookingRules.lateDepositWeeks;
-    campForm.elements.lateDepositPercent.value =
-      state.camp.bookingRules?.lateDepositPercent ?? seedState.camp.bookingRules.lateDepositPercent;
+    const depositRules = depositRulesConfig(state.camp.bookingRules);
+    const depositRuleById = Object.fromEntries(depositRules.map((rule) => [rule.id, rule]));
+    campForm.elements.depositAdvancePercent.value = depositRuleById.advance?.depositPercent ?? 25;
+    campForm.elements.depositAdvanceWeeks.value = depositRuleById.advance?.weeksInAdvance ?? 12;
+    campForm.elements.depositRegularPercent.value = depositRuleById.regular?.depositPercent ?? 50;
+    campForm.elements.depositRegularWeeks.value = depositRuleById.regular?.weeksInAdvance ?? 2;
+    campForm.elements.depositLastMinutePercent.value = depositRuleById.last_minute?.depositPercent ?? 100;
+    campForm.elements.depositLastMinuteWeeks.value = depositRuleById.last_minute?.weeksInAdvance ?? 0;
     campForm.elements.showAvailabilityColors.checked = showAvailabilityColors(state.camp.bookingRules);
     campForm.elements.showAvailability.checked = showAvailabilityCounts(state.camp.bookingRules);
     campForm.elements.showPricePerNight.checked = showPricePerNightInCalendar(state.camp.bookingRules);
@@ -4461,20 +4533,22 @@ function renderAdminPage() {
   const customerFieldCount = document.getElementById("customerFieldCount");
   const orderedCustomerFields = customerFieldDefinitions();
   if (customerFieldCount) {
-    customerFieldCount.textContent = `${orderedCustomerFields.length} fields`;
+    const activeCount = orderedCustomerFields.filter((field) => !field.archivedAt).length;
+    customerFieldCount.textContent = `${activeCount} active / ${orderedCustomerFields.length} total`;
   }
   if (customerFieldList) {
     customerFieldList.innerHTML = orderedCustomerFields
       .map((field) => {
+        const archived = !!field.archivedAt;
         const summary =
           field.type === "select"
             ? `Dropdown ${field.options?.length ? `· ${field.options.length} options` : ""}`
             : field.type.charAt(0).toUpperCase() + field.type.slice(1);
         return `
-          <div class="stack-item">
+          <div class="stack-item ${archived ? "is-archived" : ""}">
             <div class="stack-item-top">
-              <strong>${field.label}</strong>
-              <span class="pill">${field.required ? "Required" : "Optional"}</span>
+              <strong>${escapeHtml(field.label)}</strong>
+              <span class="pill">${archived ? "Archived" : field.required ? "Required" : "Optional"}</span>
             </div>
             <div class="tiny">${field.key} · ${summary}</div>
             ${field.placeholder ? `<div class="tiny">${escapeHtml(field.placeholder)}</div>` : ""}
@@ -4483,6 +4557,7 @@ function renderAdminPage() {
               <button type="button" class="button button-secondary" data-move-customer-field="${field.id}" data-move-direction="-1">Up</button>
               <button type="button" class="button button-secondary" data-move-customer-field="${field.id}" data-move-direction="1">Down</button>
               <button type="button" class="button button-secondary" data-edit-customer-field="${field.id}">Edit</button>
+              <button type="button" class="button button-secondary" data-archive-customer-field="${field.id}" data-archive-state="${archived ? "restore" : "archive"}">${archived ? "Restore" : "Archive"}</button>
             </div>
           </div>
         `;
@@ -5817,7 +5892,7 @@ function setBookingFieldErrors(fieldIds = []) {
     "fieldGuestPhone",
     "fieldGuestCountry",
     "fieldGuestNotes",
-    ...customerFieldDefinitions().map((field) => customerFieldDomId(field)),
+    ...activeCustomerFieldDefinitions().map((field) => customerFieldDomId(field)),
   ];
   if (sharedRoomMode) {
     allFieldIds.push(
@@ -6057,6 +6132,11 @@ async function confirmBookingReservation() {
   if (!guestEmail) missingFields.push("fieldGuestEmail");
   if (!guestPhone) missingFields.push("fieldGuestPhone");
   if (!guestCountry) missingFields.push("fieldGuestCountry");
+  for (const field of activeCustomerFieldDefinitions()) {
+    if (field.required && !customerFieldValue(field.key)) {
+      missingFields.push(customerFieldDomId(field));
+    }
+  }
   setBookingFieldErrors(missingFields);
 
   if (missingFields.length) {
@@ -7029,22 +7109,34 @@ function initAdminInteractions() {
         lowThreshold,
         Number(campForm.elements.availabilityMidThreshold.value || seedState.camp.bookingRules.availabilityMidThreshold),
       );
-      const depositPercent = Math.max(
-        1,
-        Math.min(100, Math.round(Number(campForm.elements.depositPercent.value || seedState.camp.bookingRules.depositPercent))),
-      );
-      const lateDepositWeeks = Math.max(0, Math.round(Number(campForm.elements.lateDepositWeeks.value || 0)));
-      const lateDepositPercent = Math.max(
-        1,
-        Math.min(100, Math.round(Number(campForm.elements.lateDepositPercent.value || seedState.camp.bookingRules.lateDepositPercent))),
+      const depositRules = normalizeDepositRules(
+        [
+          {
+            id: "advance",
+            weeksInAdvance: campForm.elements.depositAdvanceWeeks.value,
+            depositPercent: campForm.elements.depositAdvancePercent.value,
+          },
+          {
+            id: "regular",
+            weeksInAdvance: campForm.elements.depositRegularWeeks.value,
+            depositPercent: campForm.elements.depositRegularPercent.value,
+          },
+          {
+            id: "last_minute",
+            weeksInAdvance: campForm.elements.depositLastMinuteWeeks.value,
+            depositPercent: campForm.elements.depositLastMinutePercent.value,
+          },
+        ],
+        state.camp.bookingRules || seedState.camp.bookingRules,
       );
       state.camp.bookingRules = {
         ...(state.camp.bookingRules || {}),
         availabilityLowThreshold: lowThreshold,
         availabilityMidThreshold: midThreshold,
-        depositPercent,
-        lateDepositWeeks,
-        lateDepositPercent,
+        depositRules,
+        depositPercent: depositRules.find((rule) => rule.id === "regular")?.depositPercent || 100,
+        lateDepositWeeks: depositRules.find((rule) => rule.id === "last_minute")?.weeksInAdvance || 0,
+        lateDepositPercent: depositRules.find((rule) => rule.id === "last_minute")?.depositPercent || 100,
         availabilityCountVisibilityThreshold:
           campForm.elements.availabilityCountVisibilityThreshold.value === ""
             ? null
@@ -7351,6 +7443,7 @@ function initAdminInteractions() {
         options,
         placeholder: customerFieldForm.elements.placeholder.value.trim(),
         required: !!customerFieldForm.elements.required.checked,
+        archivedAt: existing?.archivedAt || "",
         order: existing?.order ?? nextOrderValue(state.camp.customerFields || []),
       },
       existing?.order ?? nextOrderValue(state.camp.customerFields || []),
@@ -7379,6 +7472,7 @@ function initAdminInteractions() {
     const movePromoButton = event.target?.closest?.("[data-move-promo]");
     const editCustomerFieldButton = event.target?.closest?.("[data-edit-customer-field]");
     const moveCustomerFieldButton = event.target?.closest?.("[data-move-customer-field]");
+    const archiveCustomerFieldButton = event.target?.closest?.("[data-archive-customer-field]");
 
     if (movePackageButton) {
       if (moveOrderedItem("packages", movePackageButton.dataset.movePackage, Number(movePackageButton.dataset.moveDirection || 0))) {
@@ -7434,6 +7528,22 @@ function initAdminInteractions() {
         saveState();
         renderAdminPage();
       }
+      return;
+    }
+
+    if (archiveCustomerFieldButton) {
+      const fieldId = archiveCustomerFieldButton.dataset.archiveCustomerField;
+      const restore = archiveCustomerFieldButton.dataset.archiveState === "restore";
+      state.camp.customerFields = orderedItems(state.camp.customerFields || []).map((field) =>
+        field.id === fieldId
+          ? {
+              ...field,
+              archivedAt: restore ? "" : field.archivedAt || new Date().toISOString(),
+            }
+          : field,
+      );
+      saveState();
+      renderAdminPage();
       return;
     }
 

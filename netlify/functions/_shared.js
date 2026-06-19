@@ -26,6 +26,13 @@ const seedCamp = {
     availabilityMidThreshold: 15,
     availabilityCountVisibilityThreshold: null,
     depositPercent: 100,
+    lateDepositWeeks: 0,
+    lateDepositPercent: 100,
+    depositRules: [
+      { id: "advance", label: "Advance bookings", weeksInAdvance: 12, depositPercent: 25 },
+      { id: "regular", label: "Regular bookings", weeksInAdvance: 2, depositPercent: 50 },
+      { id: "last_minute", label: "Last minute", weeksInAdvance: 0, depositPercent: 100 },
+    ],
     showAvailabilityColors: true,
     showAvailability: true,
     showPricePerNight: false,
@@ -315,6 +322,52 @@ function createDefaultWorkspace(input = {}) {
   };
 }
 
+const depositRuleDefaults = [
+  { id: "advance", label: "Advance bookings", weeksInAdvance: 12, depositPercent: 25 },
+  { id: "regular", label: "Regular bookings", weeksInAdvance: 2, depositPercent: 50 },
+  { id: "last_minute", label: "Last minute", weeksInAdvance: 0, depositPercent: 100 },
+];
+
+function clampPercent(value, fallback = 100) {
+  return Math.max(1, Math.min(100, Math.round(Number.isFinite(Number(value)) ? Number(value) : fallback)));
+}
+
+function normalizeDepositRules(rawRules = [], legacyRules = {}) {
+  const source = Array.isArray(rawRules) && rawRules.length ? rawRules : [];
+  const byId = new Map(source.map((rule) => [String(rule.id || "").trim(), rule]));
+  const legacyDepositPercent = clampPercent(legacyRules.depositPercent, depositRuleDefaults[1].depositPercent);
+  const legacyLateWeeks = Math.max(0, Math.round(Number(legacyRules.lateDepositWeeks || 0)));
+  const legacyLatePercent = clampPercent(legacyRules.lateDepositPercent, depositRuleDefaults[2].depositPercent);
+  const merged = depositRuleDefaults.map((defaults) => {
+    const rule = byId.get(defaults.id) || {};
+    const fallbackPercent =
+      defaults.id === "regular"
+        ? legacyDepositPercent
+        : defaults.id === "last_minute"
+          ? legacyLatePercent
+          : defaults.depositPercent;
+    const fallbackWeeks =
+      defaults.id === "regular"
+        ? Math.max(defaults.weeksInAdvance, legacyLateWeeks + 1)
+        : defaults.id === "last_minute"
+          ? legacyLateWeeks
+          : defaults.weeksInAdvance;
+    return {
+      id: defaults.id,
+      label: defaults.label,
+      weeksInAdvance: Math.max(0, Math.round(Number.isFinite(Number(rule.weeksInAdvance)) ? Number(rule.weeksInAdvance) : fallbackWeeks)),
+      depositPercent: clampPercent(rule.depositPercent, fallbackPercent),
+    };
+  });
+  const advance = merged.find((rule) => rule.id === "advance");
+  const regular = merged.find((rule) => rule.id === "regular");
+  const lastMinute = merged.find((rule) => rule.id === "last_minute");
+  lastMinute.weeksInAdvance = Math.max(0, lastMinute.weeksInAdvance);
+  regular.weeksInAdvance = Math.max(lastMinute.weeksInAdvance + 1, regular.weeksInAdvance);
+  advance.weeksInAdvance = Math.max(regular.weeksInAdvance + 1, advance.weeksInAdvance);
+  return [advance, regular, lastMinute];
+}
+
 function normalizeWorkspace(data = {}) {
   const base = createDefaultWorkspace({
     name: data?.camp?.name || data?.name,
@@ -363,6 +416,16 @@ function normalizeWorkspace(data = {}) {
     depositPercent: Number.isFinite(Number(data?.camp?.bookingRules?.depositPercent))
       ? Math.max(1, Math.min(100, Math.round(Number(data.camp.bookingRules.depositPercent))))
       : base.camp.bookingRules.depositPercent,
+    lateDepositWeeks: Number.isFinite(Number(data?.camp?.bookingRules?.lateDepositWeeks))
+      ? Math.max(0, Math.round(Number(data.camp.bookingRules.lateDepositWeeks)))
+      : base.camp.bookingRules.lateDepositWeeks,
+    lateDepositPercent: Number.isFinite(Number(data?.camp?.bookingRules?.lateDepositPercent))
+      ? Math.max(1, Math.min(100, Math.round(Number(data.camp.bookingRules.lateDepositPercent))))
+      : base.camp.bookingRules.lateDepositPercent,
+    depositRules: normalizeDepositRules(data?.camp?.bookingRules?.depositRules, {
+      ...base.camp.bookingRules,
+      ...((data.camp && data.camp.bookingRules) || {}),
+    }),
     showAvailabilityColors:
       typeof data?.camp?.bookingRules?.showAvailabilityColors === "boolean"
         ? data.camp.bookingRules.showAvailabilityColors

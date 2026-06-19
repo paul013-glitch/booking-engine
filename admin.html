@@ -505,23 +505,44 @@
             </div>
             <div class="admin-form-divider"></div>
             <h3>Payments</h3>
-            <div class="two-col">
-              <label>
-                Deposit percentage
-                <input name="depositPercent" type="number" min="1" max="100" step="1" placeholder="100" />
-                <span class="helper">Percentage guests pay online to confirm a reservation.</span>
-              </label>
-              <label>
-                Late booking window, weeks
-                <input name="lateDepositWeeks" type="number" min="0" step="1" placeholder="0" />
-                <span class="helper">If check-in is within this many weeks, use the late booking percentage. Set 0 to disable.</span>
-              </label>
-              <label>
-                Late booking percentage
-                <input name="lateDepositPercent" type="number" min="1" max="100" step="1" placeholder="100" />
-                <span class="helper">Example: 100 means bookings within the window pay the full amount.</span>
-              </label>
+            <div class="deposit-rules-table-wrap">
+              <table class="deposit-rules-table">
+                <thead>
+                  <tr>
+                    <th>Booking type</th>
+                    <th>Deposit %</th>
+                    <th>Weeks in advance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <strong>Advance bookings</strong>
+                      <span class="helper">Longest lead time. This must be higher than regular bookings.</span>
+                    </td>
+                    <td><input name="depositAdvancePercent" type="number" min="1" max="100" step="1" placeholder="25" /></td>
+                    <td><input name="depositAdvanceWeeks" type="number" min="0" step="1" placeholder="12" /></td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>Regular bookings</strong>
+                      <span class="helper">Middle lead time. This must be higher than last minute.</span>
+                    </td>
+                    <td><input name="depositRegularPercent" type="number" min="1" max="100" step="1" placeholder="50" /></td>
+                    <td><input name="depositRegularWeeks" type="number" min="0" step="1" placeholder="2" /></td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>Last minute</strong>
+                      <span class="helper">Lowest lead time, usually 0 or 1 week.</span>
+                    </td>
+                    <td><input name="depositLastMinutePercent" type="number" min="1" max="100" step="1" placeholder="100" /></td>
+                    <td><input name="depositLastMinuteWeeks" type="number" min="0" step="1" placeholder="0" /></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
+            <span class="helper">The checkout uses the highest matching weeks-in-advance rule for the selected check-in date.</span>
             <div id="stripeConnectPanel" class="payment-connect-panel">
               <div>
                 <span class="tiny">Stripe Connect</span>

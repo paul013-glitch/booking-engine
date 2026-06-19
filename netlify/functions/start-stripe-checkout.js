@@ -141,6 +141,48 @@ function clampPercent(value, fallback = 100) {
   return Number.isFinite(numeric) ? Math.max(1, Math.min(100, Math.round(numeric))) : fallback;
 }
 
+const depositRuleDefaults = [
+  { id: "advance", label: "Advance bookings", weeksInAdvance: 12, depositPercent: 25 },
+  { id: "regular", label: "Regular bookings", weeksInAdvance: 2, depositPercent: 50 },
+  { id: "last_minute", label: "Last minute", weeksInAdvance: 0, depositPercent: 100 },
+];
+
+function normalizeDepositRules(rawRules = [], legacyRules = {}) {
+  const source = Array.isArray(rawRules) && rawRules.length ? rawRules : [];
+  const byId = new Map(source.map((rule) => [String(rule.id || "").trim(), rule]));
+  const legacyDepositPercent = clampPercent(legacyRules.depositPercent, depositRuleDefaults[1].depositPercent);
+  const legacyLateWeeks = Math.max(0, Math.round(Number(legacyRules.lateDepositWeeks || 0)));
+  const legacyLatePercent = clampPercent(legacyRules.lateDepositPercent, depositRuleDefaults[2].depositPercent);
+  const merged = depositRuleDefaults.map((defaults) => {
+    const rule = byId.get(defaults.id) || {};
+    const fallbackPercent =
+      defaults.id === "regular"
+        ? legacyDepositPercent
+        : defaults.id === "last_minute"
+          ? legacyLatePercent
+          : defaults.depositPercent;
+    const fallbackWeeks =
+      defaults.id === "regular"
+        ? Math.max(defaults.weeksInAdvance, legacyLateWeeks + 1)
+        : defaults.id === "last_minute"
+          ? legacyLateWeeks
+          : defaults.weeksInAdvance;
+    return {
+      id: defaults.id,
+      label: defaults.label,
+      weeksInAdvance: Math.max(0, Math.round(Number.isFinite(Number(rule.weeksInAdvance)) ? Number(rule.weeksInAdvance) : fallbackWeeks)),
+      depositPercent: clampPercent(rule.depositPercent, fallbackPercent),
+    };
+  });
+  const advance = merged.find((rule) => rule.id === "advance");
+  const regular = merged.find((rule) => rule.id === "regular");
+  const lastMinute = merged.find((rule) => rule.id === "last_minute");
+  lastMinute.weeksInAdvance = Math.max(0, lastMinute.weeksInAdvance);
+  regular.weeksInAdvance = Math.max(lastMinute.weeksInAdvance + 1, regular.weeksInAdvance);
+  advance.weeksInAdvance = Math.max(regular.weeksInAdvance + 1, advance.weeksInAdvance);
+  return [advance, regular, lastMinute];
+}
+
 function parseDateOnly(value) {
   if (!value) return null;
   const date = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
@@ -156,27 +198,28 @@ function daysUntilDate(dateInput, now = new Date()) {
 
 function bookingDepositRule(workspace = {}, booking = {}, now = new Date()) {
   const rules = workspace.camp?.bookingRules || {};
-  const normalPercent = clampPercent(rules.depositPercent, null);
   const envFallback = Number(process.env.STRIPE_PAYMENT_PERCENT);
-  const depositPercent =
-    normalPercent || (Number.isFinite(envFallback) ? clampPercent(envFallback, 100) : 100);
-  const lateWeeks = Math.max(0, Math.round(Number(rules.lateDepositWeeks || 0)));
-  const latePercent = clampPercent(rules.lateDepositPercent, 100);
+  const depositRules = normalizeDepositRules(rules.depositRules, rules);
   const daysUntilCheckIn = daysUntilDate(booking.startDate, now);
-  const lateWindowDays = lateWeeks * 7;
-  const useLateRule =
-    lateWeeks > 0 &&
-    daysUntilCheckIn !== null &&
-    daysUntilCheckIn >= 0 &&
-    daysUntilCheckIn <= lateWindowDays;
+  const weeksUntilCheckIn = daysUntilCheckIn === null || daysUntilCheckIn < 0 ? null : daysUntilCheckIn / 7;
+  const matchingRule =
+    weeksUntilCheckIn === null
+      ? depositRules.find((rule) => rule.id === "regular") || depositRules[1]
+      : depositRules
+          .slice()
+          .sort((a, b) => b.weeksInAdvance - a.weeksInAdvance)
+          .find((rule) => weeksUntilCheckIn >= rule.weeksInAdvance) || depositRules[depositRules.length - 1];
+  const percent =
+    matchingRule?.depositPercent || (Number.isFinite(envFallback) ? clampPercent(envFallback, 100) : 100);
 
   return {
-    percent: useLateRule ? latePercent : depositPercent,
-    basePercent: depositPercent,
-    lateWeeks,
-    latePercent,
+    percent,
+    basePercent: percent,
+    depositRules,
+    matchingRule,
     daysUntilCheckIn,
-    rule: useLateRule ? "late_booking" : "standard",
+    weeksUntilCheckIn,
+    rule: matchingRule?.id || "regular",
   };
 }
 
@@ -273,10 +316,6 @@ exports.handler = async (event) => {
     const normalized = expired.changed ? await saveWorkspace(expired.workspace) : normalizeWorkspace(workspace);
     const booking = payload.booking || {};
     const required = ["guestName", "guestEmail", "guestPhone", "guestCountry", "packageId", "roomId", "startDate", "endDate"];
-    const sharedRoomMode = booking.packageMode !== "full_unit";
-    if (sharedRoomMode) {
-      required.push("guestBirthDay", "guestBirthMonth", "guestBirthYear");
-    }
     const missing = required.filter((key) => !String(booking[key] || "").trim());
     if (missing.length) return response(400, { error: `Missing booking fields: ${missing.join(", ")}` });
 
@@ -378,10 +417,7 @@ exports.handler = async (event) => {
         at: now.toISOString(),
         stripeCheckoutSessionId: session.id,
         stripeAccountId: bookingRecord.stripeAccountId,
-        note:
-          depositRule.rule === "late_booking"
-            ? `Late booking checkout created for ${depositPercent}% of reservation total (${depositRule.daysUntilCheckIn} days before check-in).`
-            : `Deposit checkout created for ${depositPercent}% of reservation total.`,
+        note: `${depositRule.matchingRule?.label || "Deposit"} checkout created for ${depositPercent}% of reservation total (${depositRule.daysUntilCheckIn ?? "unknown"} days before check-in).`,
       },
     ];
 

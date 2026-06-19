@@ -939,7 +939,7 @@ select {
 
 .payment-provider-logo {
   display: block;
-  height: 18px;
+  height: 22px;
   width: auto;
 }
 
@@ -1308,6 +1308,46 @@ select {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--panel-soft);
+}
+
+.deposit-rules-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+
+.deposit-rules-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+}
+
+.deposit-rules-table th,
+.deposit-rules-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.deposit-rules-table th {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.deposit-rules-table td strong,
+.deposit-rules-table td span {
+  display: block;
+}
+
+.deposit-rules-table input {
+  min-width: 110px;
+}
+
+.stack-item.is-archived {
+  opacity: 0.62;
+  background: color-mix(in srgb, var(--panel-soft) 74%, #ffffff);
 }
 
 .payment-connect-panel.is-connected {
