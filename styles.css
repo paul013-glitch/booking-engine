@@ -798,6 +798,54 @@ select {
   background: var(--panel-soft);
 }
 
+.payment-hold-notice {
+  display: grid;
+  gap: 12px;
+}
+
+.payment-hold-notice p {
+  margin: 0;
+}
+
+.payment-trust-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.payment-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 9px;
+  border: 1px solid rgba(63, 47, 28, 0.14);
+  border-radius: 7px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  box-shadow: 0 6px 14px rgba(63, 47, 28, 0.06);
+}
+
+.payment-badge-visa {
+  color: #1a1f71;
+}
+
+.payment-badge-mastercard {
+  color: #c65300;
+}
+
+.payment-badge-amex {
+  color: #2368a2;
+}
+
+.payment-badge-stripe {
+  color: #635bff;
+}
+
 .confirmation-card {
   display: grid;
   gap: 12px;
@@ -1000,6 +1048,8 @@ select {
 }
 
 .summary-footer {
+  display: grid;
+  gap: 10px;
   margin-top: 16px;
   color: var(--muted);
   font-size: 0.92rem;

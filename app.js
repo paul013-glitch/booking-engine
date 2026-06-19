@@ -3223,6 +3223,17 @@ function renderBookingConfirmationCard(confirmation = {}, { standalone = false }
   `;
 }
 
+function renderPaymentTrustBadges() {
+  return `
+    <div class="payment-trust-badges" aria-label="Accepted payment methods">
+      <span class="payment-badge payment-badge-visa">Visa</span>
+      <span class="payment-badge payment-badge-mastercard">Mastercard</span>
+      <span class="payment-badge payment-badge-amex">Amex</span>
+      <span class="payment-badge payment-badge-stripe">Stripe</span>
+    </div>
+  `;
+}
+
 function renderBookPage() {
   const logo = getBookElement("campLogo");
   const name = getBookElement("campName");
@@ -3487,8 +3498,9 @@ function renderBookPage() {
                   <span class="helper">Bringing a friend? We'll group you together. Mixed gender tent an issue? Inform us. Your comfort is our priority!</span>
                 </label>
               </div>
-              <div class="notice">
-                Your reservation is held for 15 minutes while you complete the secure Stripe payment.
+              <div class="notice payment-hold-notice">
+                <p>Your reservation is held for 15 minutes while you complete the secure Stripe payment.</p>
+                ${renderPaymentTrustBadges()}
               </div>
             `
         }
@@ -3556,6 +3568,13 @@ function renderBookPage() {
     }
     <button class="button button-primary summary-button${summaryButtonLoading ? " is-loading" : ""}" type="button" ${summaryButton.id ? `id="${summaryButton.id}"` : ""} ${summaryButton.disabled ? 'disabled aria-busy="true" aria-disabled="true"' : 'aria-disabled="false"'}>${summaryButtonLoading ? `<span class="button-spinner" aria-hidden="true"></span><span>${summaryButton.label}</span>` : summaryButton.label}</button>
   `;
+  const summaryFooterByStep = {
+    package: "Pick your package to continue.",
+    date: "Select your dates to continue.",
+    room: "Select your rooms to continue.",
+    book: "Your reservation is held for 15 minutes while you complete the secure Stripe payment.",
+  };
+  const summaryFooterText = summaryFooterByStep[currentStepKey] || "";
 
   summary.hidden = isMobileSummary && !showMobileTripSummary;
   summary.innerHTML = `
@@ -3641,9 +3660,14 @@ function renderBookPage() {
         </div>
         <strong>${summaryHasData ? money(totalPrice()) : ""}</strong>
       </div>
-      <div class="summary-footer">
-        Choose dates that are open for check-in in the calendar.
-      </div>
+      ${
+        summaryFooterText
+          ? `<div class="summary-footer">
+              <span>${escapeHtml(summaryFooterText)}</span>
+              ${currentStepKey === "book" ? renderPaymentTrustBadges() : ""}
+            </div>`
+          : ""
+      }
       ${isMobileSummary ? "" : `<div class="summary-actions">${summaryActions}</div>`}
     </div>
   `;
