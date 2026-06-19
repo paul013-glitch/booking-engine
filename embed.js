@@ -79,7 +79,7 @@
       }
 
       .booking-embed-root .booking-shell {
-        min-height: 200vh;
+        min-height: 150vh;
       }
 
       .booking-embed-root #summaryActionsShell {
