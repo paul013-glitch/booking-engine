@@ -5097,6 +5097,22 @@ function currentWorkspaceDisplayName() {
   return String(authState.workspace?.camp?.name || "").trim();
 }
 
+async function currentIdentityToken({ forceRefresh = false } = {}) {
+  const user = window.netlifyIdentity?.currentUser?.();
+  if (!user) return "";
+
+  if (typeof user.jwt === "function") {
+    try {
+      return await user.jwt(forceRefresh);
+    } catch (error) {
+      if (!forceRefresh) throw error;
+      return user.jwt();
+    }
+  }
+
+  return String(user?.token?.access_token || "");
+}
+
 function requestedTenantWorkspaceId() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -5106,13 +5122,23 @@ function requestedTenantWorkspaceId() {
   }
 }
 
-async function fetchWorkspaceWithRetry(workspaceUrl, headers = {}, attempts = 2) {
+async function fetchWorkspaceWithRetry(workspaceUrl, attempts = 3) {
   let lastError = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      return await apiJson(workspaceUrl, { headers });
+      const token = await currentIdentityToken({ forceRefresh: attempt > 1 });
+      if (!token) throw new Error("Not signed in");
+      authState.token = token;
+      return await apiJson(workspaceUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
     } catch (error) {
       lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const authError = /not signed in|jwt|token|unauthorized/i.test(message);
+      if (!authError && attempt >= 2) break;
       if (attempt >= attempts) break;
       await new Promise((resolve) => window.setTimeout(resolve, 250));
     }
@@ -5278,19 +5304,12 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
     setAdminLoadingState(true, "Loading workspace", "Loading bookings, availability, business data, and settings.", email, workspaceName);
   }
   try {
-    authState.token = await user.jwt();
     const tenantWorkspaceId = requestedTenantWorkspaceId();
     const workspaceUrl =
       tenantWorkspaceId && currentIdentityIsPlatformOwner()
         ? `master-workspace?workspaceId=${encodeURIComponent(tenantWorkspaceId)}`
         : "me-workspace";
-    const workspace = await fetchWorkspaceWithRetry(
-      workspaceUrl,
-      {
-        Authorization: `Bearer ${authState.token}`,
-      },
-      2,
-    );
+    const workspace = await fetchWorkspaceWithRetry(workspaceUrl, 3);
 
     if (authState.workspaceLoadSequence !== loadSequence) return;
     if (workspace) {
@@ -5966,7 +5985,10 @@ function upsertCheckoutLead(stage = "checkout") {
 }
 
 async function syncWorkspaceToServer() {
-  if (!authState.user || !authState.token || !authState.workspace) return;
+  if (!authState.user || !authState.workspace) return;
+
+  authState.token = await currentIdentityToken({ forceRefresh: true });
+  if (!authState.token) throw new Error("Not signed in");
 
   const payload = normalizeWorkspaceData(state);
   const result = await apiJson("save-workspace", {
@@ -7086,7 +7108,7 @@ function initAdminInteractions() {
     adminUiState.availabilityNoticeType = "info";
     renderAdminPage();
     try {
-      if (!authState.user || !authState.token || !authState.workspace) {
+      if (!authState.user || !authState.workspace) {
         throw new Error("Sign in before saving availability.");
       }
       saveState();
