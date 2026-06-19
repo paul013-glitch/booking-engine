@@ -67,6 +67,24 @@
       overflow: visible;
     }
 
+    @media (max-width: 720px) {
+      :host {
+        min-height: 100svh;
+        overflow: visible;
+      }
+
+      .booking-embed-root {
+        min-height: 100svh;
+        padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+        box-sizing: border-box;
+        overflow: visible;
+      }
+
+      .booking-embed-root .summary-actions {
+        z-index: 2147483000;
+      }
+    }
+
     .book-loading-screen {
       min-height: min(420px, 56vh);
       display: grid;
