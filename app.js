@@ -3449,7 +3449,7 @@ function renderBookPage() {
           state.bookingConfirmation
             ? renderBookingConfirmationCard(state.bookingConfirmation)
             : `
-              <div class="input-row">
+              <div class="booking-details-form">
                 <label class="field" id="fieldGuestName">
                   Guest name
                   <input id="guestName" type="text" value="${escapeHtml(draft.guestName)}" />
@@ -3458,35 +3458,35 @@ function renderBookPage() {
                   Email
                   <input id="guestEmail" type="email" value="${escapeHtml(draft.guestEmail)}" />
                 </label>
-              </div>
-              <div class="input-row" style="margin-top: 14px;">
-                <label class="field" id="fieldGuestCountry">
-                  Country
-                  <select id="guestCountry">
-                    <option value="">Select country</option>
-                    ${countryChoices
-                      .map(
-                        (country) =>
-                          `<option value="${escapeHtml(country.value)}" ${draft.guestCountry === country.value ? "selected" : ""}>${escapeHtml(country.label)}</option>`,
-                      )
-                      .join("")}
-                    ${
-                      draft.guestCountry && !countryChoices.some((country) => country.value === draft.guestCountry)
-                        ? `<option value="${escapeHtml(draft.guestCountry)}" selected>${escapeHtml(draft.guestCountry)}</option>`
-                        : ""
-                    }
-                  </select>
+                <div class="booking-phone-row">
+                  <label class="field" id="fieldGuestCountry">
+                    Country
+                    <select id="guestCountry">
+                      <option value="">Select country</option>
+                      ${countryChoices
+                        .map(
+                          (country) =>
+                            `<option value="${escapeHtml(country.value)}" ${draft.guestCountry === country.value ? "selected" : ""}>${escapeHtml(country.label)}</option>`,
+                        )
+                        .join("")}
+                      ${
+                        draft.guestCountry && !countryChoices.some((country) => country.value === draft.guestCountry)
+                          ? `<option value="${escapeHtml(draft.guestCountry)}" selected>${escapeHtml(draft.guestCountry)}</option>`
+                          : ""
+                      }
+                    </select>
+                  </label>
+                  <label class="field" id="fieldGuestPhone">
+                    Phone nr
+                    <input id="guestPhone" type="tel" value="${escapeHtml(draft.guestPhone)}" />
+                  </label>
+                </div>
+                <label class="field" id="fieldGuestNotes">
+                  Notes
+                  <textarea id="guestNotes" rows="3">${escapeHtml(draft.notes)}</textarea>
+                  <span class="helper">Bringing a friend? We'll group you together. Mixed gender tent an issue? Inform us. Your comfort is our priority!</span>
                 </label>
-                <label class="field" id="fieldGuestPhone">
-                  Phone
-                  <input id="guestPhone" type="tel" value="${escapeHtml(draft.guestPhone)}" />
-                </label>
               </div>
-              <label class="field" id="fieldGuestNotes" style="margin-top: 14px;">
-                Notes
-                <input id="guestNotes" type="text" value="${escapeHtml(draft.notes)}" />
-                <span class="helper">Bringing a friend? We'll group you together. Mixed gender tent an issue? Inform us. Your comfort is our priority!</span>
-              </label>
               <div class="notice">
                 Your reservation is held for 15 minutes while you complete the secure Stripe payment.
               </div>

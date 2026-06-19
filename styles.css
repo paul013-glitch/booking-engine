@@ -732,6 +732,23 @@ select {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.booking-details-form {
+  display: grid;
+  gap: 14px;
+  max-width: 50%;
+}
+
+.booking-phone-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 20%) minmax(0, 80%);
+  gap: 14px;
+}
+
+.booking-details-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
 .three-col {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -748,7 +765,8 @@ select {
 }
 
 .field.is-invalid input,
-.field.is-invalid select {
+.field.is-invalid select,
+.field.is-invalid textarea {
   border-color: #c96e62;
   background: #fff6f4;
   outline-color: rgba(201, 110, 98, 0.18);
@@ -2333,6 +2351,14 @@ select {
   .availability-row-header,
   .availability-row,
   .day-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-details-form {
+    max-width: 100%;
+  }
+
+  .booking-phone-row {
     grid-template-columns: 1fr;
   }
 
