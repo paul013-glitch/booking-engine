@@ -1180,6 +1180,17 @@ function bookingSiteUrl() {
   return window.location.origin;
 }
 
+function bookingAssetUrl(filename) {
+  const cleanFilename = String(filename || "").replace(/^\/+/, "");
+  const siteUrl = bookingSiteUrl();
+  if (!siteUrl) return cleanFilename;
+  try {
+    return new URL(cleanFilename, `${siteUrl}/`).toString();
+  } catch {
+    return cleanFilename;
+  }
+}
+
 function cleanBookingReturnUrl(rawUrl = window.location.href) {
   try {
     const url = new URL(rawUrl, window.location.href);
@@ -3224,12 +3235,25 @@ function renderBookingConfirmationCard(confirmation = {}, { standalone = false }
 }
 
 function renderPaymentTrustBadges() {
+  const paymentCards = [
+    { name: "Visa", file: "visa.svg" },
+    { name: "Mastercard", file: "mastercard.svg" },
+    { name: "Amex", file: "amex.svg" },
+  ];
   return `
-    <div class="payment-trust-badges" aria-label="Accepted payment methods">
-      <span class="payment-badge payment-badge-visa">Visa</span>
-      <span class="payment-badge payment-badge-mastercard">Mastercard</span>
-      <span class="payment-badge payment-badge-amex">Amex</span>
-      <span class="payment-badge payment-badge-stripe">Stripe</span>
+    <div class="payment-trust" aria-label="Secure payment information">
+      <div class="payment-card-icons" aria-label="Accepted cards">
+        ${paymentCards
+          .map(
+            (card) =>
+              `<img class="payment-card-icon" src="${escapeHtml(bookingAssetUrl(card.file))}" alt="${escapeHtml(card.name)}" loading="lazy" />`,
+          )
+          .join("")}
+      </div>
+      <div class="payment-provider-line">
+        <span>Secure checkout provided by</span>
+        <img class="payment-provider-logo" src="${escapeHtml(bookingAssetUrl("stripe.svg"))}" alt="Stripe" loading="lazy" />
+      </div>
     </div>
   `;
 }
@@ -3498,10 +3522,6 @@ function renderBookPage() {
                   <span class="helper">Bringing a friend? We'll group you together. Mixed gender tent an issue? Inform us. Your comfort is our priority!</span>
                 </label>
               </div>
-              <div class="notice payment-hold-notice">
-                <p>Your reservation is held for 15 minutes while you complete the secure Stripe payment.</p>
-                ${renderPaymentTrustBadges()}
-              </div>
             `
         }
       </section>
@@ -3567,12 +3587,12 @@ function renderBookPage() {
         : ""
     }
     <button class="button button-primary summary-button${summaryButtonLoading ? " is-loading" : ""}" type="button" ${summaryButton.id ? `id="${summaryButton.id}"` : ""} ${summaryButton.disabled ? 'disabled aria-busy="true" aria-disabled="true"' : 'aria-disabled="false"'}>${summaryButtonLoading ? `<span class="button-spinner" aria-hidden="true"></span><span>${summaryButton.label}</span>` : summaryButton.label}</button>
+    ${currentStepKey === "book" ? renderPaymentTrustBadges() : ""}
   `;
   const summaryFooterByStep = {
     package: "Pick your package to continue.",
     date: "Select your dates to continue.",
     room: "Select your rooms to continue.",
-    book: "Your reservation is held for 15 minutes while you complete the secure Stripe payment.",
   };
   const summaryFooterText = summaryFooterByStep[currentStepKey] || "";
 
@@ -3664,7 +3684,6 @@ function renderBookPage() {
         summaryFooterText
           ? `<div class="summary-footer">
               <span>${escapeHtml(summaryFooterText)}</span>
-              ${currentStepKey === "book" ? renderPaymentTrustBadges() : ""}
             </div>`
           : ""
       }

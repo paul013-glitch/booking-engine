@@ -798,54 +798,6 @@ select {
   background: var(--panel-soft);
 }
 
-.payment-hold-notice {
-  display: grid;
-  gap: 12px;
-}
-
-.payment-hold-notice p {
-  margin: 0;
-}
-
-.payment-trust-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.payment-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 4px 9px;
-  border: 1px solid rgba(63, 47, 28, 0.14);
-  border-radius: 7px;
-  background: #ffffff;
-  color: #1f2937;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  line-height: 1;
-  box-shadow: 0 6px 14px rgba(63, 47, 28, 0.06);
-}
-
-.payment-badge-visa {
-  color: #1a1f71;
-}
-
-.payment-badge-mastercard {
-  color: #c65300;
-}
-
-.payment-badge-amex {
-  color: #2368a2;
-}
-
-.payment-badge-stripe {
-  color: #635bff;
-}
-
 .confirmation-card {
   display: grid;
   gap: 12px;
@@ -945,12 +897,50 @@ select {
 .summary-actions {
   margin-top: 16px;
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
   justify-content: flex-end;
 }
 
 .summary-actions .summary-button {
   width: 100%;
   justify-content: center;
+}
+
+.payment-trust {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.payment-card-icons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.payment-card-icon {
+  display: block;
+  height: 24px;
+  width: auto;
+}
+
+.payment-provider-line {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  line-height: 1.2;
+}
+
+.payment-provider-logo {
+  display: block;
+  height: 18px;
+  width: auto;
 }
 
 .summary-actions .summary-button.is-loading {

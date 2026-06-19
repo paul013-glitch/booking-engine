@@ -68,11 +68,40 @@
     }
 
     .booking-embed-loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       padding: 24px;
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
-      box-shadow: var(--shadow);
+      box-shadow: none;
+      color: var(--muted);
+      opacity: 0;
+      animation: bookingEmbedLoadingFade 160ms ease forwards;
+    }
+
+    .booking-embed-loading::before {
+      content: "";
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid rgba(138, 109, 73, 0.22);
+      border-top-color: var(--accent);
+      animation: bookingEmbedLoadingSpin 800ms linear infinite;
+      flex: 0 0 auto;
+    }
+
+    @keyframes bookingEmbedLoadingFade {
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes bookingEmbedLoadingSpin {
+      to {
+        transform: rotate(360deg);
+      }
     }
   `;
 
