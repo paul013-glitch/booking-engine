@@ -492,6 +492,10 @@ select {
   color: var(--muted);
 }
 
+.multiline-text {
+  white-space: pre-line;
+}
+
 .package-row-actions {
   display: grid;
   justify-items: end;

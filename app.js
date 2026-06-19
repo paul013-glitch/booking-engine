@@ -3304,7 +3304,7 @@ function renderBookPage() {
             <p>${item.nights} nights</p>
             <details class="package-more">
               <summary>Included <span aria-hidden="true">▾</span></summary>
-              <p>${item.description}</p>
+              <p class="multiline-text">${escapeHtml(item.description || "")}</p>
             </details>
             <div class="option-meta">
               <span>From ${money(item.basePrice)}</span>
@@ -4338,7 +4338,7 @@ function renderAdminPage() {
               <strong>${item.name}</strong>
               <span class="pill">${item.nights} nights</span>
             </div>
-            <div class="tiny">${escapeHtml(item.description || "No description set.")}</div>
+            <div class="tiny multiline-text">${escapeHtml(item.description || "No description set.")}</div>
             <div class="tiny">${money(item.basePrice)}</div>
             <div class="stack-item-actions">
               <button type="button" class="button button-secondary" data-move-package="${item.id}" data-move-direction="-1">Up</button>
