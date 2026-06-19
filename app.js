@@ -743,6 +743,38 @@ function promoMatchesCode(promo, code) {
   return normalizePromoCode(promo?.code) === normalizePromoCode(code);
 }
 
+function monthKeyFromDate(dateInput) {
+  const value = String(dateInput || "").slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(value) ? value : "";
+}
+
+function promoMonthLabel(monthKey = "") {
+  if (!monthKey) return "Any month";
+  const date = new Date(`${monthKey}-01T00:00:00`);
+  if (Number.isNaN(date.getTime())) return monthKey;
+  return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(date);
+}
+
+function promoAppliesToDate(promo, dateInput = draft.startDate) {
+  const bookingMonth = monthKeyFromDate(dateInput);
+  const startMonth = monthKeyFromDate(promo?.startMonth);
+  const endMonth = monthKeyFromDate(promo?.endMonth);
+  if ((!startMonth && !endMonth) || !bookingMonth) return true;
+  if (startMonth && bookingMonth < startMonth) return false;
+  if (endMonth && bookingMonth > endMonth) return false;
+  return true;
+}
+
+function promoDateRangeLabel(promo = {}) {
+  const startMonth = monthKeyFromDate(promo.startMonth);
+  const endMonth = monthKeyFromDate(promo.endMonth);
+  if (!startMonth && !endMonth) return "Any month";
+  if (startMonth && endMonth && startMonth === endMonth) return promoMonthLabel(startMonth);
+  if (startMonth && endMonth) return `${promoMonthLabel(startMonth)} to ${promoMonthLabel(endMonth)}`;
+  if (startMonth) return `From ${promoMonthLabel(startMonth)}`;
+  return `Until ${promoMonthLabel(endMonth)}`;
+}
+
 function selectedPromos() {
   const codes = Array.isArray(draft.promoCodes) ? draft.promoCodes : [];
   return codes
@@ -750,7 +782,7 @@ function selectedPromos() {
       code,
       promo: orderedItems(state.promos).find((item) => promoMatchesCode(item, code)) || null,
     }))
-    .filter((item) => item.promo);
+    .filter((item) => item.promo && promoAppliesToDate(item.promo));
 }
 
 function selectedPromoCodes() {
@@ -842,11 +874,15 @@ function applyPromoCodesFromInput(rawValue) {
   const codes = parsePromoCodes(rawValue);
   const validCodes = [];
   const invalidCodes = [];
+  const inactiveCodes = [];
   const promos = orderedItems(state.promos);
 
   codes.forEach((code) => {
-    if (promos.some((item) => promoMatchesCode(item, code))) {
+    const promo = promos.find((item) => promoMatchesCode(item, code));
+    if (promo && promoAppliesToDate(promo)) {
       validCodes.push(normalizePromoCode(code));
+    } else if (promo) {
+      inactiveCodes.push(normalizePromoCode(code));
     } else {
       invalidCodes.push(normalizePromoCode(code));
     }
@@ -854,7 +890,14 @@ function applyPromoCodesFromInput(rawValue) {
 
   draft.promoCodeInput = rawValue;
   draft.promoCodes = validCodes;
-  draft.promoError = invalidCodes.length ? `Unknown promo code${invalidCodes.length > 1 ? "s" : ""}: ${invalidCodes.join(", ")}` : "";
+  draft.promoError = [
+    invalidCodes.length ? `Unknown promo code${invalidCodes.length > 1 ? "s" : ""}: ${invalidCodes.join(", ")}` : "",
+    inactiveCodes.length
+      ? `Promo code${inactiveCodes.length > 1 ? "s are" : " is"} not valid for the selected check-in month: ${inactiveCodes.join(", ")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   state.bookingConfirmation = null;
   syncDraftToState();
   upsertCheckoutLead("checkout");
@@ -879,19 +922,30 @@ function applyPromoCodesFromUrl() {
   const codes = promoCodesFromUrl();
   if (!codes.length) return;
   const promos = orderedItems(state.promos);
-  const validCodes = codes.filter((code) => promos.some((item) => promoMatchesCode(item, code)));
-  const invalidCodes = codes.filter((code) => !validCodes.includes(code));
+  const validCodes = codes.filter((code) => {
+    const promo = promos.find((item) => promoMatchesCode(item, code));
+    return promo && promoAppliesToDate(promo);
+  });
+  const invalidCodes = codes.filter((code) => {
+    const promo = promos.find((item) => promoMatchesCode(item, code));
+    return !promo || !promoAppliesToDate(promo);
+  });
   if (!validCodes.length && !invalidCodes.length) return;
 
   draft.promoCodeInput = codes.join(", ");
   draft.promoCodes = validCodes;
   draft.promoError = invalidCodes.length
-    ? `Unknown promo code${invalidCodes.length > 1 ? "s" : ""}: ${invalidCodes.join(", ")}`
+    ? `Promo code${invalidCodes.length > 1 ? "s are" : " is"} not valid for the selected check-in month: ${invalidCodes.join(", ")}`
     : "";
   state.bookingConfirmation = null;
   syncDraftToState();
   upsertCheckoutLead("checkout");
   saveState();
+}
+
+function refreshPromoValidity() {
+  if (!draft.promoCodeInput && !draft.promoCodes?.length) return;
+  applyPromoCodesFromInput(draft.promoCodeInput || draft.promoCodes.join(", "));
 }
 
 function applyTheme(theme = {}) {
@@ -4343,6 +4397,8 @@ function renderAdminPage() {
             <td><strong>${escapeHtml(item.code || "")}</strong></td>
             <td>${item.type === "free-addon" ? escapeHtml(getAddon(item.addonId)?.name || "Add-on") : escapeHtml(amount)}</td>
             <td>${escapeHtml(typeLabel)}</td>
+            <td>${escapeHtml(promoMonthLabel(item.startMonth))}</td>
+            <td>${escapeHtml(promoMonthLabel(item.endMonth))}</td>
             <td>
               <div class="table-actions">
                 <button type="button" class="button button-secondary" data-move-promo="${item.id}" data-move-direction="-1">Up</button>
@@ -4354,7 +4410,7 @@ function renderAdminPage() {
         `;
       })
       .join("");
-    promoList.innerHTML = rows || `<tr><td colspan="4"><span class="tiny">No promo codes yet.</span></td></tr>`;
+    promoList.innerHTML = rows || `<tr><td colspan="6"><span class="tiny">No promo codes yet.</span></td></tr>`;
   }
 
   const customerFieldForm = document.getElementById("customerFieldForm");
@@ -4445,6 +4501,8 @@ function renderAdminPage() {
       promoForm.elements.discountType.value = editing.type === "fixed" ? "fixed" : "percent";
       promoForm.elements.amount.value =
         editing.type === "fixed" ? Math.max(0, Number(editing.amount || 0)) : Math.max(0, Number(editing.percent || 0));
+      promoForm.elements.startMonth.value = monthKeyFromDate(editing.startMonth);
+      promoForm.elements.endMonth.value = monthKeyFromDate(editing.endMonth);
     }
   }
 
@@ -6165,6 +6223,7 @@ function initBookInteractions() {
         draft.roomAllocations = {};
       }
         state.bookingConfirmation = null;
+        refreshPromoValidity();
         trackAnalyticsEvent("search", {
           camp: bookingSlug(),
           check_in: draft.startDate,
@@ -6288,6 +6347,7 @@ function initBookInteractions() {
     if (target.id === "startDate") {
       draft.startDate = target.value;
       state.bookingConfirmation = null;
+      refreshPromoValidity();
       trackAnalyticsEvent("search", {
         camp: bookingSlug(),
         check_in: draft.startDate,
@@ -7168,6 +7228,8 @@ function initAdminInteractions() {
     const type = promoForm.elements.discountType.value === "fixed" ? "fixed" : "percent";
     const code = normalizePromoCode(promoForm.elements.code.value);
     const amount = Math.max(0, Number(promoForm.elements.amount.value || 0));
+    const startMonth = monthKeyFromDate(promoForm.elements.startMonth.value);
+    const endMonth = monthKeyFromDate(promoForm.elements.endMonth.value);
     if (!code) {
       alert("Please enter a promo code.");
       return;
@@ -7185,12 +7247,18 @@ function initAdminInteractions() {
       alert("Percent discounts cannot be more than 100%.");
       return;
     }
+    if (startMonth && endMonth && startMonth > endMonth) {
+      alert("Promo start month must be before or the same as the end month.");
+      return;
+    }
     const payload = {
       id,
       code,
       type,
       percent: type === "percent" ? amount : 0,
       amount: type === "fixed" ? amount : 0,
+      startMonth,
+      endMonth,
       addonId: "",
       order: existing?.order ?? nextOrderValue(state.promos),
     };
@@ -7385,6 +7453,8 @@ function initAdminInteractions() {
       promoForm.elements.discountType.value = item.type === "fixed" ? "fixed" : "percent";
       promoForm.elements.amount.value =
         item.type === "fixed" ? Math.max(0, Number(item.amount || 0)) : Math.max(0, Number(item.percent || 0));
+      promoForm.elements.startMonth.value = monthKeyFromDate(item.startMonth);
+      promoForm.elements.endMonth.value = monthKeyFromDate(item.endMonth);
       renderAdminPage();
     }
 
