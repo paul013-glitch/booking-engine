@@ -69,12 +69,12 @@
 
     @media (max-width: 720px) {
       :host {
-        min-height: 100svh;
+        min-height: 200vh;
         overflow: visible;
       }
 
       .booking-embed-root {
-        min-height: 100svh;
+        min-height: 200vh;
         padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
         box-sizing: border-box;
         overflow: visible;
