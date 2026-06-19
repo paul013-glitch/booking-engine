@@ -3541,7 +3541,10 @@ function renderBookPage() {
         <article class="option-card addon-card ${quantity > 0 ? "selected" : ""} ${isUnavailable ? "unavailable" : ""}">
           <div class="option-media">${room.imageUrl ? `<img src="${room.imageUrl}" alt="${room.name}" />` : ""}</div>
           <div class="option-body">
-            <h3>${room.name}</h3>
+            <div class="option-title-row">
+              <h3>${room.name}</h3>
+              ${isUnavailable ? `<span class="availability-badge availability-badge-unavailable">Unavailable, fully booked</span>` : ""}
+            </div>
             <p>${room.description}</p>
             ${
               room.learnMoreUrl
