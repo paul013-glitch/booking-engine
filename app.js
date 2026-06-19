@@ -148,6 +148,7 @@ const adminUiState = {
   availabilityBulkOpenWeekdays: [],
   availabilityBulkEditCheckin: false,
   availabilityBulkDirty: false,
+  availabilityMatrixDirty: false,
   availabilityBulkInitialized: false,
   activeTab: "bookings",
   configTab: "packages",
@@ -4213,7 +4214,7 @@ function renderAdminPage() {
     applyAvailabilityBulkEditButton.disabled = bulkEditorDisabled || adminUiState.availabilitySaving;
   }
   if (bookingRefresh) {
-    bookingRefresh.disabled = adminUiState.availabilityBulkDirty;
+    bookingRefresh.disabled = adminUiState.availabilityBulkDirty || adminUiState.availabilityMatrixDirty;
   }
 
   if (bookingList) {
@@ -4787,6 +4788,9 @@ function ensureAvailabilityDayEntry(roomId, dateKey, targetState = state) {
 function updateAvailabilityDayField(roomId, dateKey, field, rawValue) {
   const row = ensureAvailabilityDayEntry(roomId, dateKey);
   if (!row) return;
+  adminUiState.availabilityMatrixDirty = true;
+  adminUiState.availabilityNotice = "Availability changed. Save availability to keep it.";
+  adminUiState.availabilityNoticeType = "warning";
 
   if (field === "openForCheckin") {
     row.openForCheckin = !!rawValue;
@@ -4852,8 +4856,9 @@ function applyAvailabilityBulkEdit(roomId, bulkEdit = {}) {
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  adminUiState.availabilityNotice = `Bulk edit applied for ${formatDateShort(startDate)} to ${formatDateShort(endDate)}. Save to keep it.`;
-  adminUiState.availabilityNoticeType = "success";
+  adminUiState.availabilityMatrixDirty = true;
+  adminUiState.availabilityNotice = `Bulk edit applied for ${formatDateShort(startDate)} to ${formatDateShort(endDate)}. Save availability to keep it.`;
+  adminUiState.availabilityNoticeType = "warning";
   return true;
 }
 
@@ -5322,10 +5327,14 @@ async function loadAdminWorkspace({ showLoading = true } = {}) {
 
 async function refreshAdminWorkspace({ silent = false } = {}) {
   if (!window.netlifyIdentity?.currentUser || !window.netlifyIdentity.currentUser()) return;
-  if (adminUiState.availabilityBulkDirty || adminUiState.bookingEngineFormDirty) {
+  if (adminUiState.availabilityBulkDirty || adminUiState.availabilityMatrixDirty || adminUiState.bookingEngineFormDirty) {
     if (!silent) {
       if (adminUiState.availabilityBulkDirty) {
         adminUiState.availabilityNotice = "Finish or save the bulk edit before refreshing.";
+        adminUiState.availabilityNoticeType = "warning";
+      }
+      if (adminUiState.availabilityMatrixDirty) {
+        adminUiState.availabilityNotice = "Save availability before refreshing.";
         adminUiState.availabilityNoticeType = "warning";
       }
       if (adminUiState.bookingEngineFormDirty) {
@@ -7076,13 +7085,25 @@ function initAdminInteractions() {
     adminUiState.availabilityNotice = "Saving availability...";
     adminUiState.availabilityNoticeType = "info";
     renderAdminPage();
-    saveState();
-    adminUiState.availabilitySaving = false;
-    adminUiState.availabilityNotice = "Availability saved.";
-    adminUiState.availabilityNoticeType = "success";
-    adminUiState.availabilityBulkDirty = false;
-    applyTheme(state.camp.theme);
-    renderAdminPage();
+    try {
+      if (!authState.user || !authState.token || !authState.workspace) {
+        throw new Error("Sign in before saving availability.");
+      }
+      saveState();
+      clearTimeout(authState.syncTimer);
+      await syncWorkspaceToServer();
+      adminUiState.availabilityBulkDirty = false;
+      adminUiState.availabilityMatrixDirty = false;
+      adminUiState.availabilityNotice = "Availability saved.";
+      adminUiState.availabilityNoticeType = "success";
+      applyTheme(state.camp.theme);
+    } catch (error) {
+      adminUiState.availabilityNotice = error instanceof Error ? error.message : "Could not save availability.";
+      adminUiState.availabilityNoticeType = "error";
+    } finally {
+      adminUiState.availabilitySaving = false;
+      renderAdminPage();
+    }
   });
 
   document.addEventListener("input", (event) => {
