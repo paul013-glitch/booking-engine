@@ -15,13 +15,30 @@
       })();
     </script>
   </head>
-  <body class="page page-book">
+  <body class="page page-book is-book-loading">
     <header class="book-header">
       <img id="campLogo" class="camp-logo" alt="Camp logo" />
       <div>
         <h1 id="campName">Amigos Surf Camp</h1>
       </div>
     </header>
+
+    <section id="bookLoading" class="book-loading-screen" role="status" aria-live="polite" aria-busy="true">
+      <div class="book-loading-card">
+        <div class="book-loading-orbit" aria-hidden="true">
+          <span></span>
+        </div>
+        <div class="book-loading-copy">
+          <p class="eyebrow">Booking engine</p>
+          <strong id="bookLoadingTitle">Preparing your booking flow</strong>
+          <p id="bookLoadingDetail">Loading the booking engine.</p>
+          <div class="book-loading-progress" aria-hidden="true">
+            <span id="bookLoadingBar" style="width: 8%;"></span>
+          </div>
+          <p class="book-loading-percent"><span id="bookLoadingPercent">8</span>% complete</p>
+        </div>
+      </div>
+    </section>
 
     <main class="booking-shell">
       <section class="panel wizard-panel">

@@ -3200,6 +3200,68 @@ function bookShellMarkup() {
   `;
 }
 
+function bookLoadingMarkup() {
+  return `
+    <section id="bookLoading" class="book-loading-screen" role="status" aria-live="polite" aria-busy="true">
+      <div class="book-loading-card">
+        <div class="book-loading-orbit" aria-hidden="true">
+          <span></span>
+        </div>
+        <div class="book-loading-copy">
+          <p class="eyebrow">Booking engine</p>
+          <strong id="bookLoadingTitle">Preparing your booking flow</strong>
+          <p id="bookLoadingDetail">Loading the booking engine.</p>
+          <div class="book-loading-progress" aria-hidden="true">
+            <span id="bookLoadingBar" style="width: 8%;"></span>
+          </div>
+          <p class="book-loading-percent"><span id="bookLoadingPercent">8</span>% complete</p>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function ensureBookLoadingSurface() {
+  const existing = getBookElement("bookLoading");
+  if (existing) return existing;
+  if (isEmbeddedBooking()) {
+    const host = bookingHostElement();
+    if (!host) return null;
+    host.innerHTML = bookLoadingMarkup();
+    return getBookElement("bookLoading");
+  }
+  const shell = document.querySelector(".booking-shell");
+  if (!shell) return null;
+  shell.insertAdjacentHTML("beforebegin", bookLoadingMarkup());
+  return getBookElement("bookLoading");
+}
+
+function setBookLoadingState({ title = "Preparing your booking flow", detail = "Loading the booking engine.", percent = 8, visible = true } = {}) {
+  const loading = visible ? ensureBookLoadingSurface() : getBookElement("bookLoading");
+  const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  document.body?.classList.toggle("is-book-loading", visible && !isEmbeddedBooking());
+  document.body?.classList.toggle("is-book-ready", !visible && !isEmbeddedBooking());
+  bookingHostElement()?.classList.toggle("is-book-loading", visible);
+  bookingHostElement()?.classList.toggle("is-book-ready", !visible);
+  if (!loading) return;
+  const titleEl = getBookElement("bookLoadingTitle");
+  const detailEl = getBookElement("bookLoadingDetail");
+  const percentEl = getBookElement("bookLoadingPercent");
+  const barEl = getBookElement("bookLoadingBar");
+  if (titleEl) titleEl.textContent = title;
+  if (detailEl) detailEl.textContent = detail;
+  if (percentEl) percentEl.textContent = String(safePercent);
+  if (barEl) barEl.style.width = `${safePercent}%`;
+  loading.hidden = !visible;
+  loading.setAttribute("aria-busy", visible ? "true" : "false");
+}
+
+function revealBookSurface() {
+  setBookLoadingState({ visible: false, percent: 100, title: "Booking engine ready", detail: "Opening booking flow." });
+  document.body?.classList.remove("is-book-loading");
+  document.body?.classList.add("is-book-ready");
+}
+
 function renderEmbeddedBookError(message) {
   const host = bookingHostElement();
   if (!host) return;
@@ -3215,6 +3277,36 @@ function renderEmbeddedBookError(message) {
         </div>
       </div>
     </section>
+  `;
+}
+
+function renderBookLoadError(message) {
+  if (isEmbeddedBooking()) {
+    renderEmbeddedBookError(message);
+    return;
+  }
+  const loading = ensureBookLoadingSurface();
+  if (!loading) return;
+  const contactName = fallbackCampContactName();
+  document.body?.classList.add("is-book-loading");
+  document.body?.classList.remove("is-book-ready");
+  loading.hidden = false;
+  loading.setAttribute("aria-busy", "false");
+  loading.innerHTML = `
+    <div class="book-loading-card">
+      <div class="book-loading-orbit" aria-hidden="true">
+        <span></span>
+      </div>
+      <div class="book-loading-copy">
+        <p class="eyebrow">Booking engine</p>
+        <strong>We couldn&rsquo;t load the booking engine right now.</strong>
+        <p>${escapeHtml(message)}</p>
+        <p>Please refresh and, if it keeps happening, contact ${escapeHtml(contactName)}.</p>
+        <div style="margin-top: 16px;">
+          <button type="button" class="button button-secondary" data-embedded-refresh>Refresh booking engine</button>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -5107,12 +5199,19 @@ async function reconcileEmbeddedStripeReturn() {
 
 async function loadPublicWorkspace() {
   if (window.location.protocol === "file:") {
+    revealBookSurface();
     return;
   }
 
   let renderedFromCache = false;
   try {
     const slug = requestedCampSlug();
+    setBookLoadingState({
+      title: "Preparing your booking flow",
+      detail: "Setting up the secure booking engine.",
+      percent: 12,
+      visible: true,
+    });
     if (!slug) {
       if (isEmbeddedBooking()) {
         renderEmbeddedBookError("Missing camp slug for the embedded booking engine. Add data-slug to the script tag.");
@@ -5120,24 +5219,57 @@ async function loadPublicWorkspace() {
       return;
     }
     if (isEmbeddedBooking()) {
-      ensureEmbeddedBookShell();
       initBookInteractions();
     }
     const canRenderCache = !embeddedStripeReturnParams();
     const cachedWorkspace = canRenderCache ? readPublicWorkspaceCache(slug) : null;
     if (cachedWorkspace) {
+      setBookLoadingState({
+        title: "Opening recent booking data",
+        detail: "Showing the booking engine while we refresh availability.",
+        percent: 58,
+        visible: true,
+      });
+      if (isEmbeddedBooking()) {
+        ensureEmbeddedBookShell();
+      }
       hydrateStateFromWorkspace(cachedWorkspace);
       applyPromoCodesFromUrl();
       renderBookPage();
+      revealBookSurface();
       renderedFromCache = true;
     }
+    setBookLoadingState({
+      title: "Loading camp settings",
+      detail: "Fetching packages, rooms, prices, and booking rules.",
+      percent: renderedFromCache ? 76 : 34,
+      visible: !renderedFromCache,
+    });
     const workspace = await apiJson(`public-workspace?slug=${encodeURIComponent(slug)}`);
     if (workspace) {
+      setBookLoadingState({
+        title: "Checking live availability",
+        detail: "Calculating remaining spots for your travel dates.",
+        percent: 72,
+        visible: !renderedFromCache,
+      });
       writePublicWorkspaceCache(slug, workspace);
       hydrateStateFromWorkspace(workspace);
       applyPromoCodesFromUrl();
+      setBookLoadingState({
+        title: embeddedStripeReturnParams() ? "Confirming payment" : "Building booking steps",
+        detail: embeddedStripeReturnParams()
+          ? "Checking your Stripe payment and reservation status."
+          : "Preparing the calendar, room choices, and trip summary.",
+        percent: 88,
+        visible: !renderedFromCache,
+      });
       await reconcileEmbeddedStripeReturn();
+      if (isEmbeddedBooking()) {
+        ensureEmbeddedBookShell();
+      }
       renderBookPage();
+      revealBookSurface();
     }
   } catch (error) {
     if (renderedFromCache) {
@@ -5150,7 +5282,7 @@ async function loadPublicWorkspace() {
       );
       return;
     }
-    // Fall back to local demo state when the public API is unavailable.
+    renderBookLoadError(error instanceof Error ? error.message : "Could not load this booking engine right now.");
   }
 }
 
@@ -7818,11 +7950,21 @@ function initBookSurface() {
 
   if (!hasBookSurface()) return;
   initBookInteractions();
+  if (window.location.protocol !== "file:") {
+    setBookLoadingState({
+      title: "Preparing your booking flow",
+      detail: "Connecting to the booking engine.",
+      percent: 8,
+      visible: true,
+    });
+    void loadPublicWorkspace();
+    return;
+  }
   ensureAvailabilityCoverage(state);
   saveState();
   draft.calendarMonthOffset = draft.startDate ? calendarOffsetForDate(draft.startDate) : 0;
   renderBookPage();
-  void loadPublicWorkspace();
+  revealBookSurface();
 }
 
 function init() {
